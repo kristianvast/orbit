@@ -24,11 +24,12 @@ const auth = { authorization: `Bearer ${TOKEN}` };
 let client: PGlite;
 let db: CoreDb;
 
+// Booting PGlite (Postgres compiled to WASM) takes >5 s on shared CI runners.
 beforeAll(async () => {
   client = new PGlite();
   db = drizzle({ client, schema: coreSchema }) as unknown as CoreDb;
   await migrate(db);
-});
+}, 60_000);
 afterAll(async () => {
   await client.close();
 });

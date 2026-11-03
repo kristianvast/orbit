@@ -20,7 +20,9 @@ export const config: WebdriverIO.Config = {
   maxInstances: 1,
   capabilities: [
     {
-      browserName: "wry",
+      // No browserName (as in the Tauri docs) and WebDriver classic: WebdriverIO v9 otherwise
+      // requests BiDi (webSocketUrl), which tauri-driver rejects with "Failed to match capabilities".
+      "wdio:enforceWebDriverClassic": true,
       "tauri:options": { application },
     } as WebdriverIO.Capabilities,
   ],
