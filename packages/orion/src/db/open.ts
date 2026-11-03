@@ -33,5 +33,7 @@ export function openDatabase(dataDir: string, options: { seed: boolean }): Opene
       (db.select({ n: count() }).from(animals).get()?.n ?? 0) === 0;
     if (empty) seeded = seedDemoFarm(db).created;
   }
-  return { repo, seeded, close: () => db.$client.close() };
+  // close(true) finalizes cached statements and closes now; the default defers the close and
+  // keeps orbit.sqlite (+ -wal/-shm) open, which locks the data folder on Windows.
+  return { repo, seeded, close: () => db.$client.close(true) };
 }
