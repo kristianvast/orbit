@@ -39,13 +39,17 @@ export function isTauriRuntime(): boolean {
 
 export async function resolveOrionEndpoint(): Promise<OrionEndpoint> {
   if (isTauriRuntime()) {
-    try {
-      const endpoint = await invoke<OrionEndpoint>("orion_endpoint");
-      if (endpoint?.url && endpoint?.token) {
-        return endpoint;
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      try {
+        const endpoint = await invoke<OrionEndpoint>("orion_endpoint");
+        if (endpoint?.url && endpoint?.token) {
+          return endpoint;
+        }
+      } catch {
+        // Sidecar is still starting (migrating/seeding SQLite); retry shortly.
       }
-    } catch {
-      // Fallback to env/default if invoke is unavailable in browser preview
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 

@@ -81,7 +81,7 @@ fn spawn_orion_sidecar(app: &AppHandle) -> Result<(), String> {
 
   let sidecar_cmd = app
     .shell()
-    .sidecar("binaries/orion")
+    .sidecar("orion")
     .map_err(|e| format!("failed to create sidecar command: {e}"))?
     .args(args);
 

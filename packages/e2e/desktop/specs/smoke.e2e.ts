@@ -4,9 +4,9 @@ const SEEDED_COUNTS = "24 cattle · 4 horses";
 
 describe("Orbit desktop smoke", () => {
   it("shows seeded data from the real Orion sidecar on Home", async () => {
-    const counts = await $(`//*[contains(normalize-space(.), "${SEEDED_COUNTS}") and not(*)]`);
+    const counts = await $('[data-testid="home-herd-counts"]');
     // First launch spawns the sidecar, migrates SQLite and seeds the demo farm.
-    await counts.waitForDisplayed({ timeout: 90_000 });
+    await counts.waitForDisplayed({ timeout: 60_000 });
     await expect(counts).toHaveText(SEEDED_COUNTS);
   });
 
