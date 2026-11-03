@@ -1,0 +1,29 @@
+{
+  "name": "@orion/agent",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "orion": "./src/main.ts"
+  },
+  "scripts": {
+    "dev": "bun --watch src/main.ts --port 7717 --token dev --mock-model --seed --data-dir ./.dev-data",
+    "start": "bun src/main.ts",
+    "typecheck": "tsc -p . --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^1.5.0",
+    "@earendil-works/pi-ai": "^1.5.0",
+    "@earendil-works/pi-coding-agent": "^1.5.0",
+    "@orbit/protocol": "workspace:*",
+    "@orbit/schema": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "onvif": "^0.8.3",
+    "typebox": "^1.4.3"
+  }
+}

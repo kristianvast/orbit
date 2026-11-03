@@ -1,0 +1,19 @@
+{
+  "name": "@orbit/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p . --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "typebox": "^1.4.3",
+    "@orbit/schema": "workspace:*"
+  }
+}

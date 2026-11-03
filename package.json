@@ -1,0 +1,29 @@
+{
+  "name": "orbit-monorepo",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "core/*"
+  ],
+  "scripts": {
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '*' test",
+    "build": "bun run --filter '*' build",
+    "e2e:web": "bun run --filter '@orbit/e2e' test:web",
+    "e2e:desktop": "bun run --filter '@orbit/e2e' test:desktop",
+    "check:workflows": "bun run --filter '@orbit/e2e' check:workflows"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.0",
+    "typescript": "^5.9.0",
+    "@types/bun": "latest"
+  },
+  "engines": {
+    "node": ">=22.19"
+  }
+}

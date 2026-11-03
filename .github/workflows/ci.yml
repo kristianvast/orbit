@@ -1,0 +1,193 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  checks:
+    name: checks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Lint (Biome)
+        run: bunx biome ci .
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit tests
+        run: bun run test
+
+      - name: Build web UI
+        run: bun run --filter '@orbit/app' build
+
+      - name: Workflow files parse
+        run: bun run --filter '@orbit/e2e' check:workflows
+
+      - name: Install Playwright Chromium
+        working-directory: packages/e2e
+        run: bunx playwright install --with-deps chromium
+
+      - name: Web e2e (Playwright)
+        run: bun run --filter '@orbit/e2e' test:web
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: |
+            packages/e2e/playwright-report
+            packages/e2e/test-results
+          retention-days: 14
+
+  desktop:
+    name: desktop (${{ matrix.os }})
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bun-target: bun-windows-x64
+            exe: .exe
+            smoke: true
+          - os: ubuntu-22.04
+            bun-target: bun-linux-x64
+            exe: ""
+            smoke: true
+          # tauri-driver has no macOS driver: macOS gets a build + artifact only.
+          - os: macos-latest
+            bun-target: bun-darwin-arm64
+            exe: ""
+            smoke: false
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/orbit/src-tauri -> target
+
+      - name: Linux system dependencies (Tauri 2 + WebDriver)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
+            webkit2gtk-driver xvfb
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build Orion sidecar
+        run: |
+          TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
+          echo "Rust host triple: $TRIPLE"
+          mkdir -p apps/orbit/src-tauri/binaries
+          bun build --compile --target=${{ matrix.bun-target }} packages/orion/src/main.ts \
+            --outfile "apps/orbit/src-tauri/binaries/orion-$TRIPLE${{ matrix.exe }}"
+          ls -la apps/orbit/src-tauri/binaries
+
+      - name: Smoke-test compiled Orion sidecar
+        run: |
+          TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
+          DATA_DIR="$(mktemp -d)"
+          LOG="$RUNNER_TEMP/orion-smoke.log"
+          "apps/orbit/src-tauri/binaries/orion-$TRIPLE${{ matrix.exe }}" \
+            --port 0 --token ci-smoke --mock-model --seed --data-dir "$DATA_DIR" \
+            > "$LOG" 2>&1 &
+          PID=$!
+          READY=0
+          for _ in $(seq 1 60); do
+            if grep -q '^ORION_READY' "$LOG"; then READY=1; break; fi
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 1
+          done
+          kill "$PID" 2>/dev/null || true
+          cat "$LOG"
+          if [ "$READY" != 1 ]; then echo "ORION_READY not printed by the compiled sidecar"; exit 1; fi
+          test -f "$DATA_DIR/resources/AGENTS.md"
+          test -f "$DATA_DIR/resources/skills/herd-data/SKILL.md"
+          test -f "$DATA_DIR/resources/connector-template/index.ts"
+
+      - name: Build desktop app (debug, unsigned)
+        working-directory: apps/orbit
+        run: bunx tauri build --debug
+
+      - name: Upload installers and binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbit-debug-${{ matrix.os }}
+          path: |
+            apps/orbit/src-tauri/target/debug/bundle/
+            apps/orbit/src-tauri/target/debug/orbit-desktop${{ matrix.exe }}
+            apps/orbit/src-tauri/target/debug/orion${{ matrix.exe }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Install tauri-driver
+        if: matrix.smoke
+        run: cargo install tauri-driver --locked
+
+      - name: msedgedriver matching Edge (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+          $version = (Get-Item $edge).VersionInfo.ProductVersion
+          Write-Host "Edge version: $version"
+          $dir = Join-Path $env:RUNNER_TEMP "msedgedriver"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          try {
+            Invoke-WebRequest "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile "$dir\driver.zip"
+            Expand-Archive "$dir\driver.zip" -DestinationPath $dir -Force
+            $driver = Join-Path $dir "msedgedriver.exe"
+          } catch {
+            Write-Host "Download failed ($_); falling back to the runner image's EdgeWebDriver"
+            $driver = Join-Path $env:EDGEWEBDRIVER "msedgedriver.exe"
+          }
+          & $driver --version
+          "TAURI_NATIVE_DRIVER=$driver" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Desktop smoke (Windows)
+        if: runner.os == 'Windows'
+        run: bun run --filter '@orbit/e2e' test:desktop
+
+      - name: Desktop smoke (Linux, xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a bun run --filter '@orbit/e2e' test:desktop

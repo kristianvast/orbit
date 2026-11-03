@@ -1,0 +1,248 @@
+// Shared value types carried by requests, responses and events.
+import {
+  ANIMAL_SEX,
+  ANIMAL_STATUS,
+  CAMERA_STATUS,
+  CONNECTOR_KINDS,
+  CONNECTOR_VENDORS,
+  DEVICE_KINDS,
+  DEVICE_STATUS,
+  OBSERVATION_KINDS,
+  SPECIES,
+} from "@orbit/schema/enums";
+import { type Static, Type } from "typebox";
+
+export const PROTOCOL_VERSION = 1;
+/** Default dev-server address used by the UI in browser dev mode. */
+export const DEV_SERVER_URL = "ws://127.0.0.1:7717/ws";
+export const DEV_TOKEN = "dev";
+/** Line printed on stdout by the Orion sidecar once listening: ORION_READY {"port":N} */
+export const READY_LINE_PREFIX = "ORION_READY ";
+/** WebSocket close codes used by the server. */
+export const CloseCode = {
+  unauthorized: 4401,
+  protocolError: 4400,
+  serverShutdown: 4001,
+} as const;
+
+export const Json = Type.Record(Type.String(), Type.Unknown());
+
+export const ErrorCode = Type.Enum([
+  "bad_request",
+  "unauthorized",
+  "not_found",
+  "conflict",
+  "rule_violation",
+  "busy",
+  "not_ready",
+  "internal",
+  "timeout",
+  "disconnected",
+]);
+export type ErrorCode = Static<typeof ErrorCode>;
+
+export const ProtocolError = Type.Object({
+  code: ErrorCode,
+  message: Type.String(),
+  details: Type.Optional(Type.Unknown()),
+});
+export type ProtocolError = Static<typeof ProtocolError>;
+
+// ------------------------------------------------------------------ sessions & transcript
+
+export const SessionSummary = Type.Object({
+  id: Type.String(),
+  title: Type.String(),
+  createdAt: Type.String(),
+  updatedAt: Type.String(),
+  messageCount: Type.Integer(),
+  model: Type.Union([Type.String(), Type.Null()]),
+  /** True while the agent is running a turn in this session. */
+  streaming: Type.Boolean(),
+  parentSessionId: Type.Union([Type.String(), Type.Null()]),
+});
+export type SessionSummary = Static<typeof SessionSummary>;
+
+export const ToolStatus = Type.Enum(["running", "done", "error", "denied", "aborted"]);
+export type ToolStatus = Static<typeof ToolStatus>;
+
+export const UserItem = Type.Object({
+  kind: Type.Literal("user"),
+  id: Type.String(),
+  ts: Type.String(),
+  text: Type.String(),
+});
+export const AssistantItem = Type.Object({
+  kind: Type.Literal("assistant"),
+  id: Type.String(),
+  ts: Type.String(),
+  text: Type.String(),
+  thinking: Type.Optional(Type.String()),
+  model: Type.Optional(Type.String()),
+  stopReason: Type.Optional(Type.String()),
+  errorMessage: Type.Optional(Type.String()),
+});
+export const ToolItem = Type.Object({
+  kind: Type.Literal("tool"),
+  /** Equal to toolCallId. */
+  id: Type.String(),
+  ts: Type.String(),
+  toolCallId: Type.String(),
+  name: Type.String(),
+  label: Type.String(),
+  args: Type.Unknown(),
+  status: ToolStatus,
+  /** Text content of the tool result. */
+  result: Type.Optional(Type.String()),
+  details: Type.Optional(Type.Unknown()),
+  isError: Type.Optional(Type.Boolean()),
+  durationMs: Type.Optional(Type.Number()),
+});
+/** Compaction notices, aborted-run markers, etc. */
+export const SystemItem = Type.Object({
+  kind: Type.Literal("system"),
+  id: Type.String(),
+  ts: Type.String(),
+  text: Type.String(),
+});
+export const TranscriptItem = Type.Union([UserItem, AssistantItem, ToolItem, SystemItem]);
+export type UserItem = Static<typeof UserItem>;
+export type AssistantItem = Static<typeof AssistantItem>;
+export type ToolItem = Static<typeof ToolItem>;
+export type SystemItem = Static<typeof SystemItem>;
+export type TranscriptItem = Static<typeof TranscriptItem>;
+
+// ------------------------------------------------------------------ approvals & settings
+
+/** safe: runs without asking. ask: asks unless always-allowed or mode=auto. always_ask: always asks. */
+export const Risk = Type.Enum(["safe", "ask", "always_ask"]);
+export type Risk = Static<typeof Risk>;
+
+export const ApprovalDecision = Type.Enum(["allow_once", "always_allow", "deny"]);
+export type ApprovalDecision = Static<typeof ApprovalDecision>;
+
+/**
+ * ask: prompt for ask + always_ask tiers (default).
+ * auto: auto-allow the ask tier, prompt only for always_ask.
+ * read_only: deny every non-safe tool call without prompting.
+ */
+export const ApprovalMode = Type.Enum(["ask", "auto", "read_only"]);
+export type ApprovalMode = Static<typeof ApprovalMode>;
+
+export const ThinkingLevel = Type.Enum(["off", "minimal", "low", "medium", "high", "xhigh"]);
+export type ThinkingLevel = Static<typeof ThinkingLevel>;
+
+export const Settings = Type.Object({
+  provider: Type.Union([Type.String(), Type.Null()]),
+  model: Type.Union([Type.String(), Type.Null()]),
+  thinkingLevel: ThinkingLevel,
+  approvalMode: ApprovalMode,
+  /** Per provider: whether a key is stored (in the OS keychain) and a masked hint. Never the key. */
+  apiKeys: Type.Record(
+    Type.String(),
+    Type.Object({ configured: Type.Boolean(), hint: Type.Optional(Type.String()) }),
+  ),
+  /** Tool names (or rule ids) the farmer chose "always allow" for. */
+  alwaysAllow: Type.Array(Type.String()),
+  availableModels: Type.Array(
+    Type.Object({ provider: Type.String(), id: Type.String(), name: Type.String() }),
+  ),
+});
+export type Settings = Static<typeof Settings>;
+
+export const SettingsUpdate = Type.Object({
+  provider: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  model: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  thinkingLevel: Type.Optional(ThinkingLevel),
+  approvalMode: Type.Optional(ApprovalMode),
+  /** key null removes the stored key. */
+  apiKey: Type.Optional(
+    Type.Object({ provider: Type.String(), key: Type.Union([Type.String(), Type.Null()]) }),
+  ),
+  alwaysAllow: Type.Optional(Type.Array(Type.String())),
+});
+export type SettingsUpdate = Static<typeof SettingsUpdate>;
+
+// ------------------------------------------------------------------ snapshots & sync
+
+export const SnapshotSummary = Type.Object({
+  id: Type.String(),
+  createdAt: Type.String(),
+  description: Type.String(),
+  sessionId: Type.Union([Type.String(), Type.Null()]),
+  toolCallId: Type.Union([Type.String(), Type.Null()]),
+  tables: Type.Array(Type.String()),
+  rowCount: Type.Integer(),
+  undoneAt: Type.Union([Type.String(), Type.Null()]),
+});
+export type SnapshotSummary = Static<typeof SnapshotSummary>;
+
+export const SyncState = Type.Enum([
+  "disabled",
+  "offline",
+  "connecting",
+  "syncing",
+  "up_to_date",
+  "error",
+]);
+export type SyncState = Static<typeof SyncState>;
+
+// ------------------------------------------------------------------ db write inputs
+
+const OptStr = Type.Optional(Type.Union([Type.String(), Type.Null()]));
+
+export const AnimalInput = Type.Object({
+  /** Omit to create. */
+  id: Type.Optional(Type.String()),
+  species: Type.Enum([...SPECIES]),
+  name: OptStr,
+  earTagNumber: OptStr,
+  nationalId: OptStr,
+  breed: OptStr,
+  sex: Type.Optional(Type.Enum([...ANIMAL_SEX])),
+  birthDate: OptStr,
+  groupName: OptStr,
+  status: Type.Optional(Type.Enum([...ANIMAL_STATUS])),
+  notes: OptStr,
+});
+export type AnimalInput = Static<typeof AnimalInput>;
+
+export const DeviceInput = Type.Object({
+  id: Type.Optional(Type.String()),
+  kind: Type.Enum([...DEVICE_KINDS]),
+  vendor: OptStr,
+  model: OptStr,
+  serial: OptStr,
+  connection: Type.Optional(Type.Union([Json, Type.Null()])),
+  status: Type.Optional(Type.Enum([...DEVICE_STATUS])),
+  batteryPct: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+});
+export type DeviceInput = Static<typeof DeviceInput>;
+
+export const ConnectorInput = Type.Object({
+  id: Type.Optional(Type.String()),
+  vendor: Type.Enum([...CONNECTOR_VENDORS]),
+  kind: Type.Enum([...CONNECTOR_KINDS]),
+  name: OptStr,
+  /** Non-secret config only. */
+  config: Type.Optional(Json),
+  enabled: Type.Optional(Type.Boolean()),
+  /** Optional secret; the server stores it in the OS keychain and keeps only a reference. */
+  secret: Type.Optional(Type.String()),
+});
+export type ConnectorInput = Static<typeof ConnectorInput>;
+
+export const CameraInput = Type.Object({
+  id: Type.Optional(Type.String()),
+  name: Type.String(),
+  location: OptStr,
+  onvifXaddr: OptStr,
+  rtspUrl: OptStr,
+  /** Optional credentials; the server stores the password in the OS keychain (credential_ref). */
+  username: Type.Optional(Type.String()),
+  password: Type.Optional(Type.String()),
+  status: Type.Optional(Type.Enum([...CAMERA_STATUS])),
+});
+export type CameraInput = Static<typeof CameraInput>;
+
+export const ObservationKindSchema = Type.Enum([...OBSERVATION_KINDS]);

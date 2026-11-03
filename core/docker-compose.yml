@@ -1,0 +1,70 @@
+# Local Core stack: Postgres (logical replication) + Electric (read-path sync) + @core/api.
+# Run from the repo root:  docker compose -f core/docker-compose.yml --env-file core/.env up
+services:
+  postgres:
+    image: postgres:17
+    command:
+      [
+        "postgres",
+        "-c",
+        "wal_level=logical",
+        "-c",
+        "max_replication_slots=10",
+        "-c",
+        "max_wal_senders=10",
+      ]
+    environment:
+      POSTGRES_USER: orbit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orbit}
+      POSTGRES_DB: orbit
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  electric:
+    image: electricsql/electric:latest
+    environment:
+      DATABASE_URL: postgresql://orbit:${POSTGRES_PASSWORD:-orbit}@postgres:5432/orbit?sslmode=disable
+      ELECTRIC_SECRET: ${ELECTRIC_SECRET:?set ELECTRIC_SECRET in core/.env}
+      ELECTRIC_STORAGE_DIR: /var/lib/electric
+    volumes:
+      - electric:/var/lib/electric
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Electric only streams tables that exist; the api runs the migrations on start.
+      api:
+        condition: service_started
+    # Not published: only the api talks to Electric.
+    expose:
+      - "3000"
+
+  api:
+    build:
+      context: ..
+      dockerfile: core/api/Dockerfile
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgresql://orbit:${POSTGRES_PASSWORD:-orbit}@postgres:5432/orbit
+      ELECTRIC_URL: http://electric:3000
+      ELECTRIC_SECRET: ${ELECTRIC_SECRET}
+      CORE_STATIC_TOKENS: ${CORE_STATIC_TOKENS:-}
+      LLM_UPSTREAM_URL: ${LLM_UPSTREAM_URL:-}
+      LLM_UPSTREAM_API_KEY: ${LLM_UPSTREAM_API_KEY:-}
+      LLM_UPSTREAM_AUTH: ${LLM_UPSTREAM_AUTH:-authorization}
+      LLM_MONTHLY_TOKEN_BUDGET: ${LLM_MONTHLY_TOKEN_BUDGET:-2000000}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  electric:

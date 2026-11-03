@@ -1,0 +1,15 @@
+node_modules/
+dist/
+target/
+.handoff/
+*.log
+.DS_Store
+apps/orbit/src-tauri/gen/
+apps/orbit/src-tauri/binaries/
+test-results/
+playwright-report/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*

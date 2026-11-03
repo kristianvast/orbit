@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: release (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            bun-target: bun-windows-x64
+            exe: .exe
+          - name: linux-x64
+            os: ubuntu-22.04
+            rust-target: x86_64-unknown-linux-gnu
+            bun-target: bun-linux-x64
+            exe: ""
+          - name: macos-arm64
+            os: macos-latest
+            rust-target: aarch64-apple-darwin
+            bun-target: bun-darwin-arm64
+            exe: ""
+          - name: macos-x64
+            os: macos-latest
+            rust-target: x86_64-apple-darwin
+            bun-target: bun-darwin-x64
+            exe: ""
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      # Optional Windows code signing via Azure Trusted Signing; skipped when unset.
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+      AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+      TAURI_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/orbit/src-tauri -> target
+          key: ${{ matrix.rust-target }}
+
+      - name: Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build Orion sidecar
+        run: |
+          mkdir -p apps/orbit/src-tauri/binaries
+          bun build --compile --target=${{ matrix.bun-target }} packages/orion/src/main.ts \
+            --outfile "apps/orbit/src-tauri/binaries/orion-${{ matrix.rust-target }}${{ matrix.exe }}"
+
+      - name: Install Azure Trusted Signing CLI
+        if: runner.os == 'Windows' && env.AZURE_CLIENT_ID != ''
+        run: cargo install trusted-signing-cli --locked
+
+      - name: Release config override
+        run: |
+          bun -e '
+            const env = process.env;
+            const conf = { bundle: { createUpdaterArtifacts: true } };
+            if (env.TAURI_UPDATER_PUBKEY) conf.plugins = { updater: { pubkey: env.TAURI_UPDATER_PUBKEY } };
+            if (process.platform === "win32" && env.AZURE_CLIENT_ID) {
+              conf.bundle.windows = {
+                signCommand: "trusted-signing-cli -e " + env.AZURE_TRUSTED_SIGNING_ENDPOINT +
+                  " -a " + env.AZURE_TRUSTED_SIGNING_ACCOUNT +
+                  " -c " + env.AZURE_TRUSTED_SIGNING_PROFILE + " -d Orbit %1",
+              };
+            }
+            await Bun.write(env.RUNNER_TEMP + "/tauri.release.conf.json", JSON.stringify(conf, null, 2));
+            console.log(JSON.stringify(conf, null, 2));
+          '
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/orbit
+          tauriScript: bunx tauri
+          args: --target ${{ matrix.rust-target }} --config ${{ runner.temp }}/tauri.release.conf.json
+          tagName: ${{ github.ref_name }}
+          releaseName: Orbit ${{ github.ref_name }}
+          releaseBody: See the assets below to download and install this version.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
