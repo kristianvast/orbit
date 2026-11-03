@@ -167,9 +167,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
-          $version = (Get-Item $edge).VersionInfo.ProductVersion
-          Write-Host "Edge version: $version"
+          $wvKey = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          if (Test-Path $wvKey) {
+            $version = (Get-ItemProperty $wvKey).pv
+          } else {
+            $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+            $version = (Get-Item $edge).VersionInfo.ProductVersion
+          }
+          Write-Host "WebView2 / Edge version: $version"
           $dir = Join-Path $env:RUNNER_TEMP "msedgedriver"
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           try {
@@ -182,11 +187,29 @@ jobs:
           }
           & $driver --version
           "TAURI_NATIVE_DRIVER=$driver" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$dir" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Desktop smoke (Windows)
         if: runner.os == 'Windows'
-        run: bun run --filter '@orbit/e2e' test:desktop
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $gsudoZip = Join-Path $env:RUNNER_TEMP "gsudo.zip"
+          $gsudoDir = Join-Path $env:RUNNER_TEMP "gsudo"
+          Invoke-WebRequest "https://github.com/gerardog/gsudo/releases/latest/download/gsudo.portable.zip" -OutFile $gsudoZip
+          Expand-Archive $gsudoZip -DestinationPath $gsudoDir -Force
+          New-Item -ItemType Directory -Force -Path "$env:APPDATA\no.agrointel.orbit" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\no.agrointel.orbit" | Out-Null
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /Q | Out-Null
+          icacls "$env:GITHUB_WORKSPACE\packages\e2e" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          icacls "$env:APPDATA\no.agrointel.orbit" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          icacls "$env:LOCALAPPDATA\no.agrointel.orbit" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          icacls "$env:RUNNER_TEMP" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          icacls "$env:TEMP" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          & "$gsudoDir\x64\gsudo.exe" --integrity Medium bun run --filter '@orbit/e2e' test:desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Desktop smoke (Linux, xvfb)
         if: runner.os == 'Linux'
+        timeout-minutes: 5
         run: xvfb-run -a bun run --filter '@orbit/e2e' test:desktop
