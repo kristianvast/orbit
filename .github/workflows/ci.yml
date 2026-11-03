@@ -70,7 +70,6 @@ jobs:
 
   desktop:
     name: desktop (${{ matrix.os }})
-    needs: checks
     strategy:
       fail-fast: false
       matrix:
