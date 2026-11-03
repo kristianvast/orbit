@@ -93,7 +93,7 @@ fn spawn_orion_sidecar(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<OrionSidecarState>();
     if let Ok(mut guard) = state.child.lock() {
       *guard = Some(child);
-    }
+    };
   }
 
   let app_handle = app.clone();
@@ -109,7 +109,7 @@ fn spawn_orion_sidecar(app: &AppHandle) -> Result<(), String> {
           let state = app_handle.state::<OrionSidecarState>();
           if let Ok(mut guard) = state.endpoint.lock() {
             *guard = Some(endpoint);
-          }
+          };
           break;
         }
       }
@@ -119,8 +119,9 @@ fn spawn_orion_sidecar(app: &AppHandle) -> Result<(), String> {
   Ok(())
 }
 
+// Commands in lib.rs must not be `pub` (Tauri glue-code limitation, E0255).
 #[tauri::command]
-pub fn orion_endpoint(state: State<'_, OrionSidecarState>) -> Result<OrionEndpoint, String> {
+fn orion_endpoint(state: State<'_, OrionSidecarState>) -> Result<OrionEndpoint, String> {
   let guard = state
     .endpoint
     .lock()
