@@ -10,6 +10,7 @@
     "./sqlite": "./src/sqlite.ts",
     "./pg": "./src/pg.ts",
     "./hlc": "./src/hlc.ts",
+    "./roles": "./src/roles.ts",
     "./local": "./src/local.ts",
     "./seed": "./src/seed.ts"
   },

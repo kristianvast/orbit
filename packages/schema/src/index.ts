@@ -3,5 +3,6 @@
 export * from "./enums";
 export * from "./hlc";
 export * as pg from "./pg";
+export * from "./roles";
 export * from "./sqlite";
 export * from "./wearable";
