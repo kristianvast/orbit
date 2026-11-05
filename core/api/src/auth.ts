@@ -1,5 +1,6 @@
-import { and, eq, isNull } from "drizzle-orm";
-import { apiTokens, type CoreDb } from "./db";
+import type { FarmRole } from "@orbit/schema";
+import { and, eq, gt, isNull } from "drizzle-orm";
+import { apiTokens, type CoreDb, farmMembers, userSessions, users } from "./db";
 
 export type TokenResolver = (token: string) => Promise<string | null>;
 
@@ -8,9 +9,77 @@ export async function hashToken(token: string): Promise<string> {
   return Buffer.from(digest).toString("hex");
 }
 
+export const SESSION_PREFIX = "orb_s_";
+export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+export function randomToken(prefix: string, bytes = 32): string {
+  return `${prefix}${Buffer.from(crypto.getRandomValues(new Uint8Array(bytes))).toString("base64url")}`;
+}
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
+/** Who is calling a farm-scoped route: a member through a user session, or a legacy farm token. */
+export interface Principal {
+  farmId: string;
+  role: FarmRole;
+  userId: string | null;
+}
+
+export async function createSession(
+  db: CoreDb,
+  userId: string,
+  deviceName: string | null,
+  now: Date,
+): Promise<{ token: string; expiresAt: string }> {
+  const token = randomToken(SESSION_PREFIX);
+  const expiresAt = new Date(now.getTime() + SESSION_TTL_MS).toISOString();
+  await db
+    .insert(userSessions)
+    .values({ tokenHash: await hashToken(token), userId, deviceName, expiresAt });
+  return { token, expiresAt };
+}
+
+export async function resolveSession(
+  db: CoreDb,
+  token: string,
+  now: Date,
+): Promise<SessionUser | null> {
+  if (!token.startsWith(SESSION_PREFIX)) return null;
+  const [row] = await db
+    .select({ id: users.id, email: users.email, name: users.name })
+    .from(userSessions)
+    .innerJoin(users, eq(users.id, userSessions.userId))
+    .where(
+      and(
+        eq(userSessions.tokenHash, await hashToken(token)),
+        isNull(userSessions.revokedAt),
+        gt(userSessions.expiresAt, now.toISOString()),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export async function memberRole(
+  db: CoreDb,
+  farmId: string,
+  userId: string,
+): Promise<FarmRole | null> {
+  const [row] = await db
+    .select({ role: farmMembers.role })
+    .from(farmMembers)
+    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, userId)))
+    .limit(1);
+  return row?.role ?? null;
+}
+
 /** Generates a new random token (returned once) and stores only its hash. */
 export async function issueToken(db: CoreDb, farmId: string, name?: string): Promise<string> {
-  const token = `orb_${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}`;
+  const token = randomToken("orb_");
   await db.insert(apiTokens).values({ tokenHash: await hashToken(token), farmId, name });
   return token;
 }

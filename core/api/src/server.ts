@@ -29,6 +29,7 @@ const app = createApp({
     upstreamApiKey: process.env.LLM_UPSTREAM_API_KEY || undefined,
     authHeader,
     defaultMonthlyTokenBudget: Number(process.env.LLM_MONTHLY_TOKEN_BUDGET ?? 2_000_000),
+    defaultModel: process.env.LLM_DEFAULT_MODEL || undefined,
   },
   version: process.env.CORE_VERSION,
 });

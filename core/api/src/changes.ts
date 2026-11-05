@@ -3,8 +3,10 @@
 // "one active wearable per animal / one active binding per device" rule: the newer binding stays
 // active and the older one is ended by Core (with a fresh cloud HLC so the end syncs back).
 import {
+  canWriteTable,
   compare,
   createHlc,
+  type FarmRole,
   type Hlc,
   HlcError,
   isWearableKind,
@@ -183,10 +185,17 @@ export function createChangeApplier(db: CoreDb, options: ApplyOptions = {}) {
   const clock = options.clock ?? createHlc("cloud", { maxDriftMs: 24 * 60 * 60 * 1000 });
   const now = options.now ?? (() => new Date());
 
-  async function applyOne(change: IncomingChange, farmId: string): Promise<ChangeResult> {
+  async function applyOne(
+    change: IncomingChange,
+    farmId: string,
+    role: FarmRole,
+  ): Promise<ChangeResult> {
     let values: Record<string, unknown>;
     try {
       values = validateChange(change, farmId);
+      if (!canWriteTable(role, change.table as SyncedTable)) {
+        throw new ValidationError(`a ${role} may not change ${change.table}`);
+      }
       clock.receive(change.hlc);
     } catch (err) {
       if (err instanceof ValidationError || err instanceof HlcError) {
@@ -241,9 +250,10 @@ export function createChangeApplier(db: CoreDb, options: ApplyOptions = {}) {
   return async function applyChanges(
     changes: IncomingChange[],
     farmId: string,
+    role: FarmRole = "owner",
   ): Promise<ChangeResult[]> {
     const results: ChangeResult[] = [];
-    for (const change of changes) results.push(await applyOne(change, farmId));
+    for (const change of changes) results.push(await applyOne(change, farmId, role));
     return results;
   };
 }

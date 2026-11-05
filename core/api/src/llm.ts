@@ -12,9 +12,13 @@ export interface LlmGatewayOptions {
   /** "authorization" sends `Bearer <key>`; "x-api-key" sends the raw key (Anthropic). */
   authHeader: "authorization" | "x-api-key";
   defaultMonthlyTokenBudget: number;
+  /** Upstream model used when Orion asks for the generic "orbit-default" model. */
+  defaultModel?: string;
   fetch: FetchLike;
   now: () => Date;
 }
+
+export const ORBIT_DEFAULT_MODEL = "orbit-default";
 
 const FORWARDED_HEADERS = ["content-type", "accept", "anthropic-version", "anthropic-beta"];
 
@@ -117,11 +121,17 @@ export async function handleLlm(
   let model: string | null = null;
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
+    let changed = false;
+    if (parsed.model === ORBIT_DEFAULT_MODEL && options.defaultModel) {
+      parsed.model = options.defaultModel;
+      changed = true;
+    }
     model = typeof parsed.model === "string" ? parsed.model : null;
     if (parsed.stream === true && path.endsWith("/chat/completions")) {
       parsed.stream_options = { ...(parsed.stream_options as object), include_usage: true };
-      body = JSON.stringify(parsed);
+      changed = true;
     }
+    if (changed) body = JSON.stringify(parsed);
   } catch {
     // Non-JSON bodies are forwarded untouched.
   }

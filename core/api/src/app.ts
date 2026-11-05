@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { Hono } from "hono";
-import type { TokenResolver } from "./auth";
+import { type Context, Hono, type Next } from "hono";
+import { registerAccountRoutes } from "./accounts";
+import { memberRole, type Principal, resolveSession, type TokenResolver } from "./auth";
 import {
   type ApplyOptions,
   createChangeApplier,
@@ -17,6 +18,7 @@ export interface AppOptions {
   electricUrl: string;
   electricSecret?: string;
   llm?: Partial<Omit<LlmGatewayOptions, "fetch" | "now">>;
+  loginThrottle?: { maxFailures: number; windowMs: number };
   /** Used for upstream calls (Electric, LLM provider). Defaults to global fetch. */
   fetch?: FetchLike;
   now?: () => Date;
@@ -24,7 +26,10 @@ export interface AppOptions {
   version?: string;
 }
 
-type Env = { Variables: { farmId: string } };
+/** Header naming the farm a user session acts on (a session can belong to several farms). */
+export const FARM_HEADER = "x-orbit-farm";
+
+type Env = { Variables: { principal: Principal } };
 
 export function createApp(options: AppOptions) {
   const app = new Hono<Env>();
@@ -36,6 +41,7 @@ export function createApp(options: AppOptions) {
     upstreamApiKey: options.llm?.upstreamApiKey,
     authHeader: options.llm?.authHeader ?? "authorization",
     defaultMonthlyTokenBudget: options.llm?.defaultMonthlyTokenBudget ?? 2_000_000,
+    defaultModel: options.llm?.defaultModel,
     fetch: doFetch,
     now,
   };
@@ -49,16 +55,47 @@ export function createApp(options: AppOptions) {
     }
   });
 
-  app.use("/v1/*", async (c, next) => {
-    const header = c.req.header("authorization") ?? "";
-    const match = /^Bearer\s+(.+)$/i.exec(header);
-    const farmId = match?.[1] ? await options.resolveToken(match[1].trim()) : null;
-    if (!farmId) return c.json({ error: { code: "unauthorized", message: "invalid token" } }, 401);
-    c.set("farmId", farmId);
-    await next();
+  registerAccountRoutes(app as unknown as Hono, options.db, {
+    now,
+    loginThrottle: options.loginThrottle,
   });
 
-  app.post("/v1/changes", async (c) => {
+  // Farm-scoped routes accept a user session (+ x-orbit-farm, membership required) or a legacy
+  // per-farm api token, which keeps full (owner) rights for installs set up before accounts.
+  const farmAuth = async (c: Context<Env>, next: Next) => {
+    const match = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "");
+    const token = match?.[1]?.trim() ?? "";
+    const wanted = c.req.header(FARM_HEADER)?.trim().toLowerCase() || null;
+    const user = token ? await resolveSession(options.db, token, now()) : null;
+    if (user) {
+      if (!wanted) {
+        return c.json(
+          { error: { code: "bad_request", message: `${FARM_HEADER} header is required` } },
+          400,
+        );
+      }
+      const role = /^[0-9a-f-]{36}$/.test(wanted)
+        ? await memberRole(options.db, wanted, user.id)
+        : null;
+      if (!role) {
+        return c.json(
+          { error: { code: "forbidden", message: "you are not a member of this farm" } },
+          403,
+        );
+      }
+      c.set("principal", { farmId: wanted, role, userId: user.id });
+      return next();
+    }
+    const farmId = token ? await options.resolveToken(token) : null;
+    if (!farmId) return c.json({ error: { code: "unauthorized", message: "invalid token" } }, 401);
+    if (wanted && wanted !== farmId) {
+      return c.json({ error: { code: "forbidden", message: "token is for another farm" } }, 403);
+    }
+    c.set("principal", { farmId, role: "owner", userId: null });
+    return next();
+  };
+
+  app.post("/v1/changes", farmAuth, async (c) => {
     let body: { changes?: unknown };
     try {
       body = await c.req.json();
@@ -81,21 +118,22 @@ export function createApp(options: AppOptions) {
         400,
       );
     }
-    const results = await applyChanges(changes, c.get("farmId"));
+    const { farmId, role } = c.get("principal");
+    const results = await applyChanges(changes, farmId, role);
     return c.json({ results });
   });
 
-  app.get("/v1/shape", (c) =>
-    proxyShape(c.req.raw, c.get("farmId"), {
+  app.get("/v1/shape", farmAuth, (c) =>
+    proxyShape(c.req.raw, c.get("principal").farmId, {
       electricUrl: options.electricUrl,
       electricSecret: options.electricSecret,
       fetch: doFetch,
     }),
   );
 
-  app.post("/v1/llm/*", (c) => {
+  app.post("/v1/llm/*", farmAuth, (c) => {
     const path = c.req.path.slice("/v1/llm".length) || "/";
-    return handleLlm(options.db, c.req.raw, c.get("farmId"), path, llmOptions);
+    return handleLlm(options.db, c.req.raw, c.get("principal").farmId, path, llmOptions);
   });
 
   return app;
