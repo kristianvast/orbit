@@ -21,6 +21,7 @@ export class FakeCore {
   readonly log = new Map<string, { offset: number; value: Record<string, unknown> }[]>();
   readonly pushes: PushedChange[][] = [];
   readonly shapeRequests: URLSearchParams[] = [];
+  readonly farmHeaders: (string | null)[] = [];
   handle = "handle-1";
   pushResponder: Responder = (changes) => changes.map((c) => ({ seq: c.seq, status: "applied" }));
   shapeResponder: ((params: URLSearchParams) => Response | undefined) | null = null;
@@ -50,6 +51,7 @@ export class FakeCore {
     if (req.headers.get("authorization") !== `Bearer ${TOKEN}`) {
       return new Response("unauthorized", { status: 401 });
     }
+    this.farmHeaders.push(req.headers.get("x-orbit-farm"));
     const url = new URL(req.url);
     if (url.pathname === "/v1/shape") {
       this.shapeRequests.push(url.searchParams);

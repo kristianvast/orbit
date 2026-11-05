@@ -41,6 +41,8 @@ export interface SyncEngineOptions {
   /** Base URL of @core/api, e.g. https://core.example.com */
   coreUrl: string;
   token: string;
+  /** Sent with every Core request, e.g. { "x-orbit-farm": farmId } for a user session token. */
+  headers?: Record<string, string>;
   fetch?: FetchLike;
   /** Orion's clock. When omitted a clock is created from nodeId (or a persisted random id). */
   hlc?: Hlc;
@@ -162,7 +164,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   let abort = new AbortController();
   let chain: Promise<unknown> = Promise.resolve();
 
-  const authHeaders = () => ({ authorization: `Bearer ${token}` });
+  const authHeaders = () => ({ ...options.headers, authorization: `Bearer ${token}` });
 
   async function request(url: string, init: RequestInit = {}): Promise<Response> {
     let res: Response;

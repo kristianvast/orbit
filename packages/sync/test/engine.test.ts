@@ -21,7 +21,9 @@ afterEach(async () => {
   core.stop();
 });
 
-function engine(extra: { fetch?: FetchLike; batchSize?: number } = {}) {
+function engine(
+  extra: { fetch?: FetchLike; batchSize?: number; headers?: Record<string, string> } = {},
+) {
   const e = createSyncEngine({
     db,
     farmId: FARM,
@@ -129,6 +131,15 @@ describe("pull", () => {
     expect(animalReq?.get("offset")).toBe("1_0");
     expect(animalReq?.get("handle")).toBe("handle-1");
     expect(getAnimal(A2)?.name).toBe("Rosa");
+  });
+
+  test("sends the configured farm header on pushes and shape reads", async () => {
+    localAnimal(A1, hlcAt("2026-11-03T00:00:00Z", 0, "local"));
+    queue("insert", A1, hlcAt("2026-11-03T00:00:00Z", 0, "local"), getAnimal(A1) as object);
+    const e = engine({ headers: { "x-orbit-farm": FARM } });
+    expect(await e.syncNow()).toMatchObject({ ok: true, pushed: 1 });
+    expect(core.farmHeaders.length).toBeGreaterThan(1);
+    expect(new Set(core.farmHeaders)).toEqual(new Set([FARM]));
   });
 
   test("409 must-refetch restarts the shape from offset -1 with the new handle", async () => {
