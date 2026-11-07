@@ -1,0 +1,7 @@
+# Used by core/deploy/build.sh. Build context is the repository root.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [build, -f, core/api/Dockerfile, -t, $_IMAGE, .]
+images: [$_IMAGE]
+options:
+  logging: CLOUD_LOGGING_ONLY

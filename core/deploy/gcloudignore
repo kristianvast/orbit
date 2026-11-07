@@ -1,0 +1,15 @@
+# Upload filter for core/deploy/build.sh: only what core/api/Dockerfile copies.
+/*
+!/package.json
+!/bun.lock
+!/tsconfig.base.json
+!/packages/
+/packages/*
+!/packages/schema/
+!/core/
+/core/*
+!/core/api/
+**/node_modules/
+**/.dev-data/
+**/.env
+**/.env.*
