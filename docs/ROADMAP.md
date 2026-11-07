@@ -1,6 +1,6 @@
 # Orbit Roadmap
 
-Orbit is in early development. The foundations are in place: the local-first SQLite and Postgres schema ([`packages/schema`](../packages/schema)), the WebSocket protocol ([`packages/protocol`](../packages/protocol)), the Orion Pi sidecar with its approval gate and undo snapshots ([`packages/orion`](../packages/orion)), file-export connector adapters ([`packages/connectors`](../packages/connectors)), the ElectricSQL + outbox sync engine ([`packages/sync`](../packages/sync)), the Core cloud API ([`core/api`](../core/api)), and the Tauri 2 + React desktop shell ([`apps/orbit`](../apps/orbit)).
+Orbit is in early development. The foundations are in place: the local-first SQLite and Postgres schema ([`packages/schema`](../packages/schema)), the WebSocket protocol ([`packages/protocol`](../packages/protocol)), the Orion Pi sidecar with its undo snapshots ([`packages/orion`](../packages/orion)), file-export connector adapters ([`packages/connectors`](../packages/connectors)), the ElectricSQL + outbox sync engine ([`packages/sync`](../packages/sync)), the Core cloud API ([`core/api`](../core/api)), and the Tauri 2 + React desktop shell ([`apps/orbit`](../apps/orbit)).
 
 Here is what we are building next.
 

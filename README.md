@@ -4,7 +4,7 @@
 
 Orbit is an open-source desktop application for livestock farms raising cattle (dairy and beef) and horses. A farmer installs it on a Windows, macOS, or Linux PC on the farm, such as the management computer next to a milking robot.
 
-Inside the app lives **Orion**, an AI agent that knows your herd, reads your sensors, finds cameras on your local network, and writes new connectors or features right on your machine. Every change Orion makes is saved in an invisible local snapshot so you can undo it with one click, and risky actions always pause for your approval first.
+Inside the app lives **Orion**, an AI agent that knows your herd, reads your sensors, finds cameras on your local network, and writes new connectors or features right on your machine. Every change Orion makes is saved in an invisible local snapshot so you can undo it with one click, and Orion explains risky steps and asks you in the chat before taking them.
 
 ## The three names
 
@@ -20,7 +20,7 @@ Inside the app lives **Orion**, an AI agent that knows your herd, reads your sen
 - **Connect sensors and robots:** Pull data from milking robots (Lely, DeLaval), wearables (Allflex collars, smaXtec boluses, CowManager ear tag sensors), scales, or custom CSV and XML exports.
 - **Enforce real barn rules:** An animal wears a collar OR a bolus OR an ear tag sensor, never several at once. Orbit enforces at most one active wearable sensor binding per animal across the UI, the database schema, and cloud sync.
 - **Discover local cameras:** Probe your barn LAN for ONVIF cameras without sending credentials over the wire or storing passwords in the database.
-- **Build custom tools with Orion:** Ask Orion to scaffold a connector for a local file export or write a script in your farm workspace. You pick the approval mode (`ask`, `auto`, or `read_only`), and every workspace edit is backed by a local snapshot you can revert.
+- **Build custom tools with Orion:** Ask Orion to scaffold a connector for a local file export or write a script in your farm workspace. Every workspace edit is backed by a local snapshot you can revert.
 
 ## Quick start for developers
 
@@ -67,7 +67,7 @@ All workspace packages use `"type": "module"` and export TypeScript source direc
 | `@orbit/app`        | [`apps/orbit`](apps/orbit)                   | Tauri 2 desktop shell, React UI, design system ([DESIGN.md](apps/orbit/DESIGN.md)), and Orion WebSocket hooks                                  |
 | `@orbit/protocol`   | [`packages/protocol`](packages/protocol)     | WebSocket JSON frame types, TypeBox validators, codec, and browser-safe `OrionClient`                                                          |
 | `@orbit/schema`     | [`packages/schema`](packages/schema)         | Drizzle ORM tables for SQLite and Postgres, Hybrid Logical Clock (HLC), wearable rule checks, embedded migrations, and deterministic demo seed |
-| `@orion/agent`      | [`packages/orion`](packages/orion)           | Orion sidecar server, Pi SDK session hub, farm tools, approval gate, keychain integration, and single-writer SQLite repository                 |
+| `@orion/agent`      | [`packages/orion`](packages/orion)           | Orion sidecar server, Pi SDK session hub, farm tools, undo snapshots, keychain integration, and single-writer SQLite repository                |
 | `@orbit/connectors` | [`packages/connectors`](packages/connectors) | Connector SDK, CSV/XML parser helpers, starter template, and adapters for Lely, DeLaval, smaXtec, CowManager, Allflex, and generic CSV         |
 | `@orbit/sync`       | [`packages/sync`](packages/sync)             | Offline-first sync engine: pushes local outbox changes and pulls ElectricSQL shapes with last-writer-wins HLC resolution                       |
 | `@core/api`         | [`core/api`](core/api)                       | Hono cloud server providing the `/v1/changes` write endpoint, `/v1/shape` Electric proxy, and `/v1/llm/*` metered LLM gateway                  |
@@ -80,7 +80,7 @@ All workspace packages use `"type": "module"` and export TypeScript source direc
 - [Core cloud setup](core/README.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Contributing guide](CONTRIBUTING.md) and [Contributor License Agreement](CLA.md)
-- [Security policy and approval gate](SECURITY.md)
+- [Security policy](SECURITY.md)
 - [Open-source licensing](LICENSING.md) and [Commercial licensing](COMMERCIAL.md)
 
 ## License

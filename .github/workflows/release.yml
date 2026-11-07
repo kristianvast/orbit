@@ -82,6 +82,30 @@ jobs:
           bun build --compile --target=${{ matrix.bun-target }} packages/orion/src/main.ts \
             --outfile "apps/orbit/src-tauri/binaries/orion-${{ matrix.rust-target }}${{ matrix.exe }}"
 
+      - name: Download go2rtc sidecar (v1.9.15)
+        run: |
+          TRIPLE="${{ matrix.rust-target }}"
+          case "$TRIPLE" in
+            x86_64-pc-windows-msvc) ASSET=go2rtc_win64.zip ;;
+            x86_64-unknown-linux-gnu) ASSET=go2rtc_linux_amd64 ;;
+            aarch64-apple-darwin) ASSET=go2rtc_mac_arm64.zip ;;
+            x86_64-apple-darwin) ASSET=go2rtc_mac_amd64.zip ;;
+            *) echo "Unsupported go2rtc target: $TRIPLE"; exit 1 ;;
+          esac
+          DEST="apps/orbit/src-tauri/binaries/go2rtc-$TRIPLE${{ matrix.exe }}"
+          DOWNLOAD_DIR="$(mktemp -d)"
+          curl --fail --location --retry 3 \
+            "https://github.com/AlexxIT/go2rtc/releases/download/v1.9.15/$ASSET" \
+            --output "$DOWNLOAD_DIR/$ASSET"
+          if [[ "$ASSET" == *.zip ]]; then
+            unzip -q "$DOWNLOAD_DIR/$ASSET" -d "$DOWNLOAD_DIR/unpacked"
+            cp "$DOWNLOAD_DIR/unpacked/go2rtc${{ matrix.exe }}" "$DEST"
+          else
+            cp "$DOWNLOAD_DIR/$ASSET" "$DEST"
+          fi
+          chmod +x "$DEST"
+          rm -rf "$DOWNLOAD_DIR"
+
       - name: Install Azure Trusted Signing CLI
         if: runner.os == 'Windows' && env.AZURE_CLIENT_ID != ''
         run: cargo install trusted-signing-cli --locked

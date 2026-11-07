@@ -34,12 +34,13 @@ These ports leave 7717 and 5173 free for your normal `bun run dev`. To change th
 `ORBIT_E2E_ORION_PORT` and `ORBIT_E2E_VITE_PORT`. Every run gets a fresh seeded farm: 24 cattle,
 4 horses, one wearable per tagged animal. Specs share that farm and run one at a time.
 
-| Spec               | What it proves                                                                                                                                                                                      |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `home.spec.ts`     | Home shows the seeded counts (`24 cattle · 4 horses`)                                                                                                                                               |
-| `herd.spec.ts`     | The herd table lists all 28 seeded animals. Attach sensor shows the one-wearable explanation (collar OR bolus OR ear tag)                                                                           |
-| `chat.spec.ts`     | `list cows` streams an answer with a `done` `herd_query` tool card. `find cameras` raises an approval card, and Don't allow leaves `camera_discover` `denied`. A new session survives a page reload |
-| `settings.spec.ts` | The approval mode switches to `auto`, persists across a reload, and is restored to `ask`                                                                                                            |
+| Spec               | What it proves                                                                                                                                                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `home.spec.ts`     | Home shows the seeded counts (`24 cattle · 4 horses`)                                                                                                                                                                             |
+| `herd.spec.ts`     | The herd table lists all 28 seeded animals. Attach sensor shows the one-wearable explanation (collar OR bolus OR ear tag)                                                                                                         |
+| `local-ui.spec.ts` | `build my orbit` runs the real `local_ui_build` (typecheck + `vite build --base ./`); `/` then hands off to `/app/e2e/` with the seeded counts, `/?safe` stays on the shipped UI, and Settings > Use original Orbit returns to it |
+| `pages.spec.ts`    | `make a page` writes a custom page that appears under "Your pages" and shows `24 cattle` read through `_orbit.js`                                                                                                                 |
+| `chat.spec.ts`     | `list cows` streams an answer with a `done` `herd_query` tool card. `find cameras` runs `camera_discover` straight away (no approval prompt). A new session survives a page reload                                                |
 
 Tests wait on locators only; there are no fixed sleeps. On failure, the trace, screenshot and video
 go to `packages/e2e/test-results`, and the HTML report goes to `packages/e2e/playwright-report`

@@ -10,7 +10,7 @@ All workspaces use `"type": "module"`, `"license": "AGPL-3.0-only"`, and source-
 | ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `@orbit/protocol`   | [`packages/protocol`](packages/protocol)     | WebSocket JSON frames, TypeBox schemas, `Value.Check` codec, `OrionClient`                                         |
 | `@orbit/schema`     | [`packages/schema`](packages/schema)         | Drizzle SQLite + PG tables, HLC (`src/hlc.ts`), wearable rule (`src/wearable.ts`), migrations, `seedDemoFarm`      |
-| `@orion/agent`      | [`packages/orion`](packages/orion)           | Bun sidecar: protocol server, Pi SDK sessions, tools, approval gate, single SQLite writer                          |
+| `@orion/agent`      | [`packages/orion`](packages/orion)           | Bun sidecar: protocol server, Pi SDK sessions, tools, undo snapshots, single SQLite writer                         |
 | `@orbit/connectors` | [`packages/connectors`](packages/connectors) | Connector SDK (`defineConnector`), CSV/XML parsers, template, Lely/DeLaval/smaXtec/CowManager/Allflex/CSV adapters |
 | `@orbit/sync`       | [`packages/sync`](packages/sync)             | Outbox pusher (`POST /v1/changes`) + ElectricSQL shape consumer (`GET /v1/shape`) with LWW-by-HLC                  |
 | `@orbit/app`        | [`apps/orbit`](apps/orbit)                   | Tauri 2 shell (`src-tauri`) + React/TS/Vite UI + design system ([DESIGN.md](apps/orbit/DESIGN.md))                 |
@@ -33,7 +33,7 @@ All workspaces use `"type": "module"`, `"license": "AGPL-3.0-only"`, and source-
 
 - **Single local writer:** `@orion/agent` owns `orbit.sqlite`. `@orbit/app` never opens SQLite directly; it calls named `db.query` and `db.mutate` operations over `@orbit/protocol`. No raw SQL crosses the WebSocket.
 - **Synced vs local tables (`@orbit/schema`):**
-  - Synced (SQLite + PG parity): `farms`, `animals`, `devices`, `device_bindings`, `connectors`, `observations`, `cameras`. Every synced row carries `farm_id`, `created_at`, `updated_at`, `deleted_at` (soft delete only), `hlc`, and `origin_device`.
+  - Synced (SQLite + PG parity): `farms`, `animals`, `devices`, `device_bindings`, `connectors`, `observations`, `cameras`, `camera_layouts`. Every synced row carries `farm_id`, `created_at`, `updated_at`, `deleted_at` (soft delete only), `hlc`, and `origin_device`.
   - Local-only (SQLite): `outbox`, `snapshots` (undo log for DB + workspace git commits), `sync_state`.
 - **Protocol handshake:** First frame on `ws://127.0.0.1:<port>/ws` must be `hello { token, protocolVersion: 1 }`. Bad token closes with `4401` (terminal, do not reconnect).
 
