@@ -2,45 +2,40 @@ import type { Observation } from "@orbit/schema";
 import {
   Activity,
   AlertTriangle,
-  ArrowRight,
-  Camera,
+  ArrowUp,
   CheckCircle2,
+  ChevronRight,
   Flame,
   HeartPulse,
-  MessageSquare,
-  Radio,
-  Sparkles,
-  Tag,
+  ShieldCheck,
 } from "lucide-react";
-import { useNavigate } from "react-router";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  OrbitRings,
-  type OrbitSatellite,
-  Skeleton,
-} from "../design";
+import { type FormEvent, useState } from "react";
+import { Link, useNavigate } from "react-router";
+import { Badge, Button, EmptyState, OrbitRings, type OrbitSatellite, Skeleton } from "../design";
+import { type MessageKey, type TranslateFn, useT } from "../i18n";
 import { useOrionQuery } from "../lib/orion";
+import "./home.css";
 
-function formatAlertKind(kind: Observation["kind"]): {
+function formatAlertKind(
+  kind: Observation["kind"],
+  t: TranslateFn,
+): {
   label: string;
   variant: "danger" | "warn" | "info";
 } {
   switch (kind) {
     case "calving_alert":
-      return { label: "Calving alert", variant: "danger" };
+      return { label: t("home.alertKind.calving"), variant: "danger" };
     case "health_event":
-      return { label: "Health alert", variant: "danger" };
+      return { label: t("home.alertKind.health"), variant: "danger" };
     case "heat_alert":
-      return { label: "Heat alert", variant: "warn" };
+      return { label: t("home.alertKind.heat"), variant: "warn" };
     default:
       return { label: kind.replace(/_/g, " "), variant: "info" };
   }
 }
 
-function formatAlertDescription(obs: Observation): string {
+function formatAlertDescription(obs: Observation, t: TranslateFn): string {
   const val = obs.valueJson ?? {};
   const note =
     typeof val.note === "string"
@@ -54,45 +49,50 @@ function formatAlertDescription(obs: Observation): string {
 
   if (obs.kind === "health_event" && obs.valueNum !== null) {
     const unit = typeof val.unit === "string" ? val.unit : "°C";
-    return `Temperature recorded at ${obs.valueNum} ${unit} — check bolus & parlour logs.`;
+    return t("home.desc.temperature", { value: obs.valueNum, unit });
   }
   if (obs.kind === "calving_alert") {
-    return "Tail/bolus & calving pen activity indicates calving is approaching.";
+    return t("home.desc.calving");
   }
   if (obs.kind === "heat_alert") {
-    return "Elevated neck collar activity and rumination shift indicate standing heat.";
+    return t("home.desc.heat");
   }
-  return `Observation from ${obs.source}`;
+  return t("home.desc.source", { source: obs.source });
 }
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso: string, t: TranslateFn): string {
   const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return "Just now";
+  if (!Number.isFinite(ms) || ms < 0) return t("home.time.justNow");
   const hours = Math.floor(ms / 3_600_000);
   if (hours < 1) {
     const mins = Math.max(1, Math.floor(ms / 60_000));
-    return `${mins}m ago`;
+    return t("home.time.minutes", { count: mins });
   }
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("home.time.hours", { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t("home.time.days", { count: days });
 }
 
-function formatDayGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-}
-
-const SUGGESTED_QUESTIONS = [
-  "Which cows or horses have alerts right now?",
-  "Check calving pen camera and recent temperature drops",
-  "List collars, boluses, and ear tag sensors with low battery",
+const SUGGESTED_QUESTIONS: readonly MessageKey[] = [
+  "home.suggest.alerts",
+  "home.suggest.calving",
+  "home.suggest.battery",
 ];
+
+interface Instrument {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: "ok" | "warn" | "danger";
+  to: string;
+  testId?: string;
+}
 
 export function HomePage() {
   const navigate = useNavigate();
+  const t = useT();
+  const [question, setQuestion] = useState("");
   const { data: summary, loading } = useOrionQuery("farm.summary", undefined, {
     refetchTables: [
       "farms",
@@ -123,11 +123,12 @@ export function HomePage() {
   const totalConnectors = summary?.counts?.connectors ?? 0;
   const connectorsWithErrors = summary?.counts?.connectorsWithErrors ?? 0;
   const recentAlerts = summary?.recentAlerts ?? [];
+  const isLoading = loading && !summary;
 
   const satellites: OrbitSatellite[] = [
     {
       id: "cattle",
-      label: "Cattle",
+      label: t("home.orbit.cattle"),
       ring: 1,
       angleDeg: -35,
       tone: "ok",
@@ -135,7 +136,7 @@ export function HomePage() {
     },
     {
       id: "horses",
-      label: "Horses",
+      label: t("home.orbit.horses"),
       ring: 1,
       angleDeg: 145,
       tone: "ok",
@@ -143,7 +144,7 @@ export function HomePage() {
     },
     {
       id: "sensors",
-      label: "Sensors online",
+      label: t("home.orbit.sensors"),
       ring: 2,
       angleDeg: 30,
       tone: devicesOffline > 0 ? "warn" : "ok",
@@ -151,7 +152,7 @@ export function HomePage() {
     },
     {
       id: "connectors",
-      label: "Connectors",
+      label: t("home.orbit.connectors"),
       ring: 2,
       angleDeg: 210,
       tone: connectorsWithErrors > 0 ? "danger" : "ok",
@@ -159,7 +160,7 @@ export function HomePage() {
     },
     {
       id: "cameras",
-      label: "Cameras",
+      label: t("home.orbit.cameras"),
       ring: 3,
       angleDeg: -115,
       tone: camerasOnline < totalCameras ? "warn" : "ok",
@@ -167,7 +168,7 @@ export function HomePage() {
     },
     {
       id: "alerts",
-      label: "Alerts",
+      label: t("home.orbit.alerts"),
       ring: 3,
       angleDeg: 80,
       tone: recentAlerts.length > 0 ? "danger" : "ok",
@@ -175,615 +176,151 @@ export function HomePage() {
     },
   ];
 
+  const instruments: Instrument[] = [
+    {
+      id: "animals",
+      label: t("home.gauge.animals"),
+      value: String(cattle + horses),
+      detail: t("home.gauge.animalsDetail", { cattle, horses }),
+      tone: "ok",
+      to: "/herd",
+    },
+    {
+      id: "sensors",
+      label: t("home.gauge.sensors"),
+      value: `${devicesOnline}/${totalDevices}`,
+      detail:
+        devicesOffline > 0
+          ? t("home.gauge.offline", { count: devicesOffline })
+          : t("home.gauge.allReporting"),
+      tone: devicesOffline > 0 ? "warn" : "ok",
+      to: "/devices",
+      testId: "home-sensors-online",
+    },
+    {
+      id: "cameras",
+      label: t("home.gauge.cameras"),
+      value: `${camerasOnline}/${totalCameras}`,
+      detail:
+        totalCameras - camerasOnline > 0
+          ? t("home.gauge.offline", { count: totalCameras - camerasOnline })
+          : t("home.gauge.allStreaming"),
+      tone: camerasOnline < totalCameras ? "warn" : "ok",
+      to: "/cameras",
+      testId: "home-cameras-live",
+    },
+    {
+      id: "connectors",
+      label: t("home.gauge.connectors"),
+      value: String(totalConnectors),
+      detail:
+        connectorsWithErrors > 0
+          ? t("home.gauge.connectorErrors", { count: connectorsWithErrors })
+          : t("home.gauge.connectorsSynced"),
+      tone: connectorsWithErrors > 0 ? "danger" : "ok",
+      to: "/devices",
+    },
+  ];
+
   const openOrionWithQuestion = (prompt?: string) => {
-    if (prompt) {
-      navigate(`/chat?prompt=${encodeURIComponent(prompt)}`);
-    } else {
-      navigate("/chat");
-    }
+    const trimmed = prompt?.trim();
+    navigate(trimmed ? `/chat?prompt=${encodeURIComponent(trimmed)}` : "/chat");
   };
 
-  const greeting = formatDayGreeting();
+  const submitQuestion = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    openOrionWithQuestion(question);
+  };
+
   const heroHeadline =
     recentAlerts.length > 0
-      ? `${greeting}. ${recentAlerts.length} ${recentAlerts.length === 1 ? "thing needs" : "things need"} a look today.`
-      : `${greeting}. All quiet in the barn today.`;
+      ? t("home.hero.alerts", { count: recentAlerts.length })
+      : t("home.hero.quiet");
 
   return (
-    <div className="orbit-container">
-      <div className="orbit-home-hero">
-        <Card
-          style={{
-            justifyContent: "space-between",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-5)",
-            }}
+    <div className="orbit-container orbit-home">
+      <header className="orbit-home__head">
+        <div className="orbit-home__meta">
+          <Badge
+            data-testid="home-alerts"
+            variant={recentAlerts.length > 0 ? "warn" : "ok"}
+            icon={
+              recentAlerts.length > 0 ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />
+            }
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-                gap: "var(--space-2)",
-              }}
-            >
-              <Badge
-                data-testid="home-alerts"
-                variant={recentAlerts.length > 0 ? "warn" : "ok"}
-                icon={
-                  recentAlerts.length > 0 ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />
-                }
-              >
-                {recentAlerts.length > 0
-                  ? `${recentAlerts.length} active alert${recentAlerts.length === 1 ? "" : "s"} in the last 7 days`
-                  : "All herds & equipment steady"}
-              </Badge>
-              <span
-                data-testid="home-herd-counts"
-                className="tabular-nums"
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "var(--text-xs)",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {cattle} cattle · {horses} horses
-              </span>
-            </div>
+            {recentAlerts.length > 0
+              ? t("home.badge.alerts", { count: recentAlerts.length })
+              : t("home.badge.steady")}
+          </Badge>
+          <span data-testid="home-herd-counts" className="orbit-home__counts">
+            {t("home.counts", { cattle, horses })}
+          </span>
+        </div>
 
-            <div>
-              <h1
-                data-testid="home-hero-headline"
-                style={{
-                  margin: 0,
-                  fontFamily: "var(--font-display)",
-                  fontSize: "var(--text-h1)",
-                  fontWeight: 750,
-                  lineHeight: "var(--leading-tight)",
-                  letterSpacing: "var(--tracking-display)",
-                }}
-              >
-                {heroHeadline}
-              </h1>
-              <p
-                style={{
-                  margin: "var(--space-3) 0 0 0",
-                  color: "var(--text-secondary)",
-                  fontSize: "var(--text-base)",
-                  maxInlineSize: "62ch",
-                }}
-              >
-                Your milking robot, barn cameras, and sensors report directly to this farm PC. Ask
-                Orion in plain words whenever you want to inspect an animal or set up a new alert.
-              </p>
-            </div>
+        <h1 data-testid="home-hero-headline" className="orbit-home__headline">
+          {heroHeadline}
+        </h1>
 
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: "var(--space-2)",
-              }}
-            >
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => openOrionWithQuestion()}
-                icon={<MessageSquare size={15} />}
-                style={{ paddingInline: "var(--space-3)" }}
-              >
-                Ask Orion
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigate("/herd")}
-                icon={<Tag size={14} />}
-                style={{ paddingInline: "var(--space-2)" }}
-              >
-                Cows & Horses
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigate("/cameras")}
-                icon={<Camera size={14} />}
-                style={{ paddingInline: "var(--space-2)" }}
-              >
-                Cameras
-              </Button>
-            </div>
+        <form className="orbit-ask" onSubmit={submitQuestion}>
+          <label htmlFor="home-ask-orion" className="orbit-visually-hidden">
+            {t("home.ask.label")}
+          </label>
+          <input
+            id="home-ask-orion"
+            className="orbit-ask__input"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder={t("home.ask.placeholder")}
+            autoComplete="off"
+          />
+          <Button type="submit" variant="primary" icon={<ArrowUp size={16} />}>
+            {t("home.ask.submit")}
+          </Button>
+        </form>
 
-            <div
-              style={{
-                borderBlockStart: "1px solid var(--border-subtle)",
-                paddingBlockStart: "var(--space-4)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-2)",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 700,
-                  color: "var(--text-secondary)",
-                }}
+        <ul className="orbit-ask__suggestions" aria-label={t("home.ask.suggestions")}>
+          {SUGGESTED_QUESTIONS.map((key) => (
+            <li key={key}>
+              <button
+                type="button"
+                className="orbit-ask__suggestion"
+                onClick={() => openOrionWithQuestion(t(key))}
               >
-                Ask Orion right away:
-              </span>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "var(--space-2)",
-                }}
-              >
-                {SUGGESTED_QUESTIONS.map((q) => (
-                  <Button
-                    key={q}
-                    variant="subtle"
-                    size="sm"
-                    onClick={() => openOrionWithQuestion(q)}
-                    icon={<Sparkles size={14} style={{ flexShrink: 0 }} />}
-                    style={{
-                      backgroundColor: "var(--bg-elevated)",
-                      border: "1px solid var(--border-subtle)",
-                      whiteSpace: "normal",
-                      textAlign: "left",
-                      justifyContent: "flex-start",
-                    }}
-                  >
-                    {q}
-                  </Button>
-                ))}
-              </div>
-            </div>
+                {t(key)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </header>
+
+      <div className="orbit-home__grid">
+        <section className="orbit-card orbit-home__panel" aria-labelledby="home-alerts-title">
+          <div className="orbit-home__panel-head">
+            <h2 id="home-alerts-title" className="orbit-home__panel-title">
+              {t("home.alerts.title")}
+            </h2>
+            <span className="orbit-home__panel-meta">{t("home.alerts.period")}</span>
           </div>
-        </Card>
 
-        <Card
-          variant="elevated"
-          title="Barn Orbit"
-          subtitle="Animals on inner ring · sensors on middle ring · cameras & alerts on outer ring"
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              gap: "var(--space-4)",
-              blockSize: "100%",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <OrbitRings
-                size={200}
-                centerLabel="BARN"
-                centerSublabel={`${cattle + horses} head`}
-                satellites={satellites}
-              />
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                gap: "var(--space-2)",
-                inlineSize: "100%",
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  padding: "var(--space-2)",
-                  backgroundColor: "var(--bg-surface)",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-subtle)",
-                }}
-              >
-                <div
-                  className="tabular-nums"
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-h3)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {cattle + horses}
-                </div>
-                <div
-                  style={{
-                    fontSize: "var(--text-xs)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  Cows & Horses
-                </div>
-              </div>
-              <div
-                data-testid="home-sensors-online"
-                style={{
-                  padding: "var(--space-2)",
-                  backgroundColor: "var(--bg-surface)",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-subtle)",
-                }}
-              >
-                <div
-                  className="tabular-nums"
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-h3)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {devicesOnline}/{totalDevices}
-                </div>
-                <div
-                  style={{
-                    fontSize: "var(--text-xs)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  Sensors online
-                </div>
-              </div>
-              <div
-                data-testid="home-cameras-live"
-                style={{
-                  padding: "var(--space-2)",
-                  backgroundColor: "var(--bg-surface)",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-subtle)",
-                }}
-              >
-                <div
-                  className="tabular-nums"
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-h3)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {camerasOnline}/{totalCameras}
-                </div>
-                <div
-                  style={{
-                    fontSize: "var(--text-xs)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  Cameras live
-                </div>
-              </div>
-            </div>
-
-            <div
-              data-testid="home-needs-attention"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-2)",
-                borderBlockStart: "1px solid var(--border-subtle)",
-                paddingBlockStart: "var(--space-3)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "var(--space-2)",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "var(--text-xs)",
-                    fontWeight: 700,
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  Needs attention
-                </span>
-                <Button
-                  variant="subtle"
-                  size="sm"
-                  onClick={() => navigate("/herd")}
-                  style={{
-                    minBlockSize: "1.75rem",
-                    paddingInline: "var(--space-2)",
-                    fontSize: "var(--text-xs)",
-                  }}
-                >
-                  View herd
-                </Button>
-              </div>
-
-              {recentAlerts.length === 0 ? (
-                <div
-                  style={{
-                    padding: "var(--space-2) var(--space-3)",
-                    borderRadius: "var(--radius-md)",
-                    backgroundColor: "var(--bg-surface)",
-                    border: "1px solid var(--border-subtle)",
-                    fontSize: "var(--text-xs)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  All cows, horses, and sensors are within normal range.
-                </div>
-              ) : (
-                <ul
-                  style={{
-                    listStyle: "none",
-                    margin: 0,
-                    padding: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "var(--space-2)",
-                  }}
-                >
-                  {recentAlerts.slice(0, 3).map((alert) => {
-                    const meta = formatAlertKind(alert.kind);
-                    const animal = alert.animalId ? animalById.get(alert.animalId) : null;
-                    const animalLabel = animal
-                      ? `${animal.name ?? "Unnamed"}${animal.earTagNumber ? ` (${animal.earTagNumber})` : ""}`
-                      : "Barn alert";
-                    return (
-                      <li key={alert.id}>
-                        <button
-                          type="button"
-                          onClick={() => navigate("/herd")}
-                          style={{
-                            inlineSize: "100%",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "var(--space-2)",
-                            padding: "var(--space-2) var(--space-3)",
-                            borderRadius: "var(--radius-md)",
-                            backgroundColor: "var(--bg-surface)",
-                            border: "1px solid var(--border-subtle)",
-                            fontFamily: "var(--font-sans)",
-                            fontSize: "var(--text-xs)",
-                            color: "var(--text-primary)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                          }}
-                        >
-                          <span style={{ fontWeight: 650, minInlineSize: 0 }}>{animalLabel}</span>
-                          <Badge variant={meta.variant}>{meta.label}</Badge>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <section aria-label="Farm overview metrics" className="orbit-stats-grid">
-        <Card
-          title="Cows & Horses"
-          subtitle="Active herd & stable list"
-          actions={
-            <Badge variant="ok" icon={<Tag size={13} />}>
-              Active
-            </Badge>
-          }
-          footer={
-            <Button
-              variant="subtle"
-              size="sm"
-              onClick={() => navigate("/herd")}
-              icon={<ArrowRight size={15} />}
-            >
-              Open cows & horses
-            </Button>
-          }
-        >
-          {loading && !summary ? (
-            <Skeleton height="2.5rem" />
-          ) : (
-            <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-4)" }}>
-              <div>
-                <div
-                  className="tabular-nums"
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-h1)",
-                    fontWeight: 750,
-                    lineHeight: 1,
-                  }}
-                >
-                  {cattle}
-                </div>
-                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                  Cattle (dairy & beef)
-                </div>
-              </div>
-              <div
-                style={{
-                  inlineSize: "1px",
-                  blockSize: "2.25rem",
-                  backgroundColor: "var(--border-subtle)",
-                }}
-              />
-              <div>
-                <div
-                  className="tabular-nums"
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-h1)",
-                    fontWeight: 750,
-                    lineHeight: 1,
-                  }}
-                >
-                  {horses}
-                </div>
-                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                  Horses
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
-
-        <Card
-          title="Sensors & Robots"
-          subtitle="Milking robot, sensors & scale"
-          actions={
-            <Badge variant={devicesOffline > 0 ? "warn" : "ok"} icon={<Radio size={13} />}>
-              {devicesOffline > 0 ? `${devicesOffline} offline` : "All online"}
-            </Badge>
-          }
-          footer={
-            <Button
-              variant="subtle"
-              size="sm"
-              onClick={() => navigate("/devices")}
-              icon={<ArrowRight size={15} />}
-            >
-              Manage sensors & connectors
-            </Button>
-          }
-        >
-          {loading && !summary ? (
-            <Skeleton height="2.5rem" />
-          ) : (
-            <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-4)" }}>
-              <div>
-                <div
-                  className="tabular-nums"
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-h1)",
-                    fontWeight: 750,
-                    lineHeight: 1,
-                  }}
-                >
-                  {devicesOnline}
-                </div>
-                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                  Online of {totalDevices} devices
-                </div>
-              </div>
-              <div
-                style={{
-                  inlineSize: "1px",
-                  blockSize: "2.25rem",
-                  backgroundColor: "var(--border-subtle)",
-                }}
-              />
-              <div>
-                <div
-                  className="tabular-nums"
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-h1)",
-                    fontWeight: 750,
-                    lineHeight: 1,
-                  }}
-                >
-                  {totalConnectors}
-                </div>
-                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                  Connectors ({connectorsWithErrors} errors)
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
-
-        <Card
-          title="Barn Cameras"
-          subtitle="Parlour, calving pen & stable streams"
-          actions={
-            <Badge
-              variant={camerasOnline < totalCameras ? "warn" : "ok"}
-              icon={<Camera size={13} />}
-            >
-              {camerasOnline}/{totalCameras} online
-            </Badge>
-          }
-          footer={
-            <Button
-              variant="subtle"
-              size="sm"
-              onClick={() => navigate("/cameras")}
-              icon={<ArrowRight size={15} />}
-            >
-              Inspect camera streams
-            </Button>
-          }
-        >
-          {loading && !summary ? (
-            <Skeleton height="2.5rem" />
-          ) : (
-            <div>
-              <div
-                className="tabular-nums"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "var(--text-h1)",
-                  fontWeight: 750,
-                  lineHeight: 1,
-                }}
-              >
-                {camerasOnline}
-              </div>
-              <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                Active network camera feeds ({totalCameras - camerasOnline} offline)
-              </div>
-            </div>
-          )}
-        </Card>
-      </section>
-
-      <div className="orbit-split-grid">
-        <Card
-          title="Recent Herd Alerts"
-          subtitle="Calving, health temperature, and heat alerts from the last 7 days"
-          actions={
-            <Badge variant={recentAlerts.length > 0 ? "danger" : "ok"}>
-              {recentAlerts.length} alert{recentAlerts.length === 1 ? "" : "s"}
-            </Badge>
-          }
-        >
-          {loading && !summary ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          {isLoading ? (
+            <div className="orbit-home__skeletons">
               <Skeleton height="3.5rem" />
               <Skeleton height="3.5rem" />
               <Skeleton height="3.5rem" />
             </div>
           ) : recentAlerts.length === 0 ? (
             <EmptyState
-              title="No active alerts in the last 7 days"
-              description="Rumination, bolus temperature, calving pen, and robot visits are all within normal range."
+              title={t("home.alerts.emptyTitle")}
+              description={t("home.alerts.emptyDescription")}
             />
           ) : (
-            <ul
-              style={{
-                listStyle: "none",
-                margin: 0,
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-3)",
-              }}
-            >
+            <ul className="orbit-alert-list">
               {recentAlerts.map((alert) => {
-                const meta = formatAlertKind(alert.kind);
+                const meta = formatAlertKind(alert.kind, t);
+                const animal = alert.animalId ? animalById.get(alert.animalId) : null;
+                const animalLabel = animal
+                  ? (animal.name ?? t("home.alerts.unnamed"))
+                  : t("home.alerts.barn");
                 const Icon =
                   alert.kind === "health_event"
                     ? HeartPulse
@@ -791,174 +328,95 @@ export function HomePage() {
                       ? Flame
                       : Activity;
                 return (
-                  <li
-                    key={alert.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      justifyContent: "space-between",
-                      gap: "var(--space-4)",
-                      padding: "var(--space-3) var(--space-4)",
-                      borderRadius: "var(--radius-md)",
-                      backgroundColor: "var(--bg-elevated)",
-                      border: "1px solid var(--border-subtle)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: "var(--space-3)",
-                        minInlineSize: 0,
-                      }}
-                    >
-                      <span
-                        style={{
-                          marginTop: "2px",
-                          color:
-                            meta.variant === "danger"
-                              ? "var(--status-danger)"
-                              : "var(--status-warn)",
-                        }}
-                      >
-                        <Icon size={18} />
-                      </span>
-                      <div style={{ minInlineSize: 0 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            flexWrap: "wrap",
-                            gap: "var(--space-2)",
-                          }}
-                        >
-                          <Badge variant={meta.variant}>{meta.label}</Badge>
-                          <span
-                            className="tabular-nums"
-                            style={{
-                              fontFamily: "var(--font-mono)",
-                              fontSize: "var(--text-xs)",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            {formatRelativeTime(alert.ts)}
-                          </span>
-                        </div>
-                        <p
-                          style={{
-                            margin: "var(--space-1) 0 0 0",
-                            fontSize: "var(--text-sm)",
-                            color: "var(--text-primary)",
-                          }}
-                        >
-                          {formatAlertDescription(alert)}
-                        </p>
+                  <li key={alert.id} className="orbit-alert" data-tone={meta.variant}>
+                    <span className="orbit-alert__icon" aria-hidden="true">
+                      <Icon size={18} />
+                    </span>
+                    <div className="orbit-alert__body">
+                      <div className="orbit-alert__title-row">
+                        <span className="orbit-alert__animal">{animalLabel}</span>
+                        {animal?.earTagNumber && (
+                          <span className="orbit-alert__tag">{animal.earTagNumber}</span>
+                        )}
+                        <span className="orbit-alert__kind">{meta.label}</span>
+                        <span className="orbit-alert__time">{formatRelativeTime(alert.ts, t)}</span>
                       </div>
+                      <p className="orbit-alert__desc">{formatAlertDescription(alert, t)}</p>
                     </div>
                     <Button
                       variant="secondary"
                       size="sm"
+                      aria-label={t("home.alerts.askAria", {
+                        animal: animalLabel,
+                        kind: meta.label.toLowerCase(),
+                      })}
                       onClick={() =>
                         openOrionWithQuestion(
-                          `Explain the ${meta.label.toLowerCase()} from ${alert.source}`,
+                          t("home.alerts.askPrompt", {
+                            kind: meta.label.toLowerCase(),
+                            source: alert.source,
+                          }),
                         )
                       }
                     >
-                      Ask Orion
+                      {t("home.alerts.ask")}
                     </Button>
                   </li>
                 );
               })}
             </ul>
           )}
-        </Card>
+        </section>
 
-        <Card title="Data Safety & Undo" subtitle="How Orbit protects your farm records on this PC">
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-4)",
-              fontSize: "var(--text-sm)",
-              color: "var(--text-secondary)",
-            }}
-          >
-            <div
-              style={{
-                padding: "var(--space-3) var(--space-4)",
-                borderRadius: "var(--radius-md)",
-                backgroundColor: "var(--bg-elevated)",
-                border: "1px solid var(--border-subtle)",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 700,
-                  color: "var(--text-primary)",
-                  marginBottom: "var(--space-1)",
-                }}
-              >
-                Saved on this PC
-              </div>
-              <p style={{ margin: 0 }}>
-                Your cow and horse records stay on this computer first, so your barn dashboard keeps
-                working even when the internet is down.
-              </p>
-            </div>
-
-            <div
-              style={{
-                padding: "var(--space-3) var(--space-4)",
-                borderRadius: "var(--radius-md)",
-                backgroundColor: "var(--bg-elevated)",
-                border: "1px solid var(--border-subtle)",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 700,
-                  color: "var(--text-primary)",
-                  marginBottom: "var(--space-1)",
-                }}
-              >
-                Every change can be undone
-              </div>
-              <p style={{ margin: 0 }}>
-                Orion can make mistakes. Every update saves an undo point on this PC, and risky
-                actions require your explicit approval.
-              </p>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <Button
-                variant="subtle"
-                size="sm"
-                onClick={() => navigate("/settings")}
-                icon={<ArrowRight size={15} />}
-              >
-                Approval & undo settings
-              </Button>
-              {
-                <span
-                  style={{
-                    position: "absolute",
-                    inlineSize: "1px",
-                    blockSize: "1px",
-                    padding: 0,
-                    margin: "-1px",
-                    overflow: "hidden",
-                    clip: "rect(0, 0, 0, 0)",
-                    whiteSpace: "nowrap",
-                    border: 0,
-                  }}
-                >
-                  Collar OR bolus OR ear tag sensor
-                </span>
-              }
-            </div>
+        <section className="orbit-card orbit-home__panel" aria-labelledby="home-status-title">
+          <div className="orbit-home__panel-head">
+            <h2 id="home-status-title" className="orbit-home__panel-title">
+              {t("home.status.title")}
+            </h2>
           </div>
-        </Card>
+
+          <div className="orbit-home__rings">
+            <OrbitRings
+              size={184}
+              centerLabel={t("home.status.center")}
+              centerSublabel={t("home.status.head", { count: cattle + horses })}
+              satellites={satellites}
+            />
+          </div>
+
+          <ul className="orbit-gauges">
+            {instruments.map((ins) => (
+              <li key={ins.id}>
+                <button
+                  type="button"
+                  className="orbit-gauge"
+                  data-testid={ins.testId}
+                  onClick={() => navigate(ins.to)}
+                >
+                  <span className="orbit-gauge__label">{ins.label}</span>
+                  {isLoading ? (
+                    <Skeleton width="3rem" height="1.5rem" />
+                  ) : (
+                    <span className="orbit-gauge__value">{ins.value}</span>
+                  )}
+                  <span className="orbit-gauge__detail" data-tone={ins.tone}>
+                    {ins.detail}
+                  </span>
+                  <ChevronRight size={16} className="orbit-gauge__chevron" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
+
+      <p className="orbit-home__note">
+        <ShieldCheck size={16} aria-hidden="true" />
+        <span>
+          {t("home.note.body")} <Link to="/settings">{t("home.note.undo")}</Link>
+        </span>
+        <span className="orbit-visually-hidden">{t("home.note.wearable")}</span>
+      </p>
     </div>
   );
 }

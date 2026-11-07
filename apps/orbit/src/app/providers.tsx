@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { ToastProvider } from "../design";
+import { I18nProvider, type Locale } from "../i18n";
 import { type OrionEndpoint, OrionProvider } from "../lib/orion";
 
 export type ThemeMode = "light" | "dark";
@@ -33,13 +34,16 @@ export function ThemeProvider({
   defaultTheme?: ThemeMode;
 }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
+    // The saved choice wins over index.html's static data-theme default.
+    try {
+      const saved = window.localStorage?.getItem("orbit.theme");
+      if (saved === "dark" || saved === "light") return saved;
+    } catch {
+      // Ignore storage errors
+    }
     if (typeof document !== "undefined") {
       const attr = document.documentElement.getAttribute("data-theme");
       if (attr === "dark" || attr === "light") return attr;
-    }
-    if (typeof window !== "undefined" && window.localStorage) {
-      const saved = window.localStorage.getItem("orbit.theme");
-      if (saved === "dark" || saved === "light") return saved;
     }
     return defaultTheme;
   });
@@ -77,6 +81,8 @@ export interface AppProvidersProps {
   initialClient?: OrionClient;
   initialEndpoint?: OrionEndpoint;
   defaultTheme?: ThemeMode;
+  /** Forces a UI language (tests, previews); otherwise stored choice or OS language. */
+  initialLocale?: Locale;
 }
 
 export function AppProviders({
@@ -84,14 +90,17 @@ export function AppProviders({
   initialClient,
   initialEndpoint,
   defaultTheme = "light",
+  initialLocale,
 }: AppProvidersProps) {
   return (
-    <ThemeProvider defaultTheme={defaultTheme}>
-      <ToastProvider>
-        <OrionProvider initialClient={initialClient} initialEndpoint={initialEndpoint}>
-          {children}
-        </OrionProvider>
-      </ToastProvider>
-    </ThemeProvider>
+    <I18nProvider initialLocale={initialLocale}>
+      <ThemeProvider defaultTheme={defaultTheme}>
+        <ToastProvider>
+          <OrionProvider initialClient={initialClient} initialEndpoint={initialEndpoint}>
+            {children}
+          </OrionProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }

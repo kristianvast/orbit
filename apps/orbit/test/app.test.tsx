@@ -170,6 +170,24 @@ describe("@orbit/app UI shell and design system", () => {
     });
   });
 
+  it("renders the shell and home in Norwegian Bokmål when the locale is nb", async () => {
+    const { client } = createFakeOrionClient();
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProviders initialClient={client} initialLocale="nb">
+          <AppRoutes />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("navigation", { name: "Hovedmeny" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Kyr og hester/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Spør Orion/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Cows & Horses/ })).not.toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("nb");
+  });
+
   it("shows a friendly connection banner when Orion is reconnecting", async () => {
     const { client } = createFakeOrionClient({ state: "reconnecting" });
 

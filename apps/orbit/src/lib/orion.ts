@@ -25,6 +25,8 @@ import {
   useState,
 } from "react";
 import { Badge, Button } from "../design";
+import { type MessageKey, useT } from "../i18n";
+import { localUiEndpoint } from "./local-ui-path";
 
 export interface OrionEndpoint {
   url: string;
@@ -38,6 +40,8 @@ export function isTauriRuntime(): boolean {
 }
 
 export async function resolveOrionEndpoint(): Promise<OrionEndpoint> {
+  const local = localUiEndpoint();
+  if (local) return local;
   if (isTauriRuntime()) {
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
@@ -287,8 +291,16 @@ export function useOrionQuery<Q extends DbQueryName>(
   };
 }
 
+const BANNER_STATE_KEYS: Record<Exclude<ConnectionState, "open">, MessageKey> = {
+  connecting: "connection.state.connecting",
+  reconnecting: "connection.state.reconnecting",
+  closed: "connection.state.closed",
+  unauthorized: "connection.state.unauthorized",
+};
+
 export function OrionConnectionBanner() {
   const { state, endpoint, reconnect } = useOrion();
+  const t = useT();
 
   if (state === "open") return null;
 
@@ -296,14 +308,14 @@ export function OrionConnectionBanner() {
   const isConnecting = state === "connecting";
 
   const title = isAuthError
-    ? "Orion rejected the security token"
+    ? t("connection.title.unauthorized")
     : isConnecting
-      ? "Connecting to Orion on this farm PC…"
-      : "Orion assistant is not reachable right now";
+      ? t("connection.title.connecting")
+      : t("connection.title.unreachable");
 
   const detail = isAuthError
-    ? "Restart Orbit so a fresh local session token can be negotiated with Orion."
-    : `Waiting for local Orion agent at ${endpoint?.url ?? DEV_SERVER_URL}. Your farm data stays safe on this PC and will appear automatically once connected.`;
+    ? t("connection.detail.unauthorized")
+    : t("connection.detail.waiting", { url: endpoint?.url ?? DEV_SERVER_URL });
 
   return createElement(
     "div",
@@ -361,7 +373,7 @@ export function OrionConnectionBanner() {
           createElement(
             Badge,
             { variant: isAuthError ? "danger" : "warn" },
-            state === "reconnecting" ? "Reconnecting" : state,
+            t(BANNER_STATE_KEYS[state]),
           ),
         ),
         createElement(
@@ -384,7 +396,7 @@ export function OrionConnectionBanner() {
         onClick: reconnect,
         icon: createElement(RefreshCw, { size: 15 }),
       },
-      "Retry connection",
+      t("connection.retry"),
     ),
   );
 }

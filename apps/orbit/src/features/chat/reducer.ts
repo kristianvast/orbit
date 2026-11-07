@@ -1,34 +1,25 @@
-import type {
-  ApprovalDecision,
-  EventFrame,
-  Risk,
-  ServerEvent,
-  SessionSummary,
-  TranscriptItem,
-} from "@orbit/protocol";
-
-export interface PendingApprovalItem {
-  approvalId: string;
-  sessionId: string;
-  toolCallId?: string;
-  toolName: string;
-  title: string;
-  plainLanguage: string;
-  command?: string;
-  risk: Risk;
-  status: "pending" | "resolved";
-  decision?: ApprovalDecision;
-  resolvedBy?: "user" | "policy" | "abort" | "timeout";
-}
+import type { EventFrame, ServerEvent, SessionSummary, TranscriptItem } from "@orbit/protocol";
+import { classifyPlanError } from "./PlanErrorCard";
 
 export interface ChatState {
   sessionId: string | null;
   session: SessionSummary | null;
   items: TranscriptItem[];
   streaming: boolean;
-  approvals: PendingApprovalItem[];
   lastError: string | null;
+  lastErrorCode: string | null;
   settledReason: "completed" | "aborted" | "error" | null;
+  /** Messages sent while a run was going; they leave the list when Orion delivers them. */
+  queued: QueuedMessage[];
+  runStartedAt: string | null;
+  /** True from sending a prompt until the server announces that prompt's user message. */
+  awaitingPromptStart: boolean;
+}
+
+export interface QueuedMessage {
+  id: string;
+  text: string;
+  mode: "steer" | "followUp";
 }
 
 export type ChatAction =
@@ -51,6 +42,19 @@ export type ChatAction =
       event: ServerEvent;
     }
   | {
+      type: "queue.add";
+      message: QueuedMessage;
+    }
+  | {
+      type: "queue.remove";
+      id: string;
+    }
+  | {
+      type: "error.set";
+      code?: string;
+      message: string;
+    }
+  | {
       type: "error.clear";
     };
 
@@ -60,20 +64,49 @@ export function createInitialChatState(sessionId: string | null = null): ChatSta
     session: null,
     items: [],
     streaming: false,
-    approvals: [],
     lastError: null,
+    lastErrorCode: null,
     settledReason: null,
+    queued: [],
+    runStartedAt: null,
+    awaitingPromptStart: false,
   };
+}
+
+function lastUserTs(items: readonly TranscriptItem[]): string | null {
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const it = items[i];
+    if (it?.kind === "user") return it.ts;
+  }
+  return null;
 }
 
 function applyMessageStart(state: ChatState, ev: EventFrame<"message.start">): ChatState {
   if (state.sessionId && ev.sessionId !== state.sessionId) return state;
 
   if (ev.role === "user") {
-    return {
+    const now = new Date().toISOString();
+    const base: ChatState = {
       ...state,
       streaming: true,
       settledReason: null,
+      runStartedAt: state.runStartedAt ?? now,
+    };
+    if (state.awaitingPromptStart) return { ...base, awaitingPromptStart: false };
+    if (state.items.some((it) => it.id === ev.messageId)) return base;
+    // A queued message is being delivered mid-run. Its message.end only arrives after the
+    // replies, so hold its place now; Pi hands over steers before follow-ups.
+    const delivered = state.queued.find((q) => q.mode === "steer") ?? state.queued[0];
+    const placeholder: TranscriptItem = {
+      kind: "user",
+      id: ev.messageId,
+      ts: now,
+      text: delivered?.text ?? "",
+    };
+    return {
+      ...base,
+      items: [...state.items, placeholder],
+      queued: delivered ? state.queued.filter((q) => q !== delivered) : state.queued,
     };
   }
 
@@ -138,9 +171,16 @@ function applyMessageDelta(state: ChatState, ev: EventFrame<"message.delta">): C
   };
 }
 
-function applyMessageEnd(state: ChatState, ev: EventFrame<"message.end">): ChatState {
-  if (state.sessionId && ev.sessionId !== state.sessionId) return state;
+function dequeueDelivered(state: ChatState, text: string): ChatState {
+  const idx = state.queued.findIndex((q) => q.text.trim() === text.trim());
+  if (idx < 0) return state;
+  return { ...state, queued: state.queued.filter((_, i) => i !== idx) };
+}
 
+function applyMessageEnd(prev: ChatState, ev: EventFrame<"message.end">): ChatState {
+  if (prev.sessionId && ev.sessionId !== prev.sessionId) return prev;
+
+  const state = ev.item.kind === "user" ? dequeueDelivered(prev, ev.item.text) : prev;
   const nextItems = [...state.items];
 
   if (ev.item.kind === "user") {
@@ -235,7 +275,7 @@ function applyToolUpdate(state: ChatState, ev: EventFrame<"tool.update">): ChatS
 function applyToolEnd(state: ChatState, ev: EventFrame<"tool.end">): ChatState {
   if (state.sessionId && ev.sessionId !== state.sessionId) return state;
 
-  const status = !ev.isError ? "done" : ev.result.startsWith("Not allowed:") ? "denied" : "error";
+  const status = ev.isError ? "error" : "done";
 
   const idx = state.items.findIndex((it) => it.kind === "tool" && it.toolCallId === ev.toolCallId);
 
@@ -278,52 +318,6 @@ function applyToolEnd(state: ChatState, ev: EventFrame<"tool.end">): ChatState {
   };
 }
 
-function applyApprovalRequest(state: ChatState, ev: EventFrame<"approval.request">): ChatState {
-  const entry: PendingApprovalItem = {
-    approvalId: ev.approvalId,
-    sessionId: ev.sessionId,
-    toolCallId: ev.toolCallId,
-    toolName: ev.toolName,
-    title: ev.title,
-    plainLanguage: ev.plainLanguage,
-    command: ev.command,
-    risk: ev.risk,
-    status: "pending",
-  };
-
-  const existingIdx = state.approvals.findIndex((a) => a.approvalId === ev.approvalId);
-  if (existingIdx >= 0) {
-    const next = [...state.approvals];
-    next[existingIdx] = entry;
-    return { ...state, approvals: next };
-  }
-
-  return {
-    ...state,
-    approvals: [...state.approvals, entry],
-  };
-}
-
-function applyApprovalResolved(state: ChatState, ev: EventFrame<"approval.resolved">): ChatState {
-  const idx = state.approvals.findIndex((a) => a.approvalId === ev.approvalId);
-  if (idx < 0) return state;
-
-  const current = state.approvals[idx];
-  if (!current) return state;
-
-  const next = [...state.approvals];
-  next[idx] = {
-    ...current,
-    status: "resolved",
-    decision: ev.decision,
-    resolvedBy: ev.by,
-  };
-  return {
-    ...state,
-    approvals: next,
-  };
-}
-
 function applyAgentSettled(state: ChatState, ev: EventFrame<"agent.settled">): ChatState {
   if (state.sessionId && ev.sessionId !== state.sessionId) return state;
 
@@ -337,42 +331,35 @@ function applyAgentSettled(state: ChatState, ev: EventFrame<"agent.settled">): C
     return item;
   });
 
-  const nextApprovals = state.approvals.map((a) => {
-    if (a.sessionId === ev.sessionId && a.status === "pending") {
-      return {
-        ...a,
-        status: "resolved" as const,
-        decision: "deny" as const,
-        resolvedBy: "abort" as const,
-      };
-    }
-    return a;
-  });
+  const planCode = ev.errorMessage ? classifyPlanError(null, ev.errorMessage) : null;
 
   return {
     ...state,
     streaming: false,
     settledReason: ev.reason,
     lastError: ev.errorMessage ?? state.lastError,
+    lastErrorCode: planCode ?? state.lastErrorCode,
     items: nextItems,
-    approvals: nextApprovals,
+    queued: [],
+    runStartedAt: null,
+    awaitingPromptStart: false,
   };
 }
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "session.opened": {
-      const keptApprovals = state.approvals.filter(
-        (a) => a.sessionId === action.session.id || a.status === "pending",
-      );
       return {
         sessionId: action.session.id,
         session: action.session,
         items: action.items,
         streaming: action.session.streaming,
-        approvals: keptApprovals,
         lastError: null,
+        lastErrorCode: null,
         settledReason: null,
+        queued: [],
+        runStartedAt: action.session.streaming ? lastUserTs(action.items) : null,
+        awaitingPromptStart: false,
       };
     }
     case "session.cleared":
@@ -389,11 +376,28 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         streaming: true,
         settledReason: null,
         lastError: null,
+        lastErrorCode: null,
         items: [...state.items, userMsg],
+        runStartedAt: state.runStartedAt ?? userMsg.ts,
+        awaitingPromptStart: true,
+      };
+    }
+    case "queue.add":
+      return { ...state, queued: [...state.queued, action.message] };
+    case "queue.remove":
+      return { ...state, queued: state.queued.filter((q) => q.id !== action.id) };
+    case "error.set": {
+      const planCode = classifyPlanError(action.code, action.message);
+      return {
+        ...state,
+        streaming: false,
+        awaitingPromptStart: false,
+        lastError: action.message,
+        lastErrorCode: planCode ?? action.code ?? null,
       };
     }
     case "error.clear":
-      return { ...state, lastError: null };
+      return { ...state, lastError: null, lastErrorCode: null };
     case "server.event": {
       const ev = action.event;
       switch (ev.type) {
@@ -403,6 +407,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             ...state,
             session: ev.session,
             streaming: ev.session.streaming,
+            runStartedAt: ev.session.streaming
+              ? (state.runStartedAt ?? new Date().toISOString())
+              : state.runStartedAt,
           };
         case "message.start":
           return applyMessageStart(state, ev);
@@ -416,20 +423,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           return applyToolUpdate(state, ev);
         case "tool.end":
           return applyToolEnd(state, ev);
-        case "approval.request":
-          return applyApprovalRequest(state, ev);
-        case "approval.resolved":
-          return applyApprovalResolved(state, ev);
         case "agent.settled":
           return applyAgentSettled(state, ev);
-        case "error":
+        case "error": {
           if (ev.sessionId && state.sessionId && ev.sessionId !== state.sessionId) {
             return state;
           }
+          const planCode = classifyPlanError(ev.code, ev.message);
           return {
             ...state,
+            streaming: false,
+            awaitingPromptStart: false,
             lastError: ev.message,
+            lastErrorCode: planCode ?? ev.code,
           };
+        }
         default:
           return state;
       }

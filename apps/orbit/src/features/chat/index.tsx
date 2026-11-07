@@ -1,70 +1,47 @@
 import "./chat.css";
-import type { ApprovalDecision, SessionSummary, TranscriptItem } from "@orbit/protocol";
+import { OrionRequestError, type SessionSummary } from "@orbit/protocol";
 import {
   AlertCircle,
   ArrowDown,
-  Bot,
   Camera,
-  Check,
-  Clock,
   GitBranch,
-  Loader2,
-  MessageSquarePlus,
   Orbit as OrbitIcon,
-  Pencil,
+  PanelLeft,
   Radio,
-  Send,
-  ShieldAlert,
-  Square,
   Tag,
   Trash2,
-  User,
   X,
 } from "lucide-react";
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Badge, Button, Dialog, Input, useToast } from "../../design";
+import { Button, Dialog, useToast } from "../../design";
+import { type MessageKey, useT } from "../../i18n";
 import { useOrion } from "../../lib/orion";
-import { ApprovalCard } from "./ApprovalCard";
-import {
-  clearSessionApprovals,
-  recordApprovalRequest,
-  resolveApprovalRecord,
-  usePendingApprovals,
-} from "./approvals";
-import { SafeMarkdown } from "./markdown";
-import { chatReducer, createInitialChatState, type PendingApprovalItem } from "./reducer";
-import { ToolCard } from "./ToolCard";
+import { Composer, type SendMode } from "./Composer";
+import { classifyPlanError, PlanErrorCard } from "./PlanErrorCard";
+import { chatReducer, createInitialChatState } from "./reducer";
+import { ThreadSidebar } from "./Sidebar";
+import { Timeline } from "./Timeline";
+import { isListedSession } from "./turns";
+import { VoicePanel } from "./VoicePanel";
 
-export {
-  ApprovalCard,
-  type ApprovalCardProps,
-} from "./ApprovalCard";
-export {
-  clearSessionApprovals,
-  getPendingApprovalsSnapshot,
-  recordApprovalRequest,
-  resetPendingApprovalsForTests,
-  resolveApprovalRecord,
-  usePendingApprovalCount,
-  usePendingApprovals,
-} from "./approvals";
+export { Composer, type SendMode } from "./Composer";
 export { parseMarkdownBlocks, SafeMarkdown } from "./markdown";
+export {
+  classifyPlanError,
+  PlanErrorCard,
+  type PlanErrorCardProps,
+  type PlanErrorCode,
+} from "./PlanErrorCard";
 export {
   type ChatAction,
   type ChatState,
   chatReducer,
   createInitialChatState,
-  type PendingApprovalItem,
+  type QueuedMessage,
 } from "./reducer";
+export { ThreadSidebar } from "./Sidebar";
+export { Timeline } from "./Timeline";
 export {
   formatToolDuration,
   formatToolStatusBadge,
@@ -72,92 +49,116 @@ export {
   ToolCard,
   type ToolCardProps,
 } from "./ToolCard";
+export {
+  buildTurnBlocks,
+  buildTurns,
+  groupSessionsByRecency,
+  isListedSession,
+  turnDurationMs,
+} from "./turns";
+export { VoicePanel, type VoicePanelProps, type VoiceState } from "./VoicePanel";
+export {
+  base64ToPcm16Float32,
+  pcm16ToBase64,
+  resampleTo16kHzPcm16,
+} from "./voice-audio";
 
 export interface StarterPrompt {
   id: string;
-  label: string;
-  prompt: string;
-  category: string;
+  labelKey: MessageKey;
+  promptKey: MessageKey;
+  categoryKey: MessageKey;
   icon: typeof Tag;
 }
 
 export const STARTER_PROMPTS: StarterPrompt[] = [
   {
     id: "milk-yield",
-    label: "Which cows had lower milk yield this week?",
-    prompt: "Which cows had lower milk yield this week?",
-    category: "Herd & milking",
+    labelKey: "chat.starter.milkYield.label",
+    promptKey: "chat.starter.milkYield.prompt",
+    categoryKey: "chat.starter.milkYield.category",
     icon: Tag,
   },
   {
     id: "list-cows",
-    label: "List cows in my herd and their sensors",
-    prompt: "List cows in my herd",
-    category: "Cows & horses",
+    labelKey: "chat.starter.listCows.label",
+    promptKey: "chat.starter.listCows.prompt",
+    categoryKey: "chat.starter.listCows.category",
     icon: Tag,
   },
   {
     id: "find-cameras",
-    label: "Find cameras on my network",
-    prompt: "Find cameras on my network",
-    category: "Barn cameras",
+    labelKey: "chat.starter.findCameras.label",
+    promptKey: "chat.starter.findCameras.prompt",
+    categoryKey: "chat.starter.findCameras.category",
     icon: Camera,
   },
   {
     id: "connect-ear-tags",
-    label: "Connect my ear tag sensors",
-    prompt: "Connect my ear tag sensors and check active bindings",
-    category: "Sensors",
+    labelKey: "chat.starter.earTags.label",
+    promptKey: "chat.starter.earTags.prompt",
+    categoryKey: "chat.starter.earTags.category",
     icon: Radio,
   },
 ];
 
-function formatActivityTime(iso: string): string {
-  const date = new Date(iso);
-  const ms = date.getTime();
-  if (Number.isNaN(ms)) return iso;
-  const diffMin = Math.round((Date.now() - ms) / 60_000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDays = Math.round(diffHr / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
+const SESSION_PARAM = "s";
+
+function shortModel(model: string | null | undefined): string | null {
+  if (!model) return null;
+  const slash = model.indexOf("/");
+  return slash >= 0 ? model.slice(slash + 1) : model;
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 export default function ChatPage() {
   const { client, state: connState } = useOrion();
   const { pushToast } = useToast();
+  const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { pendingApprovals, pendingCount } = usePendingApprovals();
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
-  const [sessionSearch, setSessionSearch] = useState("");
-
+  const [defaultModel, setDefaultModel] = useState<string | null>(null);
   const [chatState, dispatch] = useReducer(chatReducer, undefined, () =>
     createInitialChatState(null),
   );
-
-  const [composerText, setComposerText] = useState(() => {
-    return searchParams.get("prompt") ?? "";
-  });
-  const [sendingMode, setSendingMode] = useState<"prompt" | "steer" | "followUp" | null>(null);
-
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
+  const [composerText, setComposerText] = useState(() => searchParams.get("prompt") ?? "");
+  const [sendingPrompt, setSendingPrompt] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [deletingSession, setDeletingSession] = useState<SessionSummary | null>(null);
   const [deletingBusy, setDeletingBusy] = useState(false);
 
-  const transcriptRef = useRef<HTMLDivElement | null>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const activeSessionIdRef = useRef<string | null>(null);
-  activeSessionIdRef.current = chatState.sessionId;
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const initialSessionParam = useRef(searchParams.get(SESSION_PARAM));
+
+  const isDraft = chatState.sessionId === null;
+
+  const setSessionParam = useCallback(
+    (sessionId: string | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (sessionId) next.set(SESSION_PARAM, sessionId);
+          else next.delete(SESSION_PARAM);
+          next.delete("prompt");
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     const promptParam = searchParams.get("prompt");
-    if (promptParam && promptParam.trim().length > 0) {
+    if (promptParam?.trim()) {
       setComposerText(promptParam);
       const next = new URLSearchParams(searchParams);
       next.delete("prompt");
@@ -165,214 +166,238 @@ export default function ChatPage() {
     }
   }, [searchParams, setSearchParams]);
 
+  const upsertSession = useCallback((session: SessionSummary) => {
+    setSessions((prev) => {
+      const exists = prev.some((s) => s.id === session.id);
+      const next = exists
+        ? prev.map((s) => (s.id === session.id ? session : s))
+        : [session, ...prev];
+      return next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    });
+  }, []);
+
   const openSession = useCallback(
     async (sessionId: string) => {
       if (!client) return;
       try {
         const res = await client.request("sessions.open", { sessionId });
-        dispatch({
-          type: "session.opened",
-          session: res.session,
-          items: res.items,
-        });
-        setSessions((prev) => {
-          const exists = prev.some((s) => s.id === res.session.id);
-          if (!exists) return [res.session, ...prev];
-          return prev.map((s) => (s.id === res.session.id ? res.session : s));
-        });
-        setAutoScroll(true);
+        dispatch({ type: "session.opened", session: res.session, items: res.items });
+        upsertSession(res.session);
+        setSessionParam(res.session.id);
+        setAtBottom(true);
+        setSidebarOpen(false);
+        composerRef.current?.focus();
       } catch (err) {
         pushToast({
-          title: "Could not open conversation",
-          description: err instanceof Error ? err.message : String(err),
+          title: t("chat.toast.openFailed"),
+          description: errorText(err),
           tone: "danger",
         });
       }
     },
-    [client, pushToast],
+    [client, pushToast, setSessionParam, upsertSession, t],
   );
 
-  const loadSessions = useCallback(async () => {
-    if (!client) return;
-    setSessionsLoading(true);
-    try {
-      const res = await client.request("sessions.list");
-      setSessions(res.sessions);
-      if (res.sessions.length > 0 && !activeSessionIdRef.current) {
-        const first = res.sessions[0];
-        if (first) {
-          await openSession(first.id);
-        }
-      }
-    } catch (err) {
-      pushToast({
-        title: "Could not load conversations",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "warn",
-      });
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, [client, openSession, pushToast]);
+  const openSessionRef = useRef(openSession);
+  openSessionRef.current = openSession;
+
+  const startDraft = useCallback(() => {
+    dispatch({ type: "session.cleared" });
+    setSessionParam(null);
+    setAtBottom(true);
+    setSidebarOpen(false);
+    composerRef.current?.focus();
+  }, [setSessionParam]);
 
   useEffect(() => {
-    if (!client) return;
-    if (connState === "open" || connState === "connecting") {
-      void loadSessions();
-    }
-  }, [client, connState, loadSessions]);
+    if (!client || connState !== "open") return;
+    let cancelled = false;
+    setSessionsLoading(true);
+    void (async () => {
+      try {
+        const [list, settings] = await Promise.all([
+          client.request("sessions.list"),
+          client.request("settings.get").catch(() => null),
+        ]);
+        if (cancelled) return;
+        setSessions(list.sessions);
+        if (settings?.model) setDefaultModel(settings.model);
+        const wanted = initialSessionParam.current;
+        initialSessionParam.current = null;
+        if (wanted && list.sessions.some((s) => s.id === wanted)) {
+          await openSessionRef.current(wanted);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          pushToast({
+            title: t("chat.toast.loadFailed"),
+            description: errorText(err),
+            tone: "warn",
+          });
+        }
+      } finally {
+        if (!cancelled) setSessionsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, connState, pushToast, t]);
 
   useEffect(() => {
     if (!client) return;
     return client.on("*", (event) => {
-      if (event.type === "session.updated") {
-        setSessions((prev) => {
-          const exists = prev.some((s) => s.id === event.session.id);
-          const updated = exists
-            ? prev.map((s) => (s.id === event.session.id ? event.session : s))
-            : [event.session, ...prev];
-          return [...updated].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-        });
-      }
-      if (event.type === "approval.request") {
-        recordApprovalRequest(event);
-      }
-      if (event.type === "approval.resolved") {
-        resolveApprovalRecord(event.approvalId);
-      }
-      if (event.type === "agent.settled" && event.reason === "aborted") {
-        clearSessionApprovals(event.sessionId);
-      }
+      if (event.type === "session.updated") upsertSession(event.session);
       dispatch({ type: "server.event", event });
     });
-  }, [client]);
+  }, [client, upsertSession]);
 
   useEffect(() => {
-    if (!autoScroll) return;
-    const el = transcriptRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    if (!atBottom) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   });
 
-  const handleTranscriptScroll = () => {
-    const el = transcriptRef.current;
+  const handleScroll = () => {
+    const el = scrollRef.current;
     if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setAutoScroll(distanceFromBottom <= 48);
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight <= 48);
   };
 
-  const scrollToBottom = () => {
-    const el = transcriptRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-    setAutoScroll(true);
+  const jumpToLatest = () => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setAtBottom(true);
   };
 
-  const handleCreateSession = async () => {
-    if (!client) return;
-    try {
-      const res = await client.request("sessions.create", {});
-      setSessions((prev) => [res.session, ...prev]);
-      dispatch({
-        type: "session.opened",
-        session: res.session,
-        items: [],
-      });
-      setAutoScroll(true);
-    } catch (err) {
-      pushToast({
-        title: "Could not start new conversation",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
+  const ensureSession = useCallback(async (): Promise<string> => {
+    if (chatState.sessionId) return chatState.sessionId;
+    if (!client) throw new Error("Orion client is not connected");
+    const created = await client.request("sessions.create", {});
+    upsertSession(created.session);
+    dispatch({ type: "session.opened", session: created.session, items: [] });
+    setSessionParam(created.session.id);
+    return created.session.id;
+  }, [chatState.sessionId, client, setSessionParam, upsertSession]);
+
+  const send = async (mode: SendMode, override?: string) => {
+    const text = (override ?? composerText).trim();
+    if (!client || !text) return;
+    if (mode === "prompt") {
+      if (sendingPrompt) return;
+      setSendingPrompt(true);
     }
-  };
-
-  const handleStartRename = (session: SessionSummary) => {
-    setRenamingId(session.id);
-    setRenameDraft(session.title);
-  };
-
-  const handleCommitRename = async (sessionId: string) => {
-    const trimmed = renameDraft.trim();
-    if (!client || !trimmed) {
-      setRenamingId(null);
-      return;
-    }
+    let sessionId = chatState.sessionId;
     try {
-      const res = await client.request("sessions.rename", {
-        sessionId,
-        title: trimmed,
-      });
-      setSessions((prev) => prev.map((s) => (s.id === sessionId ? res.session : s)));
-      if (chatState.sessionId === sessionId) {
-        dispatch({
-          type: "session.opened",
-          session: res.session,
-          items: chatState.items,
-        });
+      if (!sessionId) {
+        sessionId = await ensureSession();
+      }
+      if (mode === "prompt") {
+        dispatch({ type: "optimistic.user_message", text });
+        setComposerText("");
+        setAtBottom(true);
+        await client.request("chat.prompt", { sessionId, text });
+      } else {
+        const id = crypto.randomUUID();
+        dispatch({ type: "queue.add", message: { id, text, mode } });
+        setComposerText("");
+        try {
+          await client.request(mode === "steer" ? "chat.steer" : "chat.followUp", {
+            sessionId,
+            text,
+          });
+        } catch (err) {
+          dispatch({ type: "queue.remove", id });
+          throw err;
+        }
       }
     } catch (err) {
-      pushToast({
-        title: "Could not rename conversation",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
+      const code = err instanceof OrionRequestError ? err.code : undefined;
+      const msg = errorText(err);
+      const planCode = classifyPlanError(code, msg);
+      if (planCode) {
+        dispatch({ type: "error.set", code: planCode, message: msg });
+      } else {
+        setComposerText((current) => current || text);
+        pushToast({
+          title: t("chat.toast.sendFailed"),
+          description: msg,
+          tone: "danger",
+        });
+      }
     } finally {
-      setRenamingId(null);
+      if (mode === "prompt") setSendingPrompt(false);
     }
   };
 
-  const handleForkSession = async (sessionId: string, fromItemId?: string) => {
+  const stopRun = async () => {
+    if (!client || !chatState.sessionId) return;
+    try {
+      await client.request("chat.abort", { sessionId: chatState.sessionId });
+    } catch (err) {
+      pushToast({
+        title: t("chat.toast.stopFailed"),
+        description: errorText(err),
+        tone: "danger",
+      });
+    }
+  };
+
+  const renameSession = async (sessionId: string, title: string) => {
+    if (!client) return;
+    try {
+      const res = await client.request("sessions.rename", { sessionId, title });
+      upsertSession(res.session);
+      dispatch({
+        type: "server.event",
+        event: { type: "session.updated", sessionId, session: res.session },
+      });
+    } catch (err) {
+      pushToast({
+        title: t("chat.toast.renameFailed"),
+        description: errorText(err),
+        tone: "danger",
+      });
+    }
+  };
+
+  const forkSession = async (sessionId: string, fromItemId?: string) => {
     if (!client) return;
     try {
       const forked = await client.request("sessions.fork", {
         sessionId,
         ...(fromItemId ? { fromItemId } : {}),
       });
-      setSessions((prev) => [forked.session, ...prev]);
+      upsertSession(forked.session);
       await openSession(forked.session.id);
       pushToast({
-        title: "Branched conversation ready",
-        description: `Opened "${forked.session.title}" so you can try a different answer.`,
+        title: t("chat.toast.branched"),
+        description: t("chat.toast.branchedDescription", { title: forked.session.title }),
         tone: "ok",
       });
     } catch (err) {
       pushToast({
-        title: "Could not fork conversation",
-        description: err instanceof Error ? err.message : String(err),
+        title: t("chat.toast.branchFailed"),
+        description: errorText(err),
         tone: "danger",
       });
     }
   };
 
-  const handleConfirmDelete = async () => {
+  const confirmDelete = async () => {
     if (!client || !deletingSession) return;
     setDeletingBusy(true);
     const targetId = deletingSession.id;
     try {
       await client.request("sessions.delete", { sessionId: targetId });
-      clearSessionApprovals(targetId);
-      const remaining = sessions.filter((s) => s.id !== targetId);
-      setSessions(remaining);
+      setSessions((prev) => prev.filter((s) => s.id !== targetId));
       setDeletingSession(null);
-
-      if (chatState.sessionId === targetId) {
-        const nextSession = remaining[0];
-        if (nextSession) {
-          await openSession(nextSession.id);
-        } else {
-          dispatch({ type: "session.cleared" });
-        }
-      }
-      pushToast({
-        title: "Conversation deleted",
-        tone: "info",
-      });
+      if (chatState.sessionId === targetId) startDraft();
+      pushToast({ title: t("chat.toast.deleted"), tone: "info" });
     } catch (err) {
       pushToast({
-        title: "Could not delete conversation",
-        description: err instanceof Error ? err.message : String(err),
+        title: t("chat.toast.deleteFailed"),
+        description: errorText(err),
         tone: "danger",
       });
     } finally {
@@ -380,520 +405,89 @@ export default function ChatPage() {
     }
   };
 
-  const sendToOrion = async (textToSend: string, mode: "prompt" | "steer" | "followUp") => {
-    const trimmed = textToSend.trim();
-    if (!client || !trimmed) return;
+  const listedSessions = useMemo(
+    () => sessions.filter((s) => isListedSession(s, chatState.sessionId)),
+    [sessions, chatState.sessionId],
+  );
 
-    setSendingMode(mode);
-    try {
-      let targetSessionId = chatState.sessionId;
-      if (!targetSessionId) {
-        const created = await client.request("sessions.create", {});
-        targetSessionId = created.session.id;
-        setSessions((prev) => [created.session, ...prev]);
-        dispatch({
-          type: "session.opened",
-          session: created.session,
-          items: [],
-        });
-      }
-
-      dispatch({
-        type: "optimistic.user_message",
-        text: trimmed,
-      });
-      setComposerText("");
-      setAutoScroll(true);
-
-      if (mode === "steer") {
-        await client.request("chat.steer", {
-          sessionId: targetSessionId,
-          text: trimmed,
-        });
-      } else if (mode === "followUp") {
-        await client.request("chat.followUp", {
-          sessionId: targetSessionId,
-          text: trimmed,
-        });
-      } else {
-        await client.request("chat.prompt", {
-          sessionId: targetSessionId,
-          text: trimmed,
-        });
-      }
-    } catch (err) {
-      pushToast({
-        title: "Could not send message to Orion",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
-    } finally {
-      setSendingMode(null);
-    }
-  };
-
-  const handleStopRun = async () => {
-    if (!client || !chatState.sessionId) return;
-    try {
-      await client.request("chat.abort", { sessionId: chatState.sessionId });
-    } catch (err) {
-      pushToast({
-        title: "Could not stop Orion",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
-    }
-  };
-
-  const handleApprovalRespond = async (approvalId: string, decision: ApprovalDecision) => {
-    if (!client) return;
-    try {
-      await client.request("approval.respond", { approvalId, decision });
-      resolveApprovalRecord(approvalId);
-    } catch (err) {
-      pushToast({
-        title: "Could not send approval response",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
-    }
-  };
-
-  const handleComposerKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (!composerText.trim() || sendingMode !== null) return;
-      const mode = chatState.streaming ? "steer" : "prompt";
-      void sendToOrion(composerText, mode);
-    }
-  };
-
-  const filteredSessions = useMemo(() => {
-    const q = sessionSearch.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => s.title.toLowerCase().includes(q));
-  }, [sessions, sessionSearch]);
-
-  const sessionApprovals = useMemo(() => {
-    const map = new Map<string, PendingApprovalItem>();
-    for (const a of chatState.approvals) {
-      if (!chatState.sessionId || a.sessionId === chatState.sessionId) {
-        map.set(a.approvalId, a);
-      }
-    }
-    for (const globalReq of pendingApprovals) {
-      if (!chatState.sessionId || globalReq.sessionId === chatState.sessionId) {
-        if (!map.has(globalReq.approvalId)) {
-          map.set(globalReq.approvalId, {
-            ...globalReq,
-            status: "pending",
-          });
-        }
-      }
-    }
-    return [...map.values()];
-  }, [chatState.approvals, chatState.sessionId, pendingApprovals]);
-
-  const approvalsByToolCallId = useMemo(() => {
-    const map = new Map<string, PendingApprovalItem[]>();
-    for (const a of sessionApprovals) {
-      if (a.toolCallId) {
-        const list = map.get(a.toolCallId) ?? [];
-        list.push(a);
-        map.set(a.toolCallId, list);
-      }
-    }
-    return map;
-  }, [sessionApprovals]);
-
-  const standaloneApprovals = useMemo(() => {
-    const toolIds = new Set(
-      chatState.items
-        .filter((it): it is Extract<TranscriptItem, { kind: "tool" }> => it.kind === "tool")
-        .map((it) => it.toolCallId),
-    );
-    return sessionApprovals.filter((a) => !a.toolCallId || !toolIds.has(a.toolCallId));
-  }, [chatState.items, sessionApprovals]);
+  const showHero = chatState.items.length === 0 && !chatState.streaming && !voiceOpen;
+  const title = chatState.session?.title ?? t("chat.page.newChat");
+  const modelLabel = shortModel(chatState.session?.model ?? defaultModel);
+  const activeSessionId = chatState.sessionId;
 
   return (
-    <div className="orbit-container" data-testid="chat-page">
-      <div className="orbit-chat-layout">
-        <aside
-          className="orbit-chat-sidebar"
-          aria-label="Conversations with Orion"
-          data-testid="sessions-sidebar"
-        >
-          <div className="orbit-chat-sidebar__header">
-            <div className="orbit-chat-sidebar__title-row">
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "var(--space-2)",
-                }}
-              >
-                <h2
-                  style={{
-                    margin: 0,
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-lg)",
-                    fontWeight: 700,
-                  }}
-                >
-                  Conversations
-                </h2>
-                {pendingCount > 0 && (
-                  <Badge
-                    variant="warn"
-                    className="tabular-nums"
-                    data-testid="pending-approvals-badge"
-                  >
-                    {pendingCount} waiting
-                  </Badge>
-                )}
-              </div>
+    <div className="orbit-container orbit-chat-page" data-testid="chat-page">
+      <div className="orbit-chat" data-sidebar-open={sidebarOpen ? "true" : "false"}>
+        <ThreadSidebar
+          sessions={listedSessions}
+          activeId={chatState.sessionId}
+          isDraft={isDraft}
+          loading={sessionsLoading}
+          open={sidebarOpen}
+          onNew={startDraft}
+          onOpen={(id) => void openSession(id)}
+          onRename={renameSession}
+          onFork={(id) => void forkSession(id)}
+          onDelete={setDeletingSession}
+        />
+        {sidebarOpen && (
+          <button
+            type="button"
+            className="orbit-chat__scrim"
+            aria-label={t("chat.page.closeSidebar")}
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleCreateSession}
-                icon={<MessageSquarePlus size={15} />}
-                data-testid="session-new-button"
-              >
-                New chat
-              </Button>
-            </div>
-
-            <Input
-              type="search"
-              placeholder="Search conversations…"
-              aria-label="Search conversations"
-              value={sessionSearch}
-              onChange={(e) => setSessionSearch(e.target.value)}
-              data-testid="session-search-input"
-            />
-          </div>
-
-          <ul className="orbit-chat-sidebar__list" data-testid="sessions-list">
-            {sessionsLoading && sessions.length === 0 ? (
-              <li
-                style={{
-                  padding: "var(--space-4)",
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Loading conversations…
-              </li>
-            ) : filteredSessions.length === 0 ? (
-              <li
-                style={{
-                  padding: "var(--space-4)",
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-secondary)",
-                  textAlign: "center",
-                }}
-                data-testid="sessions-empty"
-              >
-                {sessionSearch
-                  ? "No conversations match your search."
-                  : "No past conversations yet."}
-              </li>
-            ) : (
-              filteredSessions.map((session) => {
-                const isActive = session.id === chatState.sessionId;
-                const isRenaming = renamingId === session.id;
-                const hasPendingApproval = pendingApprovals.some((a) => a.sessionId === session.id);
-
-                return (
-                  <li
-                    key={session.id}
-                    className="orbit-session-item"
-                    data-active={isActive ? "true" : "false"}
-                    data-testid={`session-item-${session.id}`}
-                  >
-                    {isRenaming ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "var(--space-2)",
-                        }}
-                      >
-                        <input
-                          type="text"
-                          className="orbit-input"
-                          aria-label="Conversation title"
-                          value={renameDraft}
-                          onChange={(e) => setRenameDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              void handleCommitRename(session.id);
-                            } else if (e.key === "Escape") {
-                              setRenamingId(null);
-                            }
-                          }}
-                          data-testid={`session-rename-input-${session.id}`}
-                        />
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "flex-end",
-                            gap: "var(--space-2)",
-                          }}
-                        >
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setRenamingId(null)}
-                            icon={<X size={14} />}
-                            data-testid={`session-rename-cancel-${session.id}`}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => handleCommitRename(session.id)}
-                            icon={<Check size={14} />}
-                            data-testid={`session-rename-save-${session.id}`}
-                          >
-                            Save
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="orbit-session-select-btn"
-                          onClick={() => openSession(session.id)}
-                          data-testid={`session-open-${session.id}`}
-                        >
-                          <span className="orbit-session-title">{session.title}</span>
-                          <div className="orbit-session-meta">
-                            <span
-                              className="tabular-nums"
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "var(--space-1)",
-                              }}
-                            >
-                              <Clock size={11} aria-hidden="true" />
-                              {formatActivityTime(session.updatedAt)}
-                            </span>
-                            <span className="tabular-nums">
-                              {session.messageCount} msg
-                              {session.messageCount === 1 ? "" : "s"}
-                            </span>
-                            {session.streaming && <Badge variant="info">Running</Badge>}
-                            {hasPendingApproval && <Badge variant="warn">Needs approval</Badge>}
-                          </div>
-                        </button>
-
-                        <div className="orbit-session-actions">
-                          <button
-                            type="button"
-                            className="orbit-icon-btn"
-                            title="Rename conversation"
-                            aria-label={`Rename ${session.title}`}
-                            onClick={() => handleStartRename(session)}
-                            data-testid={`session-rename-button-${session.id}`}
-                          >
-                            <Pencil size={13} aria-hidden="true" />
-                            <span>Rename</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="orbit-icon-btn"
-                            title="Try a different answer (fork conversation)"
-                            aria-label={`Try a different answer from ${session.title}`}
-                            onClick={() => handleForkSession(session.id)}
-                            data-testid={`session-fork-button-${session.id}`}
-                          >
-                            <GitBranch size={13} aria-hidden="true" />
-                            <span>Try a different answer</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="orbit-icon-btn orbit-icon-btn--danger"
-                            title="Delete conversation"
-                            aria-label={`Delete ${session.title}`}
-                            onClick={() => setDeletingSession(session)}
-                            data-testid={`session-delete-button-${session.id}`}
-                          >
-                            <Trash2 size={13} aria-hidden="true" />
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        </aside>
-
-        <section className="orbit-chat-main" aria-label="Conversation with Orion">
-          <header className="orbit-chat-header">
-            <div style={{ minInlineSize: 0 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: "var(--space-2)",
-                }}
-              >
-                <h1
-                  style={{
-                    margin: 0,
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-h3)",
-                    fontWeight: 700,
-                    lineHeight: "var(--leading-heading)",
-                    letterSpacing: "var(--tracking-heading)",
-                  }}
-                  data-testid="chat-active-title"
-                >
-                  {chatState.session?.title ?? "Ask Orion"}
-                </h1>
-                {chatState.streaming && (
-                  <Badge
-                    variant="info"
-                    icon={<Loader2 size={12} className="orbit-spin" />}
-                    data-testid="chat-streaming-indicator"
-                  >
-                    Orion is working…
-                  </Badge>
-                )}
-                {pendingCount > 0 && (
-                  <Badge
-                    variant="warn"
-                    icon={<ShieldAlert size={12} />}
-                    data-testid="chat-header-approval-badge"
-                  >
-                    {pendingCount} approval{pendingCount === 1 ? "" : "s"} waiting
-                  </Badge>
-                )}
-              </div>
-              <p
-                style={{
-                  margin: "var(--space-1) 0 0 0",
-                  fontSize: "var(--text-xs)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Ask about your cattle, horses, sensors, milking robot, or barn cameras. Undo is on
-                for every change.
-              </p>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--space-2)",
-              }}
+        <section className="orbit-thread-pane" aria-label={t("chat.page.paneLabel")}>
+          <header className="orbit-thread-pane__header">
+            <button
+              type="button"
+              className="orbit-thread-pane__toggle"
+              aria-label={t("chat.page.showSidebar")}
+              onClick={() => setSidebarOpen(true)}
+              data-testid="chat-sidebar-toggle"
             >
-              {chatState.session && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    if (chatState.session) {
-                      void handleForkSession(chatState.session.id);
-                    }
-                  }}
-                  icon={<GitBranch size={15} />}
+              <PanelLeft size={18} aria-hidden="true" />
+            </button>
+            <h1 className="orbit-thread-pane__title" data-testid="chat-active-title">
+              {title}
+            </h1>
+            {chatState.streaming && (
+              <span className="orbit-thread-pane__running" data-testid="chat-streaming-indicator">
+                <span className="orbit-thread-pane__dot" aria-hidden="true" />
+                {t("chat.page.working")}
+              </span>
+            )}
+            <div className="orbit-thread-pane__actions">
+              {activeSessionId && chatState.items.length > 0 && (
+                <button
+                  type="button"
+                  className="orbit-thread__icon"
+                  title={t("chat.page.branch")}
+                  aria-label={t("chat.page.branch")}
+                  onClick={() => void forkSession(activeSessionId)}
                   data-testid="chat-header-fork-button"
                 >
-                  Try a different answer
-                </Button>
-              )}
-              {chatState.streaming && (
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={handleStopRun}
-                  icon={<Square size={14} />}
-                  data-testid="chat-stop-button"
-                >
-                  Stop
-                </Button>
+                  <GitBranch size={15} aria-hidden="true" />
+                </button>
               )}
             </div>
           </header>
 
           <div
-            ref={transcriptRef}
-            onScroll={handleTranscriptScroll}
-            className="orbit-chat-transcript"
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="orbit-thread-pane__scroll"
             data-testid="chat-transcript"
           >
-            {chatState.items.length === 0 && standaloneApprovals.length === 0 ? (
-              <div
-                style={{
-                  marginInline: "auto",
-                  inlineSize: "100%",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  textAlign: "center",
-                  gap: "var(--space-3)",
-                  padding: "var(--space-2) var(--space-3)",
-                  maxInlineSize: "44rem",
-                }}
-                data-testid="chat-empty-state"
-              >
-                <div
-                  style={{
-                    inlineSize: "2.75rem",
-                    blockSize: "2.75rem",
-                    borderRadius: "var(--radius-full)",
-                    backgroundColor: "var(--accent-primary-subtle)",
-                    border: "1px solid var(--accent-primary-border)",
-                    color: "var(--accent-primary)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
+            {showHero ? (
+              <div className="orbit-hero" data-testid="chat-empty-state">
+                <span className="orbit-hero__mark" aria-hidden="true">
                   <OrbitIcon size={22} />
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "var(--space-1)",
-                  }}
-                >
-                  <h2
-                    style={{
-                      margin: 0,
-                      fontFamily: "var(--font-display)",
-                      fontSize: "var(--text-h3)",
-                      fontWeight: 700,
-                    }}
-                  >
-                    How can Orion help in the barn today?
-                  </h2>
-                  <p
-                    style={{
-                      margin: 0,
-                      color: "var(--text-secondary)",
-                      fontSize: "var(--text-sm)",
-                      maxInlineSize: "50ch",
-                    }}
-                  >
-                    Pick a question below or type your own. Orion reads your herd records on this PC
-                    and asks before changing records or scanning your network.
-                  </p>
-                </div>
-
+                </span>
+                <h2 className="orbit-hero__title">{t("chat.hero.title")}</h2>
+                <p className="orbit-hero__lede">{t("chat.hero.lede")}</p>
                 <div className="orbit-starter-grid" data-testid="starter-prompts-grid">
                   {STARTER_PROMPTS.map((starter) => {
                     const StarterIcon = starter.icon;
@@ -902,404 +496,91 @@ export default function ChatPage() {
                         key={starter.id}
                         type="button"
                         className="orbit-starter-btn"
-                        onClick={() => void sendToOrion(starter.prompt, "prompt")}
+                        onClick={() => void send("prompt", t(starter.promptKey))}
                         data-testid={`starter-prompt-${starter.id}`}
                       >
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "var(--space-2)",
-                            fontSize: "var(--text-xs)",
-                            fontWeight: 650,
-                            color: "var(--accent-primary)",
-                          }}
-                        >
-                          <StarterIcon size={14} aria-hidden="true" />
-                          {starter.category}
+                        <span className="orbit-starter-btn__category">
+                          <StarterIcon size={13} aria-hidden="true" />
+                          {t(starter.categoryKey)}
                         </span>
-                        <span
-                          style={{
-                            fontSize: "var(--text-sm)",
-                            fontWeight: 600,
-                            color: "var(--text-primary)",
-                          }}
-                        >
-                          {starter.label}
-                        </span>
+                        <span className="orbit-starter-btn__label">{t(starter.labelKey)}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
             ) : (
-              <>
-                {chatState.items.map((item) => {
-                  if (item.kind === "user") {
-                    const activeId = chatState.sessionId;
-                    const canForkItem =
-                      Boolean(activeId) &&
-                      !item.id.startsWith("optimistic-") &&
-                      !item.id.startsWith("msg_");
-                    return (
-                      <article
-                        key={item.id}
-                        className="orbit-msg-user"
-                        data-testid={`message-user-${item.id}`}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "var(--space-3)",
-                          }}
-                        >
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "var(--space-1)",
-                              fontSize: "var(--text-xs)",
-                              fontWeight: 700,
-                              color: "var(--accent-primary)",
-                            }}
-                          >
-                            <User size={13} aria-hidden="true" />
-                            You
-                          </span>
-                          {canForkItem && activeId && (
-                            <button
-                              type="button"
-                              className="orbit-icon-btn"
-                              onClick={() => handleForkSession(activeId, item.id)}
-                              title="Branch conversation from this question"
-                              data-testid={`message-fork-${item.id}`}
-                            >
-                              <GitBranch size={12} aria-hidden="true" />
-                              <span>Try a different answer</span>
-                            </button>
-                          )}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "var(--text-base)",
-                            whiteSpace: "pre-wrap",
-                            wordBreak: "break-word",
-                            color: "var(--text-primary)",
-                          }}
-                        >
-                          {item.text}
-                        </div>
-                      </article>
-                    );
-                  }
+              <Timeline
+                items={chatState.items}
+                streaming={chatState.streaming}
+                runStartedAt={chatState.runStartedAt}
+                {...(activeSessionId
+                  ? { onFork: (itemId: string) => void forkSession(activeSessionId, itemId) }
+                  : {})}
+              />
+            )}
 
-                  if (item.kind === "assistant") {
-                    return (
-                      <article
-                        key={item.id}
-                        className="orbit-msg-assistant"
-                        data-testid={`message-assistant-${item.id}`}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "var(--space-2)",
-                          }}
-                        >
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "var(--space-2)",
-                              fontSize: "var(--text-xs)",
-                              fontWeight: 700,
-                              color: "var(--accent-secondary)",
-                            }}
-                          >
-                            <Bot size={15} aria-hidden="true" />
-                            Orion
-                          </span>
-                          {item.model && (
-                            <span
-                              style={{
-                                fontFamily: "var(--font-mono)",
-                                fontSize: "var(--text-xs)",
-                                color: "var(--text-muted)",
-                              }}
-                            >
-                              {item.model}
-                            </span>
-                          )}
-                        </div>
-
-                        {item.thinking && (
-                          <div
-                            data-testid={`message-thinking-${item.id}`}
-                            style={{
-                              padding: "var(--space-2) var(--space-3)",
-                              borderRadius: "var(--radius-md)",
-                              backgroundColor: "var(--bg-surface)",
-                              border: "1px solid var(--border-subtle)",
-                              fontSize: "var(--text-xs)",
-                              color: "var(--text-secondary)",
-                              fontStyle: "italic",
-                            }}
-                          >
-                            Thinking: {item.thinking}
-                          </div>
-                        )}
-
-                        {item.text ? (
-                          <SafeMarkdown text={item.text} />
-                        ) : (
-                          chatState.streaming && (
-                            <div
-                              data-testid="thinking-indicator"
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "var(--space-2)",
-                                fontSize: "var(--text-sm)",
-                                color: "var(--text-secondary)",
-                              }}
-                            >
-                              <Loader2 size={15} className="orbit-spin" aria-hidden="true" />
-                              <span>Orion is thinking…</span>
-                            </div>
-                          )
-                        )}
-
-                        {item.errorMessage && (
-                          <div
-                            role="alert"
-                            style={{
-                              padding: "var(--space-2) var(--space-3)",
-                              borderRadius: "var(--radius-md)",
-                              backgroundColor: "var(--status-danger-bg)",
-                              border: "1px solid var(--status-danger-border)",
-                              color: "var(--status-danger)",
-                              fontSize: "var(--text-xs)",
-                              fontWeight: 600,
-                            }}
-                          >
-                            {item.errorMessage}
-                          </div>
-                        )}
-                      </article>
-                    );
-                  }
-
-                  if (item.kind === "tool") {
-                    const linkedApprovals = approvalsByToolCallId.get(item.toolCallId) ?? [];
-                    return (
-                      <div
-                        key={item.id}
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "var(--space-3)",
-                        }}
-                      >
-                        <ToolCard item={item} />
-                        {linkedApprovals.map((app) => (
-                          <ApprovalCard
-                            key={app.approvalId}
-                            approval={app}
-                            onRespond={handleApprovalRespond}
-                          />
-                        ))}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="orbit-msg-system"
-                      data-testid={`message-system-${item.id}`}
-                    >
-                      {item.text}
-                    </div>
-                  );
-                })}
-
-                {standaloneApprovals.map((app) => (
-                  <ApprovalCard
-                    key={app.approvalId}
-                    approval={app}
-                    onRespond={handleApprovalRespond}
+            {(() => {
+              const planErrorCode = classifyPlanError(chatState.lastErrorCode, chatState.lastError);
+              if (planErrorCode) {
+                return (
+                  <PlanErrorCard
+                    code={planErrorCode}
+                    message={chatState.lastError}
+                    onDismiss={() => dispatch({ type: "error.clear" })}
                   />
-                ))}
-
-                {chatState.streaming &&
-                  chatState.items[chatState.items.length - 1]?.kind === "user" && (
-                    <div
-                      data-testid="thinking-indicator"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "var(--space-2)",
-                        padding: "var(--space-3) var(--space-4)",
-                        borderRadius: "var(--radius-md)",
-                        backgroundColor: "var(--bg-elevated)",
-                        border: "1px solid var(--border-subtle)",
-                        fontSize: "var(--text-sm)",
-                        color: "var(--text-secondary)",
-                        alignSelf: "flex-start",
-                      }}
-                    >
-                      <Loader2 size={16} className="orbit-spin" aria-hidden="true" />
-                      <span>Orion is checking your farm records…</span>
-                    </div>
-                  )}
-              </>
-            )}
-
-            {chatState.lastError && (
-              <div
-                role="alert"
-                data-testid="chat-error-banner"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "var(--space-3)",
-                  padding: "var(--space-3) var(--space-4)",
-                  borderRadius: "var(--radius-md)",
-                  backgroundColor: "var(--status-danger-bg)",
-                  border: "1px solid var(--status-danger-border)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--space-2)",
-                    fontSize: "var(--text-sm)",
-                  }}
-                >
-                  <AlertCircle size={18} style={{ color: "var(--status-danger)", flexShrink: 0 }} />
+                );
+              }
+              if (!chatState.lastError) return null;
+              return (
+                <div className="orbit-chat-error" role="alert" data-testid="chat-error-banner">
+                  <AlertCircle size={16} aria-hidden="true" />
                   <span>{chatState.lastError}</span>
+                  <button
+                    type="button"
+                    className="orbit-thread__icon"
+                    aria-label={t("chat.page.dismissError")}
+                    onClick={() => dispatch({ type: "error.clear" })}
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
                 </div>
-                <Button
-                  variant="subtle"
-                  size="sm"
-                  onClick={() => dispatch({ type: "error.clear" })}
-                >
-                  Dismiss
-                </Button>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
-          <footer className="orbit-chat-composer-bar">
-            {!autoScroll && (
-              <div style={{ display: "flex", justifyContent: "center" }}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={scrollToBottom}
-                  icon={<ArrowDown size={14} />}
-                  data-testid="chat-scroll-bottom-button"
-                >
-                  Jump to latest message
-                </Button>
-              </div>
-            )}
-
-            <label
-              htmlFor="orion-composer-input"
-              style={{
-                fontSize: "var(--text-xs)",
-                fontWeight: 600,
-                color: "var(--text-secondary)",
-              }}
-            >
-              {chatState.streaming
-                ? "Orion is working — add to the current task or queue for after:"
-                : "Message Orion (Enter to send, Shift+Enter for new line)"}
-            </label>
-
-            <textarea
-              id="orion-composer-input"
-              className="orbit-chat-textarea"
-              placeholder="Ask Orion about your cows, horses, sensors, milking robot, or cameras…"
-              value={composerText}
-              onChange={(e) => setComposerText(e.target.value)}
-              onKeyDown={handleComposerKeyDown}
-              data-testid="chat-composer-input"
-            />
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                flexWrap: "wrap",
-                gap: "var(--space-3)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: "var(--space-2)",
-                }}
+          <footer className="orbit-thread-pane__footer">
+            {!atBottom && (
+              <button
+                type="button"
+                className="orbit-jump"
+                onClick={jumpToLatest}
+                data-testid="chat-scroll-bottom-button"
               >
-                {chatState.streaming ? (
-                  <>
-                    <Button
-                      variant="primary"
-                      size="md"
-                      loading={sendingMode === "steer"}
-                      disabled={!composerText.trim() || sendingMode !== null}
-                      onClick={() => void sendToOrion(composerText, "steer")}
-                      icon={<Send size={16} />}
-                      data-testid="chat-steer-button"
-                    >
-                      Add to current task
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      loading={sendingMode === "followUp"}
-                      disabled={!composerText.trim() || sendingMode !== null}
-                      onClick={() => void sendToOrion(composerText, "followUp")}
-                      data-testid="chat-followup-button"
-                    >
-                      After this
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="md"
-                      onClick={handleStopRun}
-                      icon={<Square size={15} />}
-                      data-testid="chat-composer-stop-button"
-                    >
-                      Stop
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    loading={sendingMode === "prompt"}
-                    disabled={!composerText.trim() || sendingMode !== null}
-                    onClick={() => void sendToOrion(composerText, "prompt")}
-                    icon={<Send size={16} />}
-                    data-testid="chat-send-button"
-                  >
-                    Ask Orion
-                  </Button>
-                )}
-              </div>
-            </div>
+                <ArrowDown size={14} aria-hidden="true" />
+                {t("chat.page.jumpToLatest")}
+              </button>
+            )}
+            {voiceOpen && (
+              <VoicePanel
+                sessionId={activeSessionId}
+                ensureSession={ensureSession}
+                onClose={() => setVoiceOpen(false)}
+              />
+            )}
+            <Composer
+              value={composerText}
+              onChange={setComposerText}
+              onSend={(mode) => void send(mode)}
+              onStop={() => void stopRun()}
+              onStartVoice={() => setVoiceOpen((v) => !v)}
+              voiceOpen={voiceOpen}
+              streaming={chatState.streaming}
+              sendingPrompt={sendingPrompt}
+              queued={chatState.queued}
+              modelLabel={modelLabel}
+              inputRef={composerRef}
+            />
           </footer>
         </section>
       </div>
@@ -1307,44 +588,34 @@ export default function ChatPage() {
       <Dialog
         open={deletingSession !== null}
         onClose={() => setDeletingSession(null)}
-        title="Delete conversation?"
+        title={t("chat.delete.title")}
         description={
           deletingSession
-            ? `Are you sure you want to delete "${deletingSession.title}"? Your herd records and farm snapshots are kept safe.`
+            ? t("chat.delete.description", { title: deletingSession.title })
             : undefined
         }
         footer={
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: "var(--space-3)",
-              inlineSize: "100%",
-            }}
-          >
+          <div className="orbit-dialog-actions">
             <Button
               variant="secondary"
               onClick={() => setDeletingSession(null)}
               data-testid="session-delete-cancel"
             >
-              Keep conversation
+              {t("chat.delete.keep")}
             </Button>
             <Button
               variant="danger"
               loading={deletingBusy}
-              onClick={handleConfirmDelete}
+              onClick={confirmDelete}
               icon={<Trash2 size={16} />}
               data-testid="session-delete-confirm"
             >
-              Delete conversation
+              {t("chat.delete.confirm")}
             </Button>
           </div>
         }
       >
-        <p style={{ margin: 0, fontSize: "var(--text-sm)" }}>
-          This removes the chat transcript from this PC. Any database or workspace changes Orion
-          made can still be undone in Settings.
-        </p>
+        <p style={{ margin: 0, fontSize: "var(--text-sm)" }}>{t("chat.delete.body")}</p>
       </Dialog>
     </div>
   );

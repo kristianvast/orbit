@@ -1,0 +1,32 @@
+import type { Catalog } from "../../core";
+import type { shell as en } from "../en/shell";
+
+export const shell: Catalog<typeof en> = {
+  "nav.home": "Hjem",
+  "nav.chat": "Spør Orion",
+  "nav.herd": "Kyr og hester",
+  "nav.devices": "Sensorer og roboter",
+  "nav.cameras": "Kameraer",
+  "nav.settings": "Innstillinger",
+  "nav.primary": "Hovednavigasjon for gården",
+  "nav.main": "Hovedmeny",
+  "nav.alerts": " varsler",
+  "nav.yourPages": "Dine sider",
+  "sync.localWaiting": "Venter lokalt",
+  "sync.syncing": "Synkroniserer ({count})",
+  "sync.error": "Synkroniseringsfeil",
+  "sync.savedLocally": "Lagret på denne PC-en",
+  "sync.synced": "Synkronisert",
+  "orion.online": "Orion tilkoblet",
+  "orion.connecting": "Orion kobler til",
+  "orion.reconnecting": "Orion kobler til på nytt",
+  "orion.closed": "Orion frakoblet",
+  "orion.unauthorized": "Orion nektet tilgang",
+  "theme.toDark": "Bytt til mørkt nattevakt-tema",
+  "theme.toLight": "Bytt til lyst dagslys-tema",
+  "theme.darkTitle": "Nattevakt-tema",
+  "theme.lightTitle": "Dagslys-tema",
+  "theme.dark": "Nattevakt",
+  "theme.light": "Dagslys",
+  "farm.fallbackName": "North Ridge Barn",
+};

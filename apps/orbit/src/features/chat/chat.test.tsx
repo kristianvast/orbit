@@ -1,4 +1,5 @@
 import type {
+  AuthProviderInfo,
   ConnectionState,
   OrionClient,
   RequestParams,
@@ -12,17 +13,16 @@ import type {
 } from "@orbit/protocol";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AppProviders } from "../../app/providers";
 import SettingsPage from "../settings";
 import ChatPage, {
-  ApprovalCard,
+  buildTurnBlocks,
+  buildTurns,
   chatReducer,
   createInitialChatState,
-  type PendingApprovalItem,
-  resetPendingApprovalsForTests,
   ToolCard,
-  usePendingApprovalCount,
+  turnDurationMs,
 } from "./index";
 
 const baseSession: SessionSummary = {
@@ -36,21 +36,22 @@ const baseSession: SessionSummary = {
   parentSessionId: null,
 };
 
-function createMockClient() {
+function createMockClient(
+  extraSessions: SessionSummary[] = [],
+  options: { promptNeverResolves?: boolean } = {},
+) {
   const currentState: ConnectionState = "open";
   const listeners = new Map<string, Set<(ev: ServerEvent) => void>>();
 
-  const sessions: SessionSummary[] = [baseSession];
+  const sessions: SessionSummary[] = [baseSession, ...extraSessions];
   let settings: Settings = {
     provider: "orion-mock",
     model: "mock-1",
     thinkingLevel: "off",
-    approvalMode: "ask",
     apiKeys: {
       "orion-mock": { configured: true },
       anthropic: { configured: true, hint: "…9a2f" },
     },
-    alwaysAllow: ["herd_query"],
     availableModels: [
       {
         provider: "orion-mock",
@@ -64,6 +65,25 @@ function createMockClient() {
       },
     ],
   };
+
+  const providers: AuthProviderInfo[] = [
+    {
+      id: "anthropic",
+      name: "Anthropic",
+      oauth: { name: "Anthropic (Claude Pro/Max)", subscription: true },
+      apiKey: { name: "Anthropic API key" },
+      status: { configured: false, method: null, source: null },
+      modelCount: 17,
+    },
+    {
+      id: "groq",
+      name: "Groq",
+      oauth: null,
+      apiKey: { name: "Groq API key" },
+      status: { configured: false, method: null, source: null },
+      modelCount: 7,
+    },
+  ];
 
   let snapshots: SnapshotSummary[] = [
     {
@@ -144,10 +164,11 @@ function createMockClient() {
         case "sessions.delete":
           return { deleted: true } as RequestResult<T>;
         case "chat.prompt":
+          if (options.promptNeverResolves) return new Promise<RequestResult<T>>(() => {});
+          return { accepted: true } as RequestResult<T>;
         case "chat.steer":
         case "chat.followUp":
         case "chat.abort":
-        case "approval.respond":
           return { accepted: true } as RequestResult<T>;
         case "settings.get":
           return settings as RequestResult<T>;
@@ -169,8 +190,6 @@ function createMockClient() {
             ...(u.provider !== undefined ? { provider: u.provider } : {}),
             ...(u.model !== undefined ? { model: u.model } : {}),
             ...(u.thinkingLevel ? { thinkingLevel: u.thinkingLevel } : {}),
-            ...(u.approvalMode ? { approvalMode: u.approvalMode } : {}),
-            ...(u.alwaysAllow ? { alwaysAllow: u.alwaysAllow } : {}),
             apiKeys: nextKeys,
           };
           return settings as RequestResult<T>;
@@ -200,6 +219,13 @@ function createMockClient() {
             restored: [{ table: "animals", ids: ["a-1"] }],
           } as RequestResult<T>;
         }
+        case "auth.providers":
+          return { providers: structuredClone(providers) } as RequestResult<T>;
+        case "auth.login":
+          return { loginId: "login-1" } as RequestResult<T>;
+        case "auth.respond":
+        case "auth.cancel":
+          return { accepted: true } as RequestResult<T>;
         default:
           throw new Error(`Unhandled request: ${type}`);
       }
@@ -236,6 +262,7 @@ function createMockClient() {
   return {
     client,
     requestMock,
+    providers,
     emit(ev: ServerEvent) {
       for (const key of [ev.type, "*"]) {
         for (const fn of listeners.get(key) ?? []) {
@@ -246,13 +273,8 @@ function createMockClient() {
   };
 }
 
-function BadgeProbe() {
-  const count = usePendingApprovalCount();
-  return <span data-testid="nav-approval-probe">{count}</span>;
-}
-
 describe("chatReducer streaming and lifecycle", () => {
-  it("accumulates message deltas, updates tool calls, tracks approvals, and settles cleanly", () => {
+  it("accumulates message deltas, updates tool calls, and settles cleanly", () => {
     let state = createInitialChatState("sess-1");
     state = chatReducer(state, {
       type: "session.opened",
@@ -298,35 +320,6 @@ describe("chatReducer streaming and lifecycle", () => {
     });
     expect(state.items).toHaveLength(2);
     expect(state.items[1]?.kind).toBe("tool");
-
-    state = chatReducer(state, {
-      type: "server.event",
-      event: {
-        type: "approval.request",
-        sessionId: "sess-1",
-        approvalId: "app_1",
-        toolCallId: "call_cam_1",
-        toolName: "camera_discover",
-        title: "Look for cameras on your network",
-        plainLanguage: "Orion wants to send a discovery message on your local network.",
-        risk: "ask",
-      },
-    });
-    expect(state.approvals).toHaveLength(1);
-    expect(state.approvals[0]?.status).toBe("pending");
-
-    state = chatReducer(state, {
-      type: "server.event",
-      event: {
-        type: "approval.resolved",
-        sessionId: "sess-1",
-        approvalId: "app_1",
-        decision: "allow_once",
-        by: "user",
-      },
-    });
-    expect(state.approvals[0]?.status).toBe("resolved");
-    expect(state.approvals[0]?.decision).toBe("allow_once");
 
     state = chatReducer(state, {
       type: "server.event",
@@ -404,8 +397,39 @@ describe("chatReducer streaming and lifecycle", () => {
   });
 });
 
+describe("turn grouping", () => {
+  it("splits at user messages, groups consecutive tools, and only times turns of a second or more", () => {
+    const tool = (id: string, ts: string): ToolItem => ({
+      kind: "tool",
+      id,
+      ts,
+      toolCallId: id,
+      name: "herd_query",
+      label: "Look up the herd",
+      args: {},
+      status: "done",
+      durationMs: 500,
+    });
+    const turns = buildTurns([
+      { kind: "user", id: "u1", ts: "2026-11-03T07:00:00.000Z", text: "List cows" },
+      tool("t1", "2026-11-03T07:00:01.000Z"),
+      tool("t2", "2026-11-03T07:00:02.000Z"),
+      { kind: "assistant", id: "a1", ts: "2026-11-03T07:00:04.000Z", text: "Here they are." },
+      { kind: "user", id: "u2", ts: "2026-11-03T07:01:00.000Z", text: "Thanks" },
+      { kind: "assistant", id: "a2", ts: "2026-11-03T07:01:00.400Z", text: "Anytime." },
+    ]);
+
+    expect(turns.map((t) => t.user?.id)).toEqual(["u1", "u2"]);
+    const [first, second] = turns;
+    if (!first || !second) throw new Error("expected two turns");
+    expect(buildTurnBlocks(first.steps).map((b) => b.kind)).toEqual(["tools", "step"]);
+    expect(turnDurationMs(first)).toBe(4000);
+    expect(turnDurationMs(second)).toBeNull();
+  });
+});
+
 describe("ToolCard states and animal mini-table", () => {
-  it("renders running, done with animal mini-table, and denied error states", () => {
+  it("renders running, done with animal mini-table, and error states", () => {
     const runningTool: ToolItem = {
       kind: "tool",
       id: "call-1",
@@ -468,77 +492,30 @@ describe("ToolCard states and animal mini-table", () => {
     expect(screen.getByText("DK-1001")).toBeInTheDocument();
     expect(screen.getByText("bolus (92%)")).toBeInTheDocument();
 
-    const deniedTool: ToolItem = {
+    const failedTool: ToolItem = {
       ...runningTool,
       toolCallId: "call-2",
       id: "call-2",
       name: "device_bind",
-      status: "denied",
+      status: "error",
       isError: true,
-      result: 'Not allowed: the farmer said no to "Change which sensor an animal wears".',
+      result: "Not done: this animal already wears a collar.",
     };
 
-    rerender(<ToolCard key="call-2" item={deniedTool} />);
-    expect(screen.getByTestId("tool-card-status-call-2")).toHaveTextContent("Not allowed");
-    expect(screen.getByTestId("tool-card-error-summary-call-2")).toHaveTextContent(/Not allowed:/);
-  });
-});
-
-describe("ApprovalCard decisions and details", () => {
-  it("renders notice, expands command details, and fires allow_once / always_allow / deny", async () => {
-    const onRespond = vi.fn();
-    const approval: PendingApprovalItem = {
-      approvalId: "app-42",
-      sessionId: "sess-1",
-      toolCallId: "call-9",
-      toolName: "bash",
-      title: "Run a command",
-      plainLanguage: "Orion wants to run a command in the farm workspace on this computer.",
-      command: "ls -la connectors/",
-      risk: "ask",
-      status: "pending",
-    };
-
-    render(<ApprovalCard approval={approval} onRespond={onRespond} />);
-
-    expect(screen.getByTestId("approval-notice-app-42")).toHaveTextContent(
-      "AI can make mistakes. Check what Orion wants to do.",
-    );
-
-    fireEvent.click(screen.getByTestId("approval-details-toggle-app-42"));
-    expect(screen.getByTestId("approval-command-app-42")).toHaveTextContent("ls -la connectors/");
-
-    fireEvent.click(screen.getByTestId("approval-allow-once-app-42"));
-    await waitFor(() => {
-      expect(onRespond).toHaveBeenCalledWith("app-42", "allow_once");
-    });
-
-    fireEvent.click(screen.getByTestId("approval-always-allow-app-42"));
-    await waitFor(() => {
-      expect(onRespond).toHaveBeenCalledWith("app-42", "always_allow");
-    });
-
-    fireEvent.click(screen.getByTestId("approval-deny-app-42"));
-    await waitFor(() => {
-      expect(onRespond).toHaveBeenCalledWith("app-42", "deny");
-    });
+    rerender(<ToolCard key="call-2" item={failedTool} />);
+    expect(screen.getByTestId("tool-card-error-summary-call-2")).toHaveTextContent(/Not done:/);
   });
 });
 
 describe("ChatPage and SettingsPage integration", () => {
-  beforeEach(() => {
-    resetPendingApprovalsForTests();
-  });
-
-  it("prefills composer from ?prompt=, switches between prompt and steer/followUp while streaming, and updates pending approval count", async () => {
-    const { client, requestMock, emit } = createMockClient();
+  it("prefills composer from ?prompt= into a draft that becomes a session only on send", async () => {
+    const { client, requestMock } = createMockClient();
 
     render(
       <MemoryRouter
         initialEntries={["/chat?prompt=Which%20cows%20had%20lower%20milk%20yield%20this%20week%3F"]}
       >
         <AppProviders initialClient={client}>
-          <BadgeProbe />
           <ChatPage />
         </AppProviders>
       </MemoryRouter>,
@@ -550,38 +527,154 @@ describe("ChatPage and SettingsPage integration", () => {
     await waitFor(() => {
       expect(screen.getByTestId("session-item-sess-1")).toBeInTheDocument();
     });
+    expect(screen.getByTestId("chat-empty-state")).toBeInTheDocument();
+    expect(requestMock).not.toHaveBeenCalledWith("sessions.create", expect.anything());
 
     fireEvent.click(screen.getByTestId("chat-send-button"));
     await waitFor(() => {
       expect(requestMock).toHaveBeenCalledWith("chat.prompt", {
-        sessionId: "sess-1",
+        sessionId: "sess-2",
         text: "Which cows had lower milk yield this week?",
       });
     });
+    expect(requestMock).toHaveBeenCalledWith("sessions.create", {});
+    expect(screen.getByTestId("session-item-sess-2")).toHaveAttribute("data-active", "true");
 
     expect(screen.getByTestId("chat-steer-button")).toBeInTheDocument();
     expect(screen.getByTestId("chat-followup-button")).toBeInTheDocument();
-
-    act(() => {
-      emit({
-        type: "approval.request",
-        sessionId: "sess-1",
-        approvalId: "app-live-1",
-        toolName: "camera_discover",
-        title: "Look for cameras on your network",
-        plainLanguage: "Orion wants to scan for ONVIF cameras.",
-        risk: "ask",
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("approval-card-app-live-1")).toBeInTheDocument();
-      expect(screen.getByTestId("nav-approval-probe")).toHaveTextContent("1");
-    });
   });
 
-  it("renders SettingsPage, updates approval mode, saves API key without echoing it, and undoes snapshot", async () => {
-    const { client, requestMock } = createMockClient();
+  it("New chat never persists an empty session and hides never-started ones from history", async () => {
+    const emptySession: SessionSummary = {
+      ...baseSession,
+      id: "sess-empty",
+      title: "New conversation",
+      messageCount: 0,
+    };
+    const { client, requestMock } = createMockClient([emptySession]);
+
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <AppProviders initialClient={client}>
+          <ChatPage />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("session-item-sess-empty")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("session-open-sess-1"));
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toHaveAttribute("data-active", "true");
+    });
+
+    fireEvent.click(screen.getByTestId("session-new-button"));
+    expect(screen.getByTestId("chat-empty-state")).toBeInTheDocument();
+    expect(screen.getByTestId("session-item-sess-1")).toHaveAttribute("data-active", "false");
+    expect(screen.getAllByTestId(/^session-item-/)).toHaveLength(1);
+    expect(requestMock).not.toHaveBeenCalledWith("sessions.create", expect.anything());
+  });
+
+  it("queues Enter as a follow-up and Ctrl+Enter as a steer while the prompt request is still pending", async () => {
+    const { client, requestMock, emit } = createMockClient([], { promptNeverResolves: true });
+
+    render(
+      <MemoryRouter initialEntries={["/chat?s=sess-1"]}>
+        <AppProviders initialClient={client}>
+          <ChatPage />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toHaveAttribute("data-active", "true");
+    });
+    fireEvent.change(screen.getByTestId("chat-composer-input"), {
+      target: { value: "List cows" },
+    });
+    fireEvent.click(screen.getByTestId("chat-send-button"));
+    await waitFor(() => {
+      expect(requestMock).toHaveBeenCalledWith("chat.prompt", {
+        sessionId: "sess-1",
+        text: "List cows",
+      });
+    });
+    act(() =>
+      emit({
+        type: "session.updated",
+        sessionId: "sess-1",
+        session: { ...baseSession, streaming: true },
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-composer-stop-button")).toBeInTheDocument();
+    });
+
+    const input = screen.getByTestId("chat-composer-input");
+    fireEvent.change(input, { target: { value: "Then check the heifers" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => {
+      expect(requestMock).toHaveBeenCalledWith("chat.followUp", {
+        sessionId: "sess-1",
+        text: "Then check the heifers",
+      });
+    });
+    expect(screen.getByTestId("queued-message")).toHaveTextContent("Then check the heifers");
+
+    fireEvent.change(input, { target: { value: "Only the milking group" } });
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+    await waitFor(() => {
+      expect(requestMock).toHaveBeenCalledWith("chat.steer", {
+        sessionId: "sess-1",
+        text: "Only the milking group",
+      });
+    });
+    expect(screen.getAllByTestId("queued-message")).toHaveLength(2);
+
+    act(() => {
+      emit({ type: "message.start", sessionId: "sess-1", messageId: "msg_u1", role: "user" });
+      emit({ type: "message.start", sessionId: "sess-1", messageId: "msg_u2", role: "user" });
+      emit({ type: "message.start", sessionId: "sess-1", messageId: "msg_a2", role: "assistant" });
+      emit({
+        type: "message.end",
+        sessionId: "sess-1",
+        messageId: "msg_a2",
+        item: {
+          kind: "assistant",
+          id: "entry-a2",
+          ts: new Date().toISOString(),
+          text: "Milking group only.",
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getAllByTestId("queued-message")).toHaveLength(1);
+    });
+    act(() =>
+      emit({
+        type: "message.end",
+        sessionId: "sess-1",
+        messageId: "msg_u2",
+        item: {
+          kind: "user",
+          id: "entry-u2",
+          ts: new Date().toISOString(),
+          text: "Only the milking group",
+        },
+      }),
+    );
+    const steered = await screen.findByTestId("message-user-entry-u2");
+    expect(steered).toHaveTextContent("Only the milking group");
+    const reply = screen.getByTestId("message-assistant-entry-a2");
+    expect(steered.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByTestId("queued-message")).toHaveLength(1);
+  });
+
+  it("adds an API key through the sign-in dialog without ever showing it, and undoes a snapshot", async () => {
+    const { client, requestMock, providers, emit } = createMockClient();
 
     render(
       <MemoryRouter initialEntries={["/settings"]}>
@@ -591,29 +684,50 @@ describe("ChatPage and SettingsPage integration", () => {
       </MemoryRouter>,
     );
 
+    fireEvent.click(await screen.findByTestId("providers-tab-apiKeys"));
+    fireEvent.click(await screen.findByTestId("provider-connect-groq"));
     await waitFor(() => {
-      expect(screen.getByTestId("settings-provider-select")).toBeInTheDocument();
-    });
-
-    const keyInput = screen.getByTestId("settings-apikey-input") as HTMLInputElement;
-    expect(keyInput.value).toBe("");
-    fireEvent.change(keyInput, { target: { value: "sk-secret-key-8899" } });
-    fireEvent.click(screen.getByTestId("settings-save-apikey-button"));
-
-    await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith("settings.update", {
-        apiKey: { provider: "anthropic", key: "sk-secret-key-8899" },
+      expect(requestMock).toHaveBeenCalledWith("auth.login", {
+        providerId: "groq",
+        method: "api_key",
       });
     });
-    expect(keyInput.value).toBe("");
-    expect(screen.getByTestId("settings-key-hint-anthropic")).toHaveTextContent("…8899");
+    await act(async () => {});
 
-    fireEvent.click(screen.getByTestId("settings-approval-mode-auto"));
+    act(() =>
+      emit({
+        type: "auth.prompt",
+        loginId: "login-1",
+        promptId: "p1",
+        prompt: { type: "secret", message: "Enter your Groq API key" },
+      }),
+    );
+    const keyInput = (await screen.findByTestId("login-prompt-input")) as HTMLInputElement;
+    expect(keyInput.type).toBe("password");
+    fireEvent.change(keyInput, { target: { value: "gsk-secret-8899" } });
+    fireEvent.click(screen.getByTestId("login-prompt-submit"));
     await waitFor(() => {
-      expect(requestMock).toHaveBeenCalledWith("settings.update", {
-        approvalMode: "auto",
+      expect(requestMock).toHaveBeenCalledWith("auth.respond", {
+        loginId: "login-1",
+        promptId: "p1",
+        value: "gsk-secret-8899",
       });
     });
+
+    const groq = providers.find((p) => p.id === "groq");
+    if (groq) groq.status = { configured: true, method: "api_key", source: "stored" };
+    act(() =>
+      emit({
+        type: "auth.finished",
+        loginId: "login-1",
+        providerId: "groq",
+        ok: true,
+        cancelled: false,
+      }),
+    );
+    expect(await screen.findByTestId("login-success")).toBeInTheDocument();
+    expect(await screen.findByTestId("provider-status-groq")).toHaveTextContent("API key");
+    expect(document.body.textContent).not.toContain("gsk-secret-8899");
 
     fireEvent.click(screen.getByTestId("settings-undo-last-button"));
     await waitFor(() => {
@@ -621,5 +735,57 @@ describe("ChatPage and SettingsPage integration", () => {
         snapshotId: "snap-1",
       });
     });
+  });
+
+  it("shows a subscription's sign-in link and code field, and cancels the sign-in on close", async () => {
+    const { client, requestMock, emit } = createMockClient();
+
+    render(
+      <MemoryRouter initialEntries={["/settings"]}>
+        <AppProviders initialClient={client}>
+          <SettingsPage />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByTestId("provider-connect-anthropic"));
+    await waitFor(() => {
+      expect(requestMock).toHaveBeenCalledWith("auth.login", {
+        providerId: "anthropic",
+        method: "oauth",
+      });
+    });
+    await act(async () => {});
+    act(() => {
+      emit({
+        type: "auth.notice",
+        loginId: "login-1",
+        notice: { type: "auth_url", url: "https://claude.ai/oauth/authorize?x=1", opened: true },
+      });
+      emit({
+        type: "auth.prompt",
+        loginId: "login-1",
+        promptId: "p1",
+        prompt: { type: "manual_code", message: "Paste the authorization code" },
+      });
+      emit({
+        type: "auth.notice",
+        loginId: "other-login",
+        notice: { type: "info", message: "not for this dialog" },
+      });
+    });
+
+    expect(await screen.findByTestId("login-open-link")).toHaveAttribute(
+      "href",
+      "https://claude.ai/oauth/authorize?x=1",
+    );
+    expect(screen.getByTestId("login-prompt-input")).toHaveAttribute("type", "text");
+    expect(screen.queryByText("not for this dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("login-cancel"));
+    await waitFor(() => {
+      expect(requestMock).toHaveBeenCalledWith("auth.cancel", { loginId: "login-1" });
+    });
+    expect(screen.queryByTestId("login-dialog")).not.toBeInTheDocument();
   });
 });

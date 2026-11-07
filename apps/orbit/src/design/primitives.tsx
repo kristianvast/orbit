@@ -13,6 +13,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useT } from "../i18n";
 
 export type ButtonVariant = "primary" | "secondary" | "subtle" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
@@ -241,6 +242,7 @@ export interface DialogProps {
 }
 
 export function Dialog({ open, onClose, title, description, children, footer }: DialogProps) {
+  const t = useT();
   const titleId = useId();
   const descId = useId();
 
@@ -279,7 +281,7 @@ export function Dialog({ open, onClose, title, description, children, footer }: 
             variant="subtle"
             size="sm"
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={t("design.dialog.close")}
             icon={<X size={18} />}
           />
         </header>
@@ -302,6 +304,7 @@ export interface DrawerProps {
 }
 
 export function Drawer({ open, onClose, title, subtitle, children, footer }: DrawerProps) {
+  const t = useT();
   const titleId = useId();
 
   useEffect(() => {
@@ -329,7 +332,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer }: Dra
             variant="subtle"
             size="sm"
             onClick={onClose}
-            aria-label="Close panel"
+            aria-label={t("design.drawer.close")}
             icon={<X size={18} />}
           />
         </header>
@@ -356,13 +359,8 @@ export interface TabsProps {
   ariaLabel?: string;
 }
 
-export function Tabs({
-  items,
-  value,
-  defaultValue,
-  onChange,
-  ariaLabel = "Section tabs",
-}: TabsProps) {
+export function Tabs({ items, value, defaultValue, onChange, ariaLabel }: TabsProps) {
+  const t = useT();
   const [internal, setInternal] = useState<string>(defaultValue ?? items[0]?.id ?? "");
   const activeId = value ?? internal;
   const baseId = useId();
@@ -376,7 +374,11 @@ export function Tabs({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-      <div role="tablist" aria-label={ariaLabel} className="orbit-tablist">
+      <div
+        role="tablist"
+        aria-label={ariaLabel ?? t("design.tabs.label")}
+        className="orbit-tablist"
+      >
         {items.map((item) => {
           const selected = item.id === activeItem?.id;
           return (
@@ -426,6 +428,7 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const t = useT();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const dismissToast = useCallback((id: string) => {
@@ -454,7 +457,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {toasts.length > 0 && (
         <aside
-          aria-label="Notifications"
+          aria-label={t("design.toast.region")}
           style={{
             position: "fixed",
             insetBlockEnd: "var(--space-5)",
@@ -466,8 +469,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             maxInlineSize: "24rem",
           }}
         >
-          {toasts.map((t) => (
-            <Toast key={t.id} item={t} onDismiss={() => dismissToast(t.id)} />
+          {toasts.map((toast) => (
+            <Toast key={toast.id} item={toast} onDismiss={() => dismissToast(toast.id)} />
           ))}
         </aside>
       )}
@@ -476,6 +479,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 export function Toast({ item, onDismiss }: { item: ToastItem; onDismiss?: () => void }) {
+  const t = useT();
   const tone = item.tone ?? "info";
   const icon =
     tone === "ok" ? (
@@ -522,7 +526,7 @@ export function Toast({ item, onDismiss }: { item: ToastItem; onDismiss?: () => 
           variant="subtle"
           size="sm"
           onClick={onDismiss}
-          aria-label="Dismiss notification"
+          aria-label={t("design.toast.dismiss")}
           icon={<X size={14} />}
         />
       )}
@@ -562,14 +566,13 @@ export function EmptyState({ title, description, icon, action }: EmptyStateProps
         gap: "var(--space-3)",
         backgroundColor: "var(--bg-elevated)",
         borderRadius: "var(--radius-lg)",
-        border: "1px dashed var(--border-strong)",
       }}
     >
       <div
         style={{
           inlineSize: "3rem",
           blockSize: "3rem",
-          borderRadius: "var(--radius-full)",
+          borderRadius: "var(--radius-md)",
           backgroundColor: "var(--accent-primary-subtle)",
           color: "var(--accent-primary)",
           display: "flex",
@@ -582,9 +585,7 @@ export function EmptyState({ title, description, icon, action }: EmptyStateProps
       <h3
         style={{
           margin: 0,
-          fontFamily: "var(--font-display)",
           fontSize: "var(--text-h3)",
-          fontWeight: 650,
         }}
       >
         {title}

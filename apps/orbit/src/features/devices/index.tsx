@@ -11,7 +11,7 @@ import {
   Sparkles,
   Unlink,
 } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { createElement, type FormEvent, Fragment, type ReactNode, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   Badge,
@@ -26,77 +26,69 @@ import {
   Skeleton,
   useToast,
 } from "../../design";
+import { type MessageKey, type TranslateFn, useT } from "../../i18n";
 import { useOrion, useOrionQuery } from "../../lib/orion";
 
 export interface DeviceGroupSpec {
   id: string;
-  title: string;
-  subtitle: string;
+  titleKey: MessageKey;
+  subtitleKey: MessageKey;
   kinds: DeviceKind[];
 }
 
 export const DEVICE_GROUPS: DeviceGroupSpec[] = [
   {
     id: "milking_robot",
-    title: "Milking Robots",
-    subtitle: "Automated milking boxes and parlour controllers",
+    titleKey: "devices.group.milkingRobot.title",
+    subtitleKey: "devices.group.milkingRobot.subtitle",
     kinds: ["milking_robot"],
   },
   {
     id: "collar",
-    title: "Neck Collars",
-    subtitle: "Wearable activity & rumination neck transponders",
+    titleKey: "devices.group.collar.title",
+    subtitleKey: "devices.group.collar.subtitle",
     kinds: ["collar"],
   },
   {
     id: "bolus",
-    title: "Rumen Boluses",
-    subtitle: "Internal temperature & drinking boluses",
+    titleKey: "devices.group.bolus.title",
+    subtitleKey: "devices.group.bolus.subtitle",
     kinds: ["bolus"],
   },
   {
     id: "ear_tag_sensor",
-    title: "Ear Tag Sensors",
-    subtitle: "Electronic ear-mounted movement & ear-temperature tags",
+    titleKey: "devices.group.earTag.title",
+    subtitleKey: "devices.group.earTag.subtitle",
     kinds: ["ear_tag_sensor"],
   },
   {
     id: "other",
-    title: "Scales, Feeders & Other Equipment",
-    subtitle: "Walk-over weigh scales, automated feeders, and stationary barn sensors",
+    titleKey: "devices.group.other.title",
+    subtitleKey: "devices.group.other.subtitle",
     kinds: ["scale", "feeder", "camera", "other"],
   },
 ];
 
-export function formatDeviceKindLabel(kind: DeviceKind | string): string {
-  switch (kind) {
-    case "milking_robot":
-      return "Milking robot";
-    case "collar":
-      return "Collar";
-    case "bolus":
-      return "Bolus";
-    case "ear_tag_sensor":
-      return "Ear tag sensor";
-    case "scale":
-      return "Scale";
-    case "feeder":
-      return "Feeder";
-    default:
-      return kind.replace(/_/g, " ");
-  }
+export function formatDeviceKindLabel(t: TranslateFn, kind: DeviceKind): string {
+  return t(`devices.kind.${kind}`);
 }
 
-export function articleForKind(label: string): "a" | "an" {
-  return /^[aeiou]/i.test(label.trim()) ? "an" : "a";
+/** "a collar" / "an ear tag sensor": the article lives in the catalog so each language picks its own. */
+export function formatKindWithArticle(t: TranslateFn, kind: DeviceKind): string {
+  return isWearableKind(kind)
+    ? t(`devices.kindArticle.${kind}`)
+    : formatDeviceKindLabel(t, kind).toLowerCase();
 }
 
-export function formatKindWithArticle(kind: DeviceKind | string): string {
-  const label = formatDeviceKindLabel(kind).toLowerCase();
-  return `${articleForKind(label)} ${label}`;
+/** Splits a translated template on `{part}` placeholders and drops React nodes into them. */
+function rich(template: string, parts: Readonly<Record<string, ReactNode>>): ReactNode {
+  const pieces = template
+    .split(/\{(\w+)\}/)
+    .map((piece, index) => (index % 2 === 1 ? (parts[piece] ?? `{${piece}}`) : piece));
+  return createElement(Fragment, null, ...pieces);
 }
 
-export function formatVendorLabel(vendor: string): string {
+export function formatVendorLabel(t: TranslateFn, vendor: string): string {
   switch (vendor) {
     case "lely":
       return "Lely";
@@ -113,22 +105,24 @@ export function formatVendorLabel(vendor: string): string {
     case "cowmanager":
       return "CowManager";
     case "generic_csv":
-      return "CSV Import";
+      return t("devices.vendor.generic_csv");
+    case "custom":
+      return t("devices.vendor.custom");
     default:
       return vendor;
   }
 }
 
-export function formatLastSeen(iso: string | null | undefined): string {
-  if (!iso) return "Never seen";
+export function formatLastSeen(t: TranslateFn, iso: string | null | undefined): string {
+  if (!iso) return t("devices.time.never");
   const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return "Just now";
+  if (!Number.isFinite(ms) || ms < 0) return t("devices.time.justNow");
   const mins = Math.floor(ms / 60_000);
-  if (mins < 60) return `${Math.max(1, mins)}m ago`;
+  if (mins < 60) return t("devices.time.minutesAgo", { count: Math.max(1, mins) });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("devices.time.hoursAgo", { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t("devices.time.daysAgo", { count: days });
 }
 
 export interface AttachDeviceDialogProps {
@@ -146,6 +140,7 @@ export function AttachDeviceDialog({
   animals,
   onCompleted,
 }: AttachDeviceDialogProps) {
+  const t = useT();
   const { client } = useOrion();
   const { pushToast } = useToast();
   const [selectedAnimalId, setSelectedAnimalId] = useState<string>(
@@ -182,8 +177,15 @@ export function AttachDeviceDialog({
         animalId: effectiveAnimalId,
       });
       pushToast({
-        title: conflictingWearable ? "Replaced wearable sensor" : "Sensor attached to animal",
-        description: `${formatDeviceKindLabel(device.kind)} ${device.serial ?? ""} is now attached to ${chosenAnimal?.name ?? chosenAnimal?.earTagNumber ?? "animal"}.`,
+        title: conflictingWearable
+          ? t("devices.bind.toast.replaced")
+          : t("devices.bind.toast.attached"),
+        description: t("devices.bind.toast.description", {
+          kind: formatDeviceKindLabel(t, device.kind),
+          serial: device.serial ?? "",
+          animal:
+            chosenAnimal?.name ?? chosenAnimal?.earTagNumber ?? t("devices.bind.animalFallback"),
+        }),
         tone: "ok",
       });
       await onCompleted();
@@ -199,12 +201,15 @@ export function AttachDeviceDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={`Attach ${formatDeviceKindLabel(device.kind)} (${device.serial ?? device.vendor ?? "Sensor"}) to an animal`}
-      description="Each cow or horse can wear one collar OR one bolus OR one ear tag sensor — never several at once."
+      title={t("devices.bind.title", {
+        kind: formatDeviceKindLabel(t, device.kind),
+        device: device.serial ?? device.vendor ?? t("devices.bind.sensorFallback"),
+      })}
+      description={t("devices.bind.description")}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} data-testid="device-bind-cancel-btn">
-            Cancel
+            {t("devices.common.cancel")}
           </Button>
           <Button
             variant="primary"
@@ -215,10 +220,12 @@ export function AttachDeviceDialog({
             data-testid="device-bind-confirm-btn"
           >
             {conflictingWearable
-              ? `Replace ${formatDeviceKindLabel(conflictingWearable.kind).toLowerCase()} & attach`
+              ? t("devices.bind.replace", {
+                  kind: formatDeviceKindLabel(t, conflictingWearable.kind).toLowerCase(),
+                })
               : currentAnimalHolder && currentAnimalHolder.id !== effectiveAnimalId
-                ? "Move sensor to animal"
-                : "Attach to animal"}
+                ? t("devices.bind.move")
+                : t("devices.bind.attach")}
           </Button>
         </>
       }
@@ -247,33 +254,40 @@ export function AttachDeviceDialog({
               marginBottom: "var(--space-1)",
             }}
           >
-            One wearable sensor per animal
+            {t("devices.bind.rule.title")}
           </div>
           <p style={{ margin: 0 }}>
-            In real barns, an animal wears one <strong>collar</strong> OR one <strong>bolus</strong>{" "}
-            OR one <strong>ear tag sensor</strong> at a time. If the animal you choose already has a
-            sensor, Orbit can replace it for you in one step.
+            {rich(t("devices.bind.rule.body"), {
+              collar: <strong>{t("devices.bind.rule.collar")}</strong>,
+              bolus: <strong>{t("devices.bind.rule.bolus")}</strong>,
+              earTag: <strong>{t("devices.bind.rule.earTag")}</strong>,
+            })}
           </p>
         </div>
 
         <Select
-          label="Select cow or horse"
+          label={t("devices.bind.select.label")}
           data-testid="device-bind-animal-select"
           value={effectiveAnimalId}
           onChange={(e) => setSelectedAnimalId(e.target.value)}
           options={
             animals.length > 0
               ? animals.map((a) => {
-                  const tagText = a.earTagNumber ?? a.nationalId ?? a.species;
-                  const existingText = a.wearable
-                    ? ` — wears ${formatKindWithArticle(a.wearable.kind)}`
-                    : " — no sensor";
+                  const vars = {
+                    animal: a.name ?? t("devices.common.unnamed"),
+                    tag: a.earTagNumber ?? a.nationalId ?? a.species,
+                  };
                   return {
                     value: a.id,
-                    label: `${a.name ?? "Unnamed"} (${tagText})${existingText}`,
+                    label: a.wearable
+                      ? t("devices.bind.option.wears", {
+                          ...vars,
+                          wearable: formatKindWithArticle(t, a.wearable.kind),
+                        })
+                      : t("devices.bind.option.bare", vars),
                   };
                 })
-              : [{ value: "", label: "No animals in herd list" }]
+              : [{ value: "", label: t("devices.bind.option.empty") }]
           }
         />
 
@@ -289,15 +303,23 @@ export function AttachDeviceDialog({
               color: "var(--text-secondary)",
             }}
           >
-            This {formatDeviceKindLabel(device.kind).toLowerCase()} is currently attached to{" "}
-            <strong style={{ color: "var(--text-primary)" }}>
-              {currentAnimalHolder.name ?? currentAnimalHolder.earTagNumber}
-            </strong>
-            . Confirming will move it to{" "}
-            <strong style={{ color: "var(--text-primary)" }}>
-              {chosenAnimal?.name ?? chosenAnimal?.earTagNumber}
-            </strong>
-            .
+            {rich(
+              t("devices.bind.moveNotice", {
+                kind: formatDeviceKindLabel(t, device.kind).toLowerCase(),
+              }),
+              {
+                from: (
+                  <strong style={{ color: "var(--text-primary)" }}>
+                    {currentAnimalHolder.name ?? currentAnimalHolder.earTagNumber}
+                  </strong>
+                ),
+                to: (
+                  <strong style={{ color: "var(--text-primary)" }}>
+                    {chosenAnimal?.name ?? chosenAnimal?.earTagNumber}
+                  </strong>
+                ),
+              },
+            )}
           </div>
         )}
 
@@ -324,19 +346,30 @@ export function AttachDeviceDialog({
             >
               <AlertTriangle size={16} style={{ color: "var(--status-warn)" }} />
               <span>
-                {chosenAnimal.name ?? chosenAnimal.earTagNumber} already wears{" "}
-                {formatKindWithArticle(conflictingWearable.kind)}
+                {t("devices.bind.conflict.title", {
+                  animal: chosenAnimal.name ?? chosenAnimal.earTagNumber ?? "",
+                  wearable: formatKindWithArticle(t, conflictingWearable.kind),
+                })}
               </span>
             </div>
             <p style={{ margin: "var(--space-1) 0 0 0", fontSize: "var(--text-xs)" }}>
-              Because each animal can only wear a collar OR a bolus OR an ear tag sensor, confirming
-              below will unbind the current{" "}
-              <strong>{formatDeviceKindLabel(conflictingWearable.kind).toLowerCase()}</strong>{" "}
-              {conflictingWearable.vendor ? `(${conflictingWearable.vendor}) ` : ""}and attach{" "}
-              <strong>
-                {formatDeviceKindLabel(device.kind)} {device.serial ?? ""}
-              </strong>{" "}
-              instead.
+              {rich(
+                conflictingWearable.vendor
+                  ? t("devices.bind.conflict.bodyWithVendor", {
+                      vendor: conflictingWearable.vendor,
+                    })
+                  : t("devices.bind.conflict.body"),
+                {
+                  current: (
+                    <strong>
+                      {formatDeviceKindLabel(t, conflictingWearable.kind).toLowerCase()}
+                    </strong>
+                  ),
+                  next: (
+                    <strong>{`${formatDeviceKindLabel(t, device.kind)} ${device.serial ?? ""}`}</strong>
+                  ),
+                },
+              )}
             </p>
           </div>
         )}
@@ -358,6 +391,7 @@ interface AddDeviceDialogProps {
 }
 
 function AddDeviceDialog({ open, onClose, onSaved }: AddDeviceDialogProps) {
+  const t = useT();
   const { client } = useOrion();
   const { pushToast } = useToast();
 
@@ -374,7 +408,7 @@ function AddDeviceDialog({ open, onClose, onSaved }: AddDeviceDialogProps) {
     e.preventDefault();
     if (!client) return;
     if (!serial.trim()) {
-      setError("Please enter a serial number or tag code for this device.");
+      setError(t("devices.add.error.serial"));
       return;
     }
 
@@ -395,8 +429,11 @@ function AddDeviceDialog({ open, onClose, onSaved }: AddDeviceDialogProps) {
       };
       await client.mutate("devices.upsert", { device: payload });
       pushToast({
-        title: "Device added",
-        description: `${formatDeviceKindLabel(kind)} ${serial.trim()} added to farm equipment.`,
+        title: t("devices.add.toast.title"),
+        description: t("devices.add.toast.description", {
+          kind: formatDeviceKindLabel(t, kind),
+          serial: serial.trim(),
+        }),
         tone: "ok",
       });
       await onSaved();
@@ -412,12 +449,12 @@ function AddDeviceDialog({ open, onClose, onSaved }: AddDeviceDialogProps) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="Add sensor or robot"
-      description="Add a spare collar, bolus, ear tag sensor, milking robot, or scale to your farm."
+      title={t("devices.add.title")}
+      description={t("devices.add.description")}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} data-testid="device-form-cancel">
-            Cancel
+            {t("devices.common.cancel")}
           </Button>
           <Button
             variant="primary"
@@ -426,7 +463,7 @@ function AddDeviceDialog({ open, onClose, onSaved }: AddDeviceDialogProps) {
             loading={saving}
             data-testid="device-form-submit"
           >
-            Save device
+            {t("devices.add.save")}
           </Button>
         </>
       }
@@ -442,54 +479,54 @@ function AddDeviceDialog({ open, onClose, onSaved }: AddDeviceDialogProps) {
         }}
       >
         <Select
-          label="Device kind"
+          label={t("devices.add.kind.label")}
           data-testid="device-form-kind"
           value={kind}
           onChange={(e) => setKind(e.target.value as DeviceKind)}
           options={[
-            { value: "collar", label: "Collar (wearable)" },
-            { value: "bolus", label: "Rumen bolus (wearable)" },
-            { value: "ear_tag_sensor", label: "Ear tag sensor (wearable)" },
-            { value: "milking_robot", label: "Milking robot" },
-            { value: "scale", label: "Weigh scale" },
-            { value: "feeder", label: "Feeder" },
-            { value: "other", label: "Other equipment" },
+            { value: "collar", label: t("devices.add.kind.collar") },
+            { value: "bolus", label: t("devices.add.kind.bolus") },
+            { value: "ear_tag_sensor", label: t("devices.add.kind.earTag") },
+            { value: "milking_robot", label: t("devices.add.kind.milkingRobot") },
+            { value: "scale", label: t("devices.add.kind.scale") },
+            { value: "feeder", label: t("devices.add.kind.feeder") },
+            { value: "other", label: t("devices.add.kind.other") },
           ]}
         />
         <Select
-          label="Status"
+          label={t("devices.add.status.label")}
           data-testid="device-form-status"
           value={status}
           onChange={(e) => setStatus(e.target.value as DeviceStatus)}
           options={[
-            { value: "online", label: "Online" },
-            { value: "offline", label: "Offline / Spare" },
-            { value: "error", label: "Needs service" },
+            { value: "online", label: t("devices.add.status.online") },
+            { value: "offline", label: t("devices.add.status.offline") },
+            { value: "error", label: t("devices.add.status.error") },
           ]}
         />
         <Input
-          label="Vendor / Brand"
+          label={t("devices.add.vendor.label")}
           data-testid="device-form-vendor"
-          placeholder="e.g. Nedap, smaXtec, CowManager, Lely"
+          placeholder={t("devices.add.vendor.placeholder")}
           value={vendor}
           onChange={(e) => setVendor(e.target.value)}
         />
         <Input
-          label="Model"
+          label={t("devices.add.model.label")}
           data-testid="device-form-model"
-          placeholder="e.g. SmartTag Neck, Climate Bolus"
+          placeholder={t("devices.add.model.placeholder")}
           value={model}
           onChange={(e) => setModel(e.target.value)}
         />
         <Input
-          label="Serial code"
+          label={t("devices.add.serial.label")}
           data-testid="device-form-serial"
-          placeholder="e.g. COL-205"
+          placeholder={t("devices.add.serial.placeholder")}
           value={serial}
           onChange={(e) => setSerial(e.target.value)}
         />
         <Input
-          label="Battery % (leave blank if mains powered)"
+          label={t("devices.add.battery.label")}
           type="number"
           min={0}
           max={100}
@@ -514,13 +551,13 @@ const CATALOG_VENDORS = [
     vendor: "delaval",
     name: "DeLaval DelPro",
     kind: "local_api",
-    summary: "Import milking sessions, conductivity, and activity from a local DelPro server.",
+    summaryKey: "devices.catalog.delaval.summary",
   },
   {
     vendor: "allflex",
     name: "Allflex SenseHub",
     kind: "cloud_api",
-    summary: "Sync ear tag & neck collar rumination and heat alerts.",
+    summaryKey: "devices.catalog.allflex.summary",
   },
 ] as const;
 
@@ -529,6 +566,7 @@ export interface DevicesPageProps {
 }
 
 export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
+  const t = useT();
   const navigate = useNavigate();
   const { client } = useOrion();
   const { pushToast } = useToast();
@@ -579,35 +617,73 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
     ).length;
 
     return [
-      { id: "robots", label: "Robots", ring: 1, angleDeg: -45, tone: "ok", count: robots },
-      { id: "other", label: "Scales", ring: 1, angleDeg: 135, tone: "ok", count: other },
-      { id: "collars", label: "Collars", ring: 2, angleDeg: 15, tone: "ok", count: collars },
-      { id: "boluses", label: "Boluses", ring: 2, angleDeg: 195, tone: "accent", count: boluses },
-      { id: "eartags", label: "Ear tags", ring: 3, angleDeg: -110, tone: "ok", count: earTags },
+      {
+        id: "robots",
+        label: t("devices.satellites.robots"),
+        ring: 1,
+        angleDeg: -45,
+        tone: "ok",
+        count: robots,
+      },
+      {
+        id: "other",
+        label: t("devices.satellites.other"),
+        ring: 1,
+        angleDeg: 135,
+        tone: "ok",
+        count: other,
+      },
+      {
+        id: "collars",
+        label: t("devices.satellites.collars"),
+        ring: 2,
+        angleDeg: 15,
+        tone: "ok",
+        count: collars,
+      },
+      {
+        id: "boluses",
+        label: t("devices.satellites.boluses"),
+        ring: 2,
+        angleDeg: 195,
+        tone: "accent",
+        count: boluses,
+      },
+      {
+        id: "eartags",
+        label: t("devices.satellites.earTags"),
+        ring: 3,
+        angleDeg: -110,
+        tone: "ok",
+        count: earTags,
+      },
       {
         id: "connectors",
-        label: "Connectors",
+        label: t("devices.satellites.connectors"),
         ring: 3,
         angleDeg: 70,
         tone: "ok",
         count: connectors.length,
       },
     ];
-  }, [devices, connectors]);
+  }, [devices, connectors, t]);
 
   const handleUnbindDevice = async (device: DeviceListItem) => {
     if (!client) return;
     try {
       await client.mutate("bindings.clear", { deviceId: device.id });
       pushToast({
-        title: "Sensor unbound",
-        description: `${formatDeviceKindLabel(device.kind)} ${device.serial ?? ""} is now a spare sensor.`,
+        title: t("devices.unbind.toast.title"),
+        description: t("devices.unbind.toast.description", {
+          kind: formatDeviceKindLabel(t, device.kind),
+          serial: device.serial ?? "",
+        }),
         tone: "ok",
       });
       await Promise.all([refetchDevices(), refetchAnimals()]);
     } catch (err) {
       pushToast({
-        title: "Could not unbind sensor",
+        title: t("devices.unbind.toast.error"),
         description: err instanceof Error ? err.message : String(err),
         tone: "danger",
       });
@@ -629,14 +705,17 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
         },
       });
       pushToast({
-        title: nextEnabled ? "Connector switched on" : "Connector switched off",
-        description: `${connector.name ?? formatVendorLabel(connector.vendor)} is now ${nextEnabled ? "enabled" : "paused"}.`,
+        title: nextEnabled ? t("devices.connector.toast.on") : t("devices.connector.toast.off"),
+        description: t(
+          nextEnabled ? "devices.connector.toast.enabled" : "devices.connector.toast.paused",
+          { name: connector.name ?? formatVendorLabel(t, connector.vendor) },
+        ),
         tone: "ok",
       });
       await refetchConnectors();
     } catch (err) {
       pushToast({
-        title: "Could not update connector",
+        title: t("devices.connector.toast.error"),
         description: err instanceof Error ? err.message : String(err),
         tone: "danger",
       });
@@ -651,14 +730,16 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
     try {
       await client.mutate("connectors.syncNow", { id: connector.id });
       pushToast({
-        title: "Sync finished",
-        description: `Imported latest readings from ${connector.name ?? formatVendorLabel(connector.vendor)}.`,
+        title: t("devices.sync.toast.done"),
+        description: t("devices.sync.toast.description", {
+          name: connector.name ?? formatVendorLabel(t, connector.vendor),
+        }),
         tone: "ok",
       });
       await refetchConnectors();
     } catch (err) {
       pushToast({
-        title: "Sync notice",
+        title: t("devices.sync.toast.notice"),
         description: err instanceof Error ? err.message : String(err),
         tone: "warn",
       });
@@ -691,10 +772,13 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                 letterSpacing: "var(--tracking-display)",
               }}
             >
-              Sensors & Robots
+              {t("devices.page.title")}
             </h1>
             <Badge variant="neutral" className="tabular-nums">
-              {devices.length} devices · {connectors.length} connections
+              {t("devices.page.summary", {
+                devices: devices.length,
+                connections: connectors.length,
+              })}
             </Badge>
           </div>
           <p
@@ -705,15 +789,14 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
               maxInlineSize: "68ch",
             }}
           >
-            Milking robots, collars, boluses, ear tag sensors, and vendor connections. Each animal
-            wears a collar OR a bolus OR an ear tag sensor — never more than one at a time.
+            {t("devices.page.intro")}
           </p>
         </div>
 
         <div
           style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" }}
         >
-          <div className="orbit-tablist" role="tablist" aria-label="Sensors and connections tabs">
+          <div className="orbit-tablist" role="tablist" aria-label={t("devices.tabs.label")}>
             <button
               type="button"
               role="tab"
@@ -722,7 +805,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
               data-testid="devices-tab-equipment"
               onClick={() => setActiveTab("devices")}
             >
-              Sensors & Robots ({devices.length})
+              {t("devices.tabs.equipment", { count: devices.length })}
             </button>
             <button
               type="button"
@@ -732,7 +815,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
               data-testid="devices-tab-connections"
               onClick={() => setActiveTab("connections")}
             >
-              Connections ({connectors.length})
+              {t("devices.tabs.connections", { count: connectors.length })}
             </button>
           </div>
 
@@ -743,7 +826,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
             data-testid="devices-add-btn"
             onClick={() => setAddDeviceOpen(true)}
           >
-            Add sensor or robot
+            {t("devices.page.add")}
           </Button>
         </div>
       </header>
@@ -754,10 +837,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
           style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}
         >
           <div className="orbit-home-hero">
-            <Card
-              title="Equipment Overview"
-              subtitle="Milking robots, collars, boluses, and ear tag sensors on this farm"
-            >
+            <Card title={t("devices.overview.title")} subtitle={t("devices.overview.subtitle")}>
               <div
                 style={{
                   display: "flex",
@@ -774,8 +854,10 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                     color: "var(--text-secondary)",
                   }}
                 >
-                  Click <strong>Attach to animal</strong> on any spare sensor below to assign it, or{" "}
-                  <strong>Move / Replace</strong> to swap a sensor between animals.
+                  {rich(t("devices.overview.hint"), {
+                    attach: <strong>{t("devices.bind.attach")}</strong>,
+                    move: <strong>{t("devices.card.move")}</strong>,
+                  })}
                 </p>
 
                 <div
@@ -787,19 +869,19 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                 >
                   {[
                     {
-                      label: "Milking robots",
+                      label: t("devices.overview.stat.robots"),
                       count: devices.filter((d) => d.kind === "milking_robot").length,
                     },
                     {
-                      label: "Neck collars",
+                      label: t("devices.overview.stat.collars"),
                       count: devices.filter((d) => d.kind === "collar").length,
                     },
                     {
-                      label: "Rumen boluses",
+                      label: t("devices.overview.stat.boluses"),
                       count: devices.filter((d) => d.kind === "bolus").length,
                     },
                     {
-                      label: "Ear tag sensors",
+                      label: t("devices.overview.stat.earTags"),
                       count: devices.filter((d) => d.kind === "ear_tag_sensor").length,
                     },
                   ].map((stat) => (
@@ -833,14 +915,14 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
 
             <Card
               variant="elevated"
-              title="Equipment Satellites"
-              subtitle="Robots on inner ring · wearables on middle & outer rings"
+              title={t("devices.satellites.title")}
+              subtitle={t("devices.satellites.subtitle")}
             >
               <div style={{ display: "flex", justifyContent: "center" }}>
                 <OrbitRings
                   size={196}
-                  centerLabel="DEVICES"
-                  centerSublabel={`${devices.length} total`}
+                  centerLabel={t("devices.satellites.center")}
+                  centerSublabel={t("devices.satellites.total", { count: devices.length })}
                   satellites={orbitSatellites}
                 />
               </div>
@@ -848,7 +930,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
           </div>
 
           {devicesError ? (
-            <Card title="Could not load sensors & robots" data-testid="devices-error-state">
+            <Card title={t("devices.list.error.title")} data-testid="devices-error-state">
               <div
                 style={{
                   display: "flex",
@@ -864,12 +946,12 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                   icon={<RefreshCw size={15} />}
                   onClick={() => void refetchDevices()}
                 >
-                  Retry
+                  {t("devices.common.retry")}
                 </Button>
               </div>
             </Card>
           ) : devicesLoading && !devicesData ? (
-            <Card title="Loading equipment…" data-testid="devices-loading-state">
+            <Card title={t("devices.list.loading")} data-testid="devices-loading-state">
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
                 <Skeleton height="3.5rem" />
                 <Skeleton height="3.5rem" />
@@ -879,15 +961,15 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
           ) : devices.length === 0 ? (
             <EmptyState
               data-testid="devices-empty-state"
-              title="No sensors or robots added yet"
-              description="Add your first collar, bolus, ear tag sensor, or milking robot."
+              title={t("devices.list.empty.title")}
+              description={t("devices.list.empty.description")}
               action={
                 <Button
                   variant="primary"
                   icon={<Plus size={16} />}
                   onClick={() => setAddDeviceOpen(true)}
                 >
-                  Add sensor or robot
+                  {t("devices.page.add")}
                 </Button>
               }
             />
@@ -900,18 +982,18 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                 <Card
                   key={group.id}
                   data-testid={`device-group-${group.id}`}
-                  title={group.title}
-                  subtitle={group.subtitle}
+                  title={t(group.titleKey)}
+                  subtitle={t(group.subtitleKey)}
                   actions={
                     <Badge variant="neutral" className="tabular-nums">
-                      {items.length} {items.length === 1 ? "device" : "devices"}
+                      {t("devices.group.count", { count: items.length })}
                     </Badge>
                   }
                 >
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(auto-fill, minmax(19rem, 1fr))",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(min(19rem, 100%), 1fr))",
                       gap: "var(--space-4)",
                     }}
                   >
@@ -961,7 +1043,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                                   fontSize: "var(--text-base)",
                                 }}
                               >
-                                {dev.serial ?? formatDeviceKindLabel(dev.kind)}
+                                {dev.serial ?? formatDeviceKindLabel(t, dev.kind)}
                               </span>
                               <div
                                 style={{
@@ -976,17 +1058,19 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                                     icon={<Battery size={12} />}
                                     className="tabular-nums"
                                   >
-                                    {dev.batteryPct}%
+                                    {t("devices.card.battery", { pct: dev.batteryPct })}
                                   </Badge>
                                 )}
-                                <Badge variant={statusVariant}>{dev.status}</Badge>
+                                <Badge variant={statusVariant}>
+                                  {t(`devices.status.${dev.status}`)}
+                                </Badge>
                               </div>
                             </div>
 
                             <div
                               style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}
                             >
-                              <strong>{dev.vendor ?? "Farm sensor"}</strong>
+                              <strong>{dev.vendor ?? t("devices.card.vendorFallback")}</strong>
                               {dev.model ? ` · ${dev.model}` : ""}
                             </div>
 
@@ -997,7 +1081,9 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                                 color: "var(--text-muted)",
                               }}
                             >
-                              Last seen: {formatLastSeen(dev.lastSeenAt)}
+                              {t("devices.card.lastSeen", {
+                                time: formatLastSeen(t, dev.lastSeenAt),
+                              })}
                             </div>
 
                             {wearable && (
@@ -1013,15 +1099,17 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                               >
                                 {boundAnimal ? (
                                   <span>
-                                    Worn by{" "}
-                                    <strong>
-                                      {boundAnimal.name ?? "Unnamed"} (
-                                      {boundAnimal.earTagNumber ?? boundAnimal.nationalId})
-                                    </strong>
+                                    {rich(t("devices.card.wornBy"), {
+                                      animal: (
+                                        <strong>
+                                          {`${boundAnimal.name ?? t("devices.common.unnamed")} (${boundAnimal.earTagNumber ?? boundAnimal.nationalId ?? ""})`}
+                                        </strong>
+                                      ),
+                                    })}
                                   </span>
                                 ) : (
                                   <span style={{ color: "var(--text-muted)" }}>
-                                    Spare sensor — not attached to an animal
+                                    {t("devices.card.spare")}
                                   </span>
                                 )}
                               </div>
@@ -1044,7 +1132,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                                 data-testid={`device-attach-btn-${dev.serial ?? dev.id}`}
                                 onClick={() => setBindingDevice(dev)}
                               >
-                                {boundAnimal ? "Move / Replace" : "Attach to animal"}
+                                {boundAnimal ? t("devices.card.move") : t("devices.bind.attach")}
                               </Button>
                               {boundAnimal && (
                                 <Button
@@ -1054,7 +1142,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                                   data-testid={`device-unbind-btn-${dev.serial ?? dev.id}`}
                                   onClick={() => void handleUnbindDevice(dev)}
                                 >
-                                  Unbind
+                                  {t("devices.card.unbind")}
                                 </Button>
                               )}
                             </div>
@@ -1074,35 +1162,32 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
           style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}
         >
           {connectorsError ? (
-            <Card title="Could not load connectors" data-testid="connectors-error-state">
+            <Card title={t("devices.connectors.error.title")} data-testid="connectors-error-state">
               <p style={{ margin: 0, color: "var(--status-danger)" }}>{connectorsError.message}</p>
             </Card>
           ) : connectorsLoading && !connectorsData ? (
-            <Card title="Loading connections…" data-testid="connectors-loading-state">
+            <Card title={t("devices.connectors.loading")} data-testid="connectors-loading-state">
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
                 <Skeleton height="4rem" />
                 <Skeleton height="4rem" />
               </div>
             </Card>
           ) : (
-            <Card
-              title="Configured Farm Connections"
-              subtitle="Vendor software, cloud services, and CSV files saved on this PC"
-            >
+            <Card title={t("devices.connectors.title")} subtitle={t("devices.connectors.subtitle")}>
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(22rem, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(min(22rem, 100%), 1fr))",
                   gap: "var(--space-4)",
                 }}
               >
                 {connectors.map((conn) => {
                   const statusVariant = conn.lastError ? "danger" : conn.enabled ? "ok" : "neutral";
                   const statusLabel = conn.lastError
-                    ? "Sync error"
+                    ? t("devices.connector.status.error")
                     : conn.enabled
-                      ? "Enabled"
-                      : "Paused";
+                      ? t("devices.connector.status.enabled")
+                      : t("devices.connector.status.paused");
 
                   return (
                     <div
@@ -1137,21 +1222,25 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                               fontWeight: 700,
                             }}
                           >
-                            {conn.name ?? formatVendorLabel(conn.vendor)}
+                            {conn.name ?? formatVendorLabel(t, conn.vendor)}
                           </span>
                           <Badge variant={statusVariant}>{statusLabel}</Badge>
                         </div>
 
                         <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
-                          Vendor: <strong>{formatVendorLabel(conn.vendor)}</strong> · Mode:{" "}
-                          {conn.kind.replace(/_/g, " ")}
+                          {rich(
+                            t("devices.connector.meta", { mode: t(`devices.mode.${conn.kind}`) }),
+                            { vendor: <strong>{formatVendorLabel(t, conn.vendor)}</strong> },
+                          )}
                         </div>
 
                         <div
                           className="tabular-nums"
                           style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
                         >
-                          Last sync: {formatLastSeen(conn.lastSyncAt)}
+                          {t("devices.connector.lastSync", {
+                            time: formatLastSeen(t, conn.lastSyncAt),
+                          })}
                         </div>
 
                         {conn.lastError && (
@@ -1186,7 +1275,9 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                           data-testid={`connector-toggle-${conn.vendor}`}
                           onClick={() => void handleToggleConnector(conn)}
                         >
-                          {conn.enabled ? "Turn off" : "Turn on"}
+                          {conn.enabled
+                            ? t("devices.connector.turnOff")
+                            : t("devices.connector.turnOn")}
                         </Button>
                         <Button
                           variant="primary"
@@ -1197,7 +1288,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                           data-testid={`connector-sync-${conn.vendor}`}
                           onClick={() => void handleSyncNow(conn)}
                         >
-                          Sync now
+                          {t("devices.connector.syncNow")}
                         </Button>
                       </div>
                     </div>
@@ -1239,7 +1330,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                         >
                           {cat.name}
                         </span>
-                        <Badge variant="neutral">Ready to set up</Badge>
+                        <Badge variant="neutral">{t("devices.catalog.ready")}</Badge>
                       </div>
                       <p
                         style={{
@@ -1248,7 +1339,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                           color: "var(--text-secondary)",
                         }}
                       >
-                        {cat.summary}
+                        {t(cat.summaryKey)}
                       </p>
                     </div>
                     <Button
@@ -1258,11 +1349,11 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                       data-testid={`connector-setup-${cat.vendor}`}
                       onClick={() =>
                         navigate(
-                          `/chat?prompt=${encodeURIComponent(`Help me connect ${cat.name} to my farm`)}`,
+                          `/chat?prompt=${encodeURIComponent(t("devices.catalog.prompt", { name: cat.name }))}`,
                         )
                       }
                     >
-                      Set up with Orion
+                      {t("devices.catalog.setup")}
                     </Button>
                   </div>
                 ))}
@@ -1273,8 +1364,8 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
           <Card
             variant="elevated"
             data-testid="connect-something-new-card"
-            title="Connect something new"
-            subtitle="Have a different milking parlour, bolus reader, weigh scale, or spreadsheet?"
+            title={t("devices.connectNew.title")}
+            subtitle={t("devices.connectNew.subtitle")}
           >
             <div
               style={{
@@ -1293,9 +1384,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                   maxInlineSize: "62ch",
                 }}
               >
-                Orion can build a custom connector for your equipment right on this PC. Tell Orion
-                what software or sensor box you use in plain words, and approve its steps when
-                ready.
+                {t("devices.connectNew.body")}
               </p>
               <Button
                 variant="primary"
@@ -1303,14 +1392,10 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                 icon={<Sparkles size={18} />}
                 data-testid="connect-something-new-btn"
                 onClick={() =>
-                  navigate(
-                    `/chat?prompt=${encodeURIComponent(
-                      "Help me connect a new sensor or milking system to my farm",
-                    )}`,
-                  )
+                  navigate(`/chat?prompt=${encodeURIComponent(t("devices.connectNew.prompt"))}`)
                 }
               >
-                Ask Orion to connect equipment
+                {t("devices.connectNew.button")}
               </Button>
             </div>
           </Card>

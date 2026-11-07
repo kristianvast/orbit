@@ -5,7 +5,6 @@ import {
   Home,
   MessageSquare,
   Moon,
-  Orbit as OrbitIcon,
   Radio,
   RefreshCw,
   Settings as SettingsIcon,
@@ -14,32 +13,36 @@ import {
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router";
 import { Badge, Button } from "../design";
+import { CUSTOM_PAGE_ICON, useCustomPages } from "../features/pages";
+import { type MessageKey, useT } from "../i18n";
+import { useLocalUiLifecycle } from "../lib/local-ui";
 import { OrionConnectionBanner, useOrion, useOrionQuery } from "../lib/orion";
 import { useTheme } from "./providers";
 
 export interface NavItem {
   to: string;
-  label: string;
+  labelKey: MessageKey;
   end?: boolean;
   icon: typeof Home;
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Home", end: true, icon: Home },
-  { to: "/chat", label: "Ask Orion", icon: MessageSquare },
-  { to: "/herd", label: "Cows & Horses", icon: Tag },
-  { to: "/devices", label: "Sensors & Robots", icon: Radio },
-  { to: "/cameras", label: "Cameras", icon: Camera },
-  { to: "/settings", label: "Settings", icon: SettingsIcon },
+  { to: "/", labelKey: "shell.nav.home", end: true, icon: Home },
+  { to: "/chat", labelKey: "shell.nav.chat", icon: MessageSquare },
+  { to: "/herd", labelKey: "shell.nav.herd", icon: Tag },
+  { to: "/devices", labelKey: "shell.nav.devices", icon: Radio },
+  { to: "/cameras", labelKey: "shell.nav.cameras", icon: Camera },
+  { to: "/settings", labelKey: "shell.nav.settings", icon: SettingsIcon },
 ];
 
 function SyncStatusBadge() {
   const { state: connState, syncStatus } = useOrion();
+  const t = useT();
 
   if (connState !== "open") {
     return (
       <Badge variant="warn" icon={<CloudOff size={13} />}>
-        Local waiting
+        {t("shell.sync.localWaiting")}
       </Badge>
     );
   }
@@ -49,95 +52,84 @@ function SyncStatusBadge() {
     case "connecting":
       return (
         <Badge variant="info" icon={<RefreshCw size={13} className="orbit-spin" />}>
-          Syncing ({syncStatus.pendingOutbox})
+          {t("shell.sync.syncing", { count: syncStatus.pendingOutbox })}
         </Badge>
       );
     case "error":
       return (
         <Badge variant="danger" icon={<CloudOff size={13} />}>
-          Sync error
+          {t("shell.sync.error")}
         </Badge>
       );
     case "offline":
     case "disabled":
       return (
         <Badge variant="neutral" icon={<CloudOff size={13} />}>
-          Saved on this PC
+          {t("shell.sync.savedLocally")}
         </Badge>
       );
     default:
       return (
         <Badge variant="ok" icon={<CheckCircle2 size={13} />}>
-          Synced
+          {t("shell.sync.synced")}
         </Badge>
       );
   }
+}
+
+function BrandMark() {
+  return (
+    <svg
+      className="orbit-brand__mark"
+      width="22"
+      height="22"
+      viewBox="0 0 22 22"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="11" cy="11" r="4" fill="currentColor" />
+      <ellipse
+        cx="11"
+        cy="11"
+        rx="9.5"
+        ry="4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        transform="rotate(-28 11 11)"
+      />
+      <circle cx="18.6" cy="6.4" r="2" fill="var(--accent-primary)" />
+    </svg>
+  );
 }
 
 export function AppShell() {
   const { state: connState } = useOrion();
   const { data: summary } = useOrionQuery("farm.summary");
   const { theme, toggleTheme } = useTheme();
+  const customPages = useCustomPages();
+  const t = useT();
+  useLocalUiLifecycle();
 
-  const farmName = summary?.farm?.name ?? "North Ridge Barn";
+  const farmName = summary?.farm?.name ?? t("shell.farm.fallbackName");
   const alertCount = summary?.recentAlerts?.length ?? 0;
   const totalAnimals = (summary?.counts?.cattle ?? 0) + (summary?.counts?.horses ?? 0);
+  const orionOnline = connState === "open";
 
   return (
     <div className="orbit-shell">
-      <aside className="orbit-rail" aria-label="Primary farm navigation">
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "var(--space-3)",
-              paddingInline: "var(--space-2)",
-            }}
-          >
-            <div
-              style={{
-                inlineSize: "2.5rem",
-                blockSize: "2.5rem",
-                borderRadius: "var(--radius-md)",
-                backgroundColor: "var(--accent-primary)",
-                color: "var(--text-inverse)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <OrbitIcon size={22} />
-            </div>
-            <div style={{ minInlineSize: 0 }}>
-              <div
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "var(--text-h3)",
-                  fontWeight: 750,
-                  lineHeight: 1.1,
-                  letterSpacing: "var(--tracking-heading)",
-                }}
-              >
-                Orbit
-              </div>
-              <div
-                style={{
-                  fontSize: "var(--text-xs)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Farm desktop
-              </div>
-            </div>
+      <aside className="orbit-rail" aria-label={t("shell.nav.primary")}>
+        <div className="orbit-rail__top">
+          <div className="orbit-brand">
+            <BrandMark />
+            <span className="orbit-brand__name">Orbit</span>
           </div>
 
-          <nav aria-label="Main">
+          <nav aria-label={t("shell.nav.main")}>
             <ul className="orbit-nav-list">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
-                const badgeCount =
+                const count =
                   item.to === "/" && alertCount > 0
                     ? alertCount
                     : item.to === "/herd" && totalAnimals > 0
@@ -147,109 +139,83 @@ export function AppShell() {
                   <li key={item.to}>
                     <NavLink to={item.to} end={item.end} className="orbit-nav-link">
                       <span className="orbit-nav-link-inner">
-                        <Icon size={20} aria-hidden="true" />
-                        <span>{item.label}</span>
+                        <Icon size={18} aria-hidden="true" />
+                        <span>{t(item.labelKey)}</span>
                       </span>
-                      {badgeCount !== null && (
-                        <Badge
-                          variant={item.to === "/" ? "warn" : "neutral"}
-                          className="tabular-nums"
+                      {count !== null && (
+                        <span
+                          className={
+                            item.to === "/"
+                              ? "orbit-nav-count orbit-nav-count--alert"
+                              : "orbit-nav-count"
+                          }
                         >
-                          {badgeCount}
-                        </Badge>
+                          {count}
+                          {item.to === "/" && (
+                            <span className="orbit-visually-hidden">{t("shell.nav.alerts")}</span>
+                          )}
+                        </span>
                       )}
                     </NavLink>
                   </li>
                 );
               })}
+              {customPages.length > 0 && (
+                <li className="orbit-nav-section" aria-hidden="true">
+                  {t("shell.nav.yourPages")}
+                </li>
+              )}
+              {customPages.map((page) => (
+                <li key={page.id}>
+                  <NavLink
+                    to={`/pages/${page.id}`}
+                    className="orbit-nav-link"
+                    title={page.description}
+                    data-testid={`nav-custom-page-${page.id}`}
+                  >
+                    <span className="orbit-nav-link-inner">
+                      <CUSTOM_PAGE_ICON size={18} aria-hidden="true" />
+                      <span>{page.title}</span>
+                    </span>
+                  </NavLink>
+                </li>
+              ))}
             </ul>
           </nav>
         </div>
 
-        <div
-          className="orbit-card orbit-card--subtle"
-          style={{
-            padding: "var(--space-3) var(--space-4)",
-            gap: "var(--space-2)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "var(--space-2)",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "var(--text-xs)",
-                fontWeight: 700,
-                color: "var(--text-primary)",
-              }}
-            >
-              Orion assistant
-            </span>
-            <Badge variant={connState === "open" ? "ok" : "warn"}>
-              {connState === "open" ? "Online" : connState}
-            </Badge>
-          </div>
+        <div className="orbit-rail__status">
+          <span
+            className={orionOnline ? "orbit-status-dot orbit-status-dot--ok" : "orbit-status-dot"}
+            aria-hidden="true"
+          />
+          <span>{t(orionOnline ? "shell.orion.online" : `shell.orion.${connState}`)}</span>
         </div>
       </aside>
 
       <header className="orbit-topbar">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-3)",
-            minInlineSize: 0,
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: "var(--text-lg)",
-              fontWeight: 700,
-              color: "var(--text-primary)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {farmName}
-          </span>
+        <div className="orbit-topbar__farm">
+          <span className="orbit-topbar__name">{farmName}</span>
           <SyncStatusBadge />
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-3)",
-          }}
+        <Button
+          variant="subtle"
+          size="sm"
+          onClick={toggleTheme}
+          aria-label={t(theme === "light" ? "shell.theme.toDark" : "shell.theme.toLight")}
+          title={t(theme === "light" ? "shell.theme.darkTitle" : "shell.theme.lightTitle")}
+          icon={theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
         >
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={toggleTheme}
-            aria-label={
-              theme === "light"
-                ? "Switch to night watch dark theme"
-                : "Switch to daylight barn light theme"
-            }
-            icon={theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
-          >
-            {theme === "light" ? "Night watch" : "Daylight"}
-          </Button>
-        </div>
+          <span className="orbit-theme-toggle__label">
+            {t(theme === "light" ? "shell.theme.dark" : "shell.theme.light")}
+          </span>
+        </Button>
       </header>
 
       <main className="orbit-main-scroll">
         <OrionConnectionBanner />
-        <div style={{ paddingTop: "var(--space-2)" }}>
-          <Outlet />
-        </div>
+        <Outlet />
       </main>
     </div>
   );

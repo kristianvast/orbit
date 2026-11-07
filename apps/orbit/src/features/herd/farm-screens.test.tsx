@@ -29,6 +29,13 @@ function makeSyncCols() {
   };
 }
 
+const NO_ADE_FIELDS = {
+  identifierScheme: null,
+  alternativeIdentifiers: null,
+  reproductionStatus: null,
+  lactationStatus: null,
+};
+
 function createFarmMockClient() {
   const animals: AnimalListItem[] = [
     {
@@ -43,6 +50,7 @@ function createFarmMockClient() {
       groupName: "Milking",
       status: "active",
       notes: null,
+      ...NO_ADE_FIELDS,
       wearable: {
         deviceId: "dev-collar-1",
         kind: "collar",
@@ -63,6 +71,7 @@ function createFarmMockClient() {
       groupName: "Dry",
       status: "active",
       notes: null,
+      ...NO_ADE_FIELDS,
       wearable: {
         deviceId: "dev-bolus-1",
         kind: "bolus",
@@ -83,6 +92,7 @@ function createFarmMockClient() {
       groupName: "Stable",
       status: "active",
       notes: null,
+      ...NO_ADE_FIELDS,
       wearable: null,
       ...makeSyncCols(),
     },

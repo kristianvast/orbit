@@ -2,138 +2,143 @@
 
 ## 0. Research Log & Design Read
 
-- **Design Read:** Operational desktop farm command shell for non-technical cattle & horse farmers, with a warm, high-contrast "Barn Observatory" language: concentric orbit rings, satellite status indicators, big 44px+ hit targets, plain language ("Cows & Horses", "Sensors & Robots", "Cameras", "Ask Orion"), and dual daylight/night themes (`light` for bright barn offices, `dark` for night calving checks).
-- **Domain Invariant:** A cow or horse wears **at most ONE active wearable sensor** at a time (a collar **OR** a bolus **OR** an ear tag sensor — never stacked or combined). UI copy and components always present wearables as mutually exclusive choices.
-- **Anti-Slop Guard:** No Inter, Instrument Serif, Plus Jakarta Sans, or JetBrains Mono. No purple gradients, no glassmorphism (`backdrop-filter`), no emoji icons, no coloured left/top edge stripes on cards, no 2px accent outlines on rounded cards, no marketing fluff ("seamlessly", "effortlessly", "smart").
+- **Design Read:** Operational desktop farm command shell for non-technical cattle and horse farmers, with a warm, high-contrast "Barn Observatory" palette (limestone paper, iron ink, terracotta accent; charcoal and lantern amber at night) and the **Pecorva brand type system**: Tanker all-caps poster display over Switzer UI text. Layout stays quiet: flat panels, hairline rules instead of boxes, one prominent action per screen. Big 44px hit targets, plain language ("Cows & Horses", "Sensors & Robots", "Cameras", "Ask Orion"), and two themes (`light` for bright barn offices, `dark` for night calving checks).
+- **Redesign log (2026-11-05):** removed every region boxed as a bordered + shadowed card, stat tiles and bordered rows nested inside cards, a subtitle under every heading, pill badges on static labels, sparkle icons on suggestion chips, three equal stat cards, an explanatory "Data Safety" filler card, an icon-in-orange-tile logo, and a broken 390px shell. The owner kept the original warm palette and asked for the Pecorva website fonts (`pecorva-website/shared/tokens.css`).
+- **Domain Invariant:** A cow or horse wears **at most ONE active wearable sensor** at a time (a collar **OR** a bolus **OR** an ear tag sensor, never stacked or combined). UI copy and components always present wearables as mutually exclusive choices.
+- **Languages:** All UI copy goes through `t()` from `src/i18n` (English source catalogs in `src/i18n/locales/en/<namespace>.ts`, Norwegian Bokmål in `locales/nb/`; a missing translation is a type error). Never hard-code user-visible strings in components; data from Orion or the database (animal names, notes) is shown as-is. Users pick the language in Settings; the default follows the OS language.
+- **Anti-Slop Guard:** No purple gradients, no glassmorphism (`backdrop-filter`), no emoji icons, no coloured edge stripes on cards, no 2px accent outlines on rounded cards, no cards inside cards, no marketing fluff ("seamlessly", "effortlessly", "smart").
 
-## 1. Typography (Self-Hosted SIL Open Font License 1.1)
+## 1. Typography (Pecorva type system, self-hosted)
 
-All fonts are self-hosted in `apps/orbit/public/fonts/` as variable WOFF2 files under the **SIL Open Font License 1.1 (OFL-1.1)**:
+All fonts are self-hosted WOFF2 files in `apps/orbit/public/fonts/`; licences are listed in its `README.md`. `font-synthesis: none` is set globally so the single-weight display face is never faux-bolded.
 
-1. **Display / Headings (`--font-display`):** **Bricolage Grotesque** (`bricolage-grotesque-latin-wght-normal.woff2`, OFL-1.1, by Mathieu Triay).
-   - _Why:_ Warm, characterful, sturdy proportions with unmistakable personality that avoids generic tech-SaaS defaults while staying grounded and readable at display and section-heading sizes.
-2. **Body / UI Controls (`--font-sans`):** **Atkinson Hyperlegible Next** (`atkinson-hyperlegible-next-latin-wght-normal.woff2`, OFL-1.1, by Braille Institute).
-   - _Why:_ Engineered specifically for maximum character disambiguation (`0`/`O`, `1`/`I`/`l`, ear tag codes, animal names) under harsh glare in a bright barn office or tired eyes during a 3 AM calving check.
-3. **Data / Serials / Timestamps (`--font-mono`):** **Azeret Mono** (`azeret-mono-latin-wght-normal.woff2`, OFL-1.1, by Martin Vácha & Daniel Quisek).
-   - _Why:_ Crisp tabular numerals (`tabular-nums`) for ear tag numbers (`DK-1001`), temperatures (`40.4 °C`), battery percentages, and sync timestamps. Never used as a decorative "tech" costume on headings.
+1. **Display (`--font-display`):** **Tanker** 400 (`tanker-400-normal.woff2`, Fontshare, ITF Free Font License). All-caps poster face for `h1`/`h2` page titles, the Home status line, the wordmark, and large figures. Always `text-transform: uppercase`, weight 400, tracking `0.005em`.
+2. **UI / Body (`--font-sans`):** **Switzer** 400/500/600/700 (`switzer-*-normal.woff2`, Fontshare, ITF Free Font License). Body, controls, and card / panel titles (600, sentence case).
+3. **Data (`--font-mono`):** **Azeret Mono** (`azeret-mono-latin-wght-normal.woff2`, SIL OFL 1.1). Only identifiers compared character by character: ear tags (`DK-1001`), serials, endpoints. Counts use `tabular-nums`.
 
-### Type Scale (1.25x+ floor between heading steps)
+### Type Scale (1.25x floor between heading steps)
 
-| Token            | Value             | Role                              |
-| ---------------- | ----------------- | --------------------------------- |
-| `--text-display` | `2.75rem` (44px)  | Hero / primary farm figure        |
-| `--text-h1`      | `2.125rem` (34px) | Page title                        |
-| `--text-h2`      | `1.625rem` (26px) | Section heading                   |
-| `--text-h3`      | `1.25rem` (20px)  | Card / group heading              |
-| `--text-lg`      | `1.125rem` (18px) | Prominent control / lead copy     |
-| `--text-base`    | `1rem` (16px)     | Primary body text & controls      |
-| `--text-sm`      | `0.875rem` (14px) | Secondary metadata & table cells  |
-| `--text-xs`      | `0.75rem` (12px)  | Badges, ear tag chips, timestamps |
+| Token            | Value              | Role                             |
+| ---------------- | ------------------ | -------------------------------- |
+| `--text-display` | `2.5rem` (40px)    | Home status line (Tanker)        |
+| `--text-h1`      | `2rem` (32px)      | Page title (Tanker)              |
+| `--text-h2`      | `1.5625rem` (25px) | Section heading (Tanker)         |
+| `--text-h3`      | `1.25rem` (20px)   | Card / panel title (Switzer 600) |
+| `--text-lg`      | `1.125rem` (18px)  | Prominent control / lead copy    |
+| `--text-base`    | `1rem` (16px)      | Body text & controls             |
+| `--text-sm`      | `0.875rem` (14px)  | Secondary metadata & table cells |
+| `--text-xs`      | `0.75rem` (12px)   | Badges, timestamps, small labels |
 
 ## 2. Color System (Light & Dark Themes)
 
-Built for >7:1 primary text contrast and >4.5:1 secondary text contrast in both themes.
+The original Orbit palette: warm limestone neutrals, iron ink, one terracotta / lantern-amber accent, four semantic status hues. Primary buttons use the accent (`--action-*` tokens alias it).
 
 ### Light Theme ("Daylight Barn Office" - default `:root` & `[data-theme="light"]`)
 
-- **Canvas & Surfaces:**
-  - `--bg-canvas`: `#f6f3ec` (Warm limestone paper)
-  - `--bg-surface`: `#ffffff` (Crisp card surface)
-  - `--bg-elevated`: `#efeae0` (Tonal secondary surface / rail)
-  - `--bg-subtle`: `#e5dfd2` (Interactive well / hover wash)
-  - `--bg-hover`: `#dbd3c3` (Pressed / active control wash)
-  - `--bg-scrim`: `rgba(24, 22, 18, 0.55)` (Modal/drawer backdrop)
-- **Ink (Text):**
-  - `--text-primary`: `#181612` (Deep iron ink)
-  - `--text-secondary`: `#4a453b` (Weathered slate)
-  - `--text-muted`: `#686153` (Warm stone — passes AA 4.6:1 on `--bg-canvas`)
-  - `--text-inverse`: `#fcfaf5`
-- **Brand & Accent:**
-  - `--accent-primary`: `#b84a14` (Warm terracotta / barn ochre — high visibility, >=4.6:1 with white text)
-  - `--accent-primary-hover`: `#9c3d0e`
-  - `--accent-primary-subtle`: `rgba(184, 74, 20, 0.10)`
-  - `--accent-secondary`: `#1f5c3f` (Pasture pine)
-  - `--accent-secondary-subtle`: `rgba(31, 92, 63, 0.10)`
-- **Semantic Status:**
-  - `--status-ok`: `#1b6e44`, `--status-ok-bg`: `rgba(27, 110, 68, 0.11)`, `--status-ok-border`: `rgba(27, 110, 68, 0.30)`
-  - `--status-warn`: `#945305`, `--status-warn-bg`: `rgba(148, 83, 5, 0.12)`, `--status-warn-border`: `rgba(148, 83, 5, 0.32)`
-  - `--status-danger`: `#b42318`, `--status-danger-bg`: `rgba(180, 35, 24, 0.11)`, `--status-danger-border`: `rgba(180, 35, 24, 0.32)`
-  - `--status-info`: `#175cd3`, `--status-info-bg`: `rgba(23, 92, 211, 0.10)`, `--status-info-border`: `rgba(23, 92, 211, 0.28)`
-- **Borders & Focus:**
-  - `--border-subtle`: `#dcd5c7`
-  - `--border-strong`: `#bdb3a0`
-  - `--border-focus`: `#b84a14`
-  - `--orbit-ring`: `rgba(184, 74, 20, 0.18)`
-  - `--orbit-ring-strong`: `rgba(184, 74, 20, 0.34)`
+| Role                | Token                                                      | Value                                         | Contrast                 |
+| ------------------- | ---------------------------------------------------------- | --------------------------------------------- | ------------------------ |
+| Canvas              | `--bg-canvas`                                              | `#f6f3ec`                                     |                          |
+| Surface             | `--bg-surface`                                             | `#ffffff`                                     |                          |
+| Rail / tonal panel  | `--bg-elevated`                                            | `#efeae0`                                     |                          |
+| Hover / pressed     | `--bg-subtle` / `--bg-hover`                               | `#e5dfd2` / `#dbd3c3`                         |                          |
+| Ink                 | `--text-primary` / `--text-secondary` / `--text-muted`     | `#181612` / `#433e34` / `#645d4f`             | muted 5.4:1 on canvas    |
+| Accent (terracotta) | `--accent-primary` / `-hover`                              | `#b84a14` / `#9c3d0e`                         | 4.9:1 on canvas          |
+| Primary action      | `--action-bg` / `--action-fg`                              | `#b84a14` / `#fcfaf5`                         | 5.0:1                    |
+| Pasture green       | `--accent-secondary`                                       | `#1f5c3f`                                     |                          |
+| Status              | `--status-ok` / `warn` / `danger` / `info`                 | `#19673e` / `#8c4d04` / `#b42318` / `#175cd3` | all > 5:1                |
+| Borders             | `--border-subtle` / `--border-strong` / `--border-control` | `#dcd5c7` / `#bab09d` / `#8a806e`             | control 3.9:1 on surface |
+| Focus               | `--border-focus`                                           | `#b84a14`                                     |                          |
 
 ### Dark Theme ("Night Watch" - `[data-theme="dark"]`)
 
-- **Canvas & Surfaces:**
-  - `--bg-canvas`: `#111310` (Night pasture charcoal)
-  - `--bg-surface`: `#191c18` (Barn timber dark surface)
-  - `--bg-elevated`: `#222620` (Elevated panel)
-  - `--bg-subtle`: `#2b3028` (Subtle wash)
-  - `--bg-hover`: `#363c32` (Hover wash)
-  - `--bg-scrim`: `rgba(8, 9, 7, 0.74)`
-- **Ink (Text):**
-  - `--text-primary`: `#f3f0e6` (Warm cream)
-  - `--text-secondary`: `#c6c0b2` (Soft limestone)
-  - `--text-muted`: `#968f7e` (Muted straw — passes AA >5:1 on `--bg-surface`)
-  - `--text-inverse`: `#111310`
-- **Brand & Accent:**
-  - `--accent-primary`: `#e88245` (Warm lantern amber)
-  - `--accent-primary-hover`: `#f2955e`
-  - `--accent-primary-subtle`: `rgba(232, 130, 69, 0.15)`
-  - `--accent-secondary`: `#5ec28f` (Night meadow green)
-  - `--accent-secondary-subtle`: `rgba(94, 194, 143, 0.14)`
-- **Semantic Status:**
-  - `--status-ok`: `#57cc8a`, `--status-ok-bg`: `rgba(87, 204, 138, 0.14)`, `--status-ok-border`: `rgba(87, 204, 138, 0.34)`
-  - `--status-warn`: `#f5b14c`, `--status-warn-bg`: `rgba(245, 177, 76, 0.15)`, `--status-warn-border`: `rgba(245, 177, 76, 0.35)`
-  - `--status-danger`: `#f97066`, `--status-danger-bg`: `rgba(249, 112, 102, 0.16)`, `--status-danger-border`: `rgba(249, 112, 102, 0.38)`
-  - `--status-info`: `#68a8ff`, `--status-info-bg`: `rgba(104, 168, 255, 0.15)`, `--status-info-border`: `rgba(104, 168, 255, 0.34)`
-- **Borders & Focus:**
-  - `--border-subtle`: `#2c3129`
-  - `--border-strong`: `#434a3e`
-  - `--border-focus`: `#e88245`
-  - `--orbit-ring`: `rgba(232, 130, 69, 0.20)`
-  - `--orbit-ring-strong`: `rgba(232, 130, 69, 0.38)`
+| Role                    | Token                                                      | Value                                         | Contrast                 |
+| ----------------------- | ---------------------------------------------------------- | --------------------------------------------- | ------------------------ |
+| Canvas / surface / rail | `--bg-canvas` / `--bg-surface` / `--bg-elevated`           | `#111310` / `#191c18` / `#21251f`             |                          |
+| Hover / pressed         | `--bg-subtle` / `--bg-hover`                               | `#2a2f28` / `#353b32`                         |                          |
+| Ink                     | `--text-primary` / `--text-secondary` / `--text-muted`     | `#f3f0e6` / `#c9c3b5` / `#9a9383`             | muted > 5:1 on surface   |
+| Accent (lantern amber)  | `--accent-primary` / `-hover`                              | `#e88245` / `#f2955e`                         |                          |
+| Primary action          | `--action-bg` / `--action-fg`                              | `#e88245` / `#111310`                         | 6.9:1                    |
+| Night meadow green      | `--accent-secondary`                                       | `#5ec28f`                                     |                          |
+| Status                  | `--status-ok` / `warn` / `danger` / `info`                 | `#57cc8a` / `#f5b14c` / `#f97066` / `#68a8ff` |                          |
+| Borders                 | `--border-subtle` / `--border-strong` / `--border-control` | `#2c3129` / `#434a3e` / `#76705f`             | control 3.5:1 on surface |
+| Focus                   | `--border-focus`                                           | `#e88245`                                     |                          |
 
-## 3. Spacing, Radius & Motion
+## 3. Spacing, Radius, Elevation & Motion
 
-- **Spacing Scale (4px base):** `--space-1` (4px), `--space-2` (8px), `--space-3` (12px), `--space-4` (16px), `--space-5` (20px), `--space-6` (24px), `--space-8` (32px), `--space-10` (40px), `--space-12` (48px).
-- **Hit Targets:** `--control-height-sm` (36px), `--control-height-md` (44px — default for farmer touch/pointer ease), `--control-height-lg` (52px).
-- **Border Radius:** `--radius-sm` (6px), `--radius-md` (10px), `--radius-lg` (14px), `--radius-xl` (20px), `--radius-full` (9999px).
-- **Motion:** `--duration-fast` (120ms), `--duration-normal` (200ms), `--duration-slow` (360ms), `--ease-out` (`cubic-bezier(0.22, 1, 0.36, 1)`). All animations respect `@media (prefers-reduced-motion: reduce)`.
+- **Spacing Scale (4px base):** `--space-1` (4px) through `--space-12` (48px), plus `--space-16` (64px) for page-level breaks.
+- **Hit Targets:** `--control-height-sm` (36px), `--control-height-md` (44px default), `--control-height-lg` (52px).
+- **Radius (tight, tooled):** `--radius-sm` 4px (badges, inner rows), `--radius-md` 6px (controls), `--radius-lg` 10px (panels), `--radius-xl` 14px (dialogs), `--radius-full`.
+- **Elevation:** panels are flat (hairline only, no shadow). Shadow exists only on things that float: dialog, drawer, toast (`--shadow-lg`, tinted to the graphite hue).
+- **Motion:** `--duration-fast` (120ms), `--duration-normal` (200ms), `--duration-slow` (360ms), `--ease-out` (`cubic-bezier(0.22, 1, 0.36, 1)`). All animations respect `prefers-reduced-motion`.
 
 ## 4. Spacing & Layout Contract
 
-Layout: App Shell - persistent left navigation rail + top farm status bar + scrollable main workspace -> fixed-sidenav-shell (skipped: host unreachable); scroll owner: `.orbit-main-scroll`; anti-patterns: double vertical scrollbars on window and main, missing `min-block-size: 0` on grid scroll child, horizontal overflow at 1024x700.
+Layout: App Shell - persistent left rail (brand, nav, Orion status line) + top farm bar + scrollable workspace; below 820px the rail collapses to a single horizontally scrolling nav row under the top bar -> fixed-sidenav-shell (skipped: host unreachable); scroll owner: `.orbit-main-scroll`; anti-patterns: double vertical scrollbars, missing `min-block-size: 0` on grid scroll child, horizontal page overflow at 390 and 1024.
 
-Layout: Home Screen - farm orbit overview + priority alerts + herd/device/camera satellite summary -> page-grid + intrinsic grid (skipped: host unreachable); scroll owner: `.orbit-main-scroll`; anti-patterns: burying active calving/health alerts below decorative chrome, stacking multiple wearables per animal.
+Layout: Home Screen - status line + Ask Orion composer on top, then a two-column split (alerts list leading, farm instruments trailing), then one footnote line -> page-grid + split (skipped: host unreachable); scroll owner: `.orbit-main-scroll`; anti-patterns: burying active calving/health alerts below decorative chrome, cards inside cards, stat tiles repeating the instrument list, stacking multiple wearables per animal.
+
+Layout: Cameras Screen (Barn Map) - page header with Add camera primary action and Find cameras secondary action, network discovery privacy card, then the interactive BarnMapCanvas (toolbar with live count, optional BarnSelector when cameras span >1 location, Reset view and Tidy layout buttons, over a bounded pannable/zoomable world viewport holding aspect-locked CameraTile items) -> canvas-shell (skipped: host unreachable); scroll owner: `.orbit-main-scroll` for page, `.orbit-barn-map__viewport` (`touch-action: none`, `overflow: hidden`) for 2D pan/zoom; anti-patterns: infinite reconnect spinners when go2rtc relay or camera stream is offline, reflowing the spatial barn layout across breakpoints instead of panning/zooming.
+
+Layout: Settings Screen (Account & Billing) - vertical stack of flat panel cards (`AccountCard` with `BillingSection`, `MembersCard`, `Language`, `Model` + `ProvidersCard` split, `Undo`, `Data`, `About`) inside `.orbit-container` -> stacked-settings (skipped: host unreachable); scroll owner: `.orbit-main-scroll`; anti-patterns: 2px accent outlines on plan cards, nested cards with drop shadows, hiding BYO provider option on free plan.
+
+Layout: Ask Orion Screen (Chat & Voice) - two-column bounded shell (`.orbit-threads` sidebar + `.orbit-thread-pane` with header, scrollable transcript/timeline + `PlanErrorCard`, and footer housing `VoicePanel` + `Composer`) -> split-thread-shell (skipped: host unreachable); scroll owner: `.orbit-thread-pane__scroll` (and `.orbit-voice-panel__body` inside active voice mode); anti-patterns: raw error stack traces for `plan_required` / `budget_exceeded`, blocking text fallback when mic permission is denied.
 
 ## 5. Screen Brief (Home & App Shell)
 
-- **Primary Action:** **"Ask Orion"** button (prominent terracotta/amber CTA in the Home hero & command bar that opens `/chat` with Orion, or triggers an immediate question).
+- **Primary Action:** **"Ask Orion"**, the submit button of the Home composer (ink style). Typing a question and pressing Enter opens `/chat?prompt=...`; an empty submit opens `/chat`.
 - **Information Priorities (1-3):**
-  1. **Active Alerts & Farm Pulse** (Calving alerts, high temperature health events, heat alerts from `farm.summary.recentAlerts`, and Orion connection banner if Orion is offline).
-  2. **The Farm Orbit & Herd/Equipment Status** (`farm.summary.counts`: Cattle, Horses, Sensors online/offline, Cameras online, Connectors synced, visualised cleanly alongside the `OrbitRings` farm diagram).
-  3. **Quick Ask Orion Prompts** (Plain-language one-click questions a farmer asks: e.g., _"Which cows need attention today?"_, _"Check calving pen camera and recent alerts"_, _"Show sensors with low battery"_).
-- **Left Out on Purpose:** No fake weather widgets, no decorative sparklines with random data, no stacked multi-wearable badges per animal, no marketing slogans.
+  1. **Status line + active alerts** (`farm.summary.recentAlerts`): a one-sentence verdict ("3 things need a look today." / "All quiet in the barn today.") and the alert list, each row naming the animal, the alert kind, the time, and what to check.
+  2. **Farm instruments** (`farm.summary.counts`): animals (cattle, horses), sensors online, cameras live, connectors, with the `OrbitRings` diagram as the panel's visual anchor.
+  3. **Suggested questions** for Orion, as plain text buttons under the composer.
+- **Left Out on Purpose:** greeting-plus-headline formula in a hero card, the three equal stat cards (they repeated the instrument numbers), the stat tiles under the orbit diagram, the "Needs attention" mini-list (it repeated the alert list), the "Data Safety & Undo" card (now one footnote line), sparkle icons, static "Active" badge, subtitles under every heading, fake weather, random sparklines.
 - **Required Content:**
-  - Left rail navigation: `Home`, `Ask Orion`, `Cows & Horses`, `Sensors & Robots`, `Cameras`, `Settings`.
-  - Top bar: Farm name (from `farm.summary.farm.name` or `"Demo Farm"` fallback), Orion connection state, Sync status (`sync.status`), and Light/Dark theme toggle.
-  - Friendly connection banner when Orion is reconnecting, offline, or unauthorized.
-  - Home summary driven by `useOrionQuery("farm.summary")`: cows count, horses count, alerts list, sensors online/offline count, cameras online/total count, and prominent "Ask Orion" entry.
+  - Left rail navigation: `Home`, `Ask Orion`, `Cows & Horses`, `Sensors & Robots`, `Cameras`, `Settings`; alert count on Home, animal count on Cows & Horses.
+  - Top bar: farm name (`farm.summary.farm.name`, fallback), sync status (`sync.status`), light/dark theme toggle. Orion connection state in the rail footer.
+  - Connection banner when Orion is reconnecting, offline, or unauthorized.
+  - Home: status headline (`home-hero-headline`), alert count badge (`home-alerts`), herd counts `"{n} cattle · {n} horses"` (`home-herd-counts`), sensors online (`home-sensors-online`), cameras live (`home-cameras-live`), connectors with error count, recent alerts with per-alert "Ask Orion", links to Cows & Horses / Sensors & Robots / Cameras / Settings, the undo + saved-on-this-PC note, and the wearable rule ("Collar OR bolus OR ear tag sensor").
 - **Reusable Primitives (`src/design/`):**
-  - `Button` (variants: `primary`, `secondary`, `subtle`, `danger`; sizes: `sm`, `md`, `lg`; loading state with fixed box geometry)
-  - `Card` (tonal/bordered container with header, title, subtitle, actions, body)
-  - `Badge` (semantic variants: `neutral`, `ok`, `warn`, `danger`, `info`, `accent`)
-  - `Input` (labelled text input with hint/error states, 44px height)
-  - `Select` (labelled native select with custom chevron, 44px height)
-  - `Dialog` (accessible modal dialog with Escape close, focus management, scrim)
-  - `Drawer` (slide-over side sheet for detail inspection)
-  - `Tabs` (ARIA tablist + tab + tabpanel with keyboard arrow navigation)
-  - `Toast` (`ToastProvider` + `useToast()` for transient feedback)
-  - `EmptyState` (calm orbit-themed empty state with title, description, and optional action)
-  - `Skeleton` (loading placeholder block)
-  - `OrbitRings` (SVG concentric rings, orbit paths, central barn node, and satellite nodes representing cows, horses, sensors, and cameras)
+  - `Button` (`primary` ink, `secondary` hairline, `subtle` text, `danger`; `sm`/`md`/`lg`; loading state with fixed box geometry)
+  - `Card` (flat surface panel with a hairline, header, title, optional subtitle, actions, body, footer)
+  - `Badge` (4px-radius tonal label: `neutral`, `ok`, `warn`, `danger`, `info`, `accent`; only for values that change)
+  - `Input`, `Select` (44px, control-edge border, labelled, hint/error)
+  - `Dialog`, `Drawer` (the only shadowed surfaces), `Tabs` (segmented), `Toast`, `EmptyState`, `Skeleton`
+  - `OrbitRings` (SVG concentric rings with satellite nodes; hairline rings, accent only on the core and alert nodes)
+
+### Cameras Screen (Barn Map)
+
+- **Primary Action:** **"Add camera"** (`cameras-add-btn`), primary button in the page header.
+- **Information Priorities (1-3):**
+  1. **Barn Map Canvas** (`camera-barn-map`): pannable/zoomable 2D map of aspect-locked (`896 / 512`) camera tiles (`camera-tile-<id>`) showing live MSE video (`connectMSE`), a still JPEG poster (`frame.jpeg`), or the offline `CameraSnapshotPlaceholder` (`camera-snapshot-<id>`).
+  2. **Barn Selector** (`camera-barn-selector`): shown when cameras span more than one location, filtering the map to one barn with optional per-farm favourite pinning.
+  3. **Network Discovery & Keychain Privacy Card**: explains local network camera scanning with Orion and OS keychain password storage.
+- **Left Out on Purpose:** detection bounding-box overlays, heatmaps, polygon zone editors, calving-zone toggles, weight-capture flows, glassmorphism/blur overlays on camera tiles.
+- **Required Content:**
+  - Page header (`cameras-page`) with title, online count badge, `cameras-find-network-btn`, and `cameras-add-btn`.
+  - Privacy card with `cameras-ask-orion-discovery-btn`.
+  - Empty state (`cameras-empty-state`), loading state (`cameras-loading-state`), and error state (`cameras-error-state`).
+  - `BarnMapCanvas` (`camera-barn-map`) with `BarnSelector` (`camera-barn-selector`), relay status notice when unavailable (`cameras-relay-notice`), `cameras-tidy-btn`, `cameras-reset-view-btn`, and `CameraTile` (`camera-tile-<id>`) with `camera-edit-<id>`, `camera-ask-orion-<id>`, Move to location menu, corner `[data-resize-handle]`, and tap-to-fullscreen.
+  - `CameraFormDialog` (`camera-form-dialog`, `camera-form-name`, `camera-form-location`, `camera-form-rtsp`, `camera-form-onvif`, `camera-form-status`, `camera-form-username`, `camera-form-password`, `camera-form-cancel`, `camera-form-submit`).
+
+### Settings Screen (Account & Billing) & Ask Orion (Chat & Voice)
+
+- **Primary Action:** **"Choose a plan"** (`billing-checkout-button`) inside `BillingSection` on the Account card; **"Send"** (`chat-send-button`) in the Ask Orion composer.
+- **Information Priorities (1-3):**
+  1. **Current plan, status, renewal date, and usage meters** (`billing-plan-name`, `billing-status-badge`, `billing-period-end`, `billing-meter-tokens`, `billing-meter-voice`), plus open-source BYO key explanation on free plan (`billing-free-copy`).
+  2. **Plan & interval picker** (`billing-plan-pen`, `billing-plan-barn`, `billing-interval-month`, `billing-interval-year`) with checkout and billing portal actions (`billing-checkout-button`, `billing-portal-button`).
+  3. **Chat plan-limit card & Talk to Orion voice panel** (`chat-plan-error-card` with `chat-plan-error-use-key` and `chat-plan-error-see-plans`; `voice-panel` with `voice-state-badge`, `voice-transcript`, `voice-tools` reusing `ToolCard`, `voice-stop-button`, and `voice-mic-error` fallback).
+- **Left Out on Purpose:** multi-tier comparison tables with checkmarks, decorative discount badges, animated waveform gimmicks, 2px coloured selection borders on plan cards.
+- **Required Content:**
+  - `AccountCard`: plan name (`free`/`pen`/`barn`), status badge, renewal/period end, token and voice minute usage meters, Free BYO explanation, signed-out sign-in prompt, Pen/Barn x Monthly/Yearly picker, `Choose a plan` (`billing.checkout`), `Manage billing` (`billing.portal`).
+  - `ChatPage`: `PlanErrorCard` for `plan_required` and `budget_exceeded` with `"Use your own key"` (navigates to Providers) and `"See plans"` (navigates to Account card); `Composer` `"Talk to Orion"` button (`chat-voice-button`) opening `VoicePanel` with AudioWorklet 16 kHz PCM16 capture, 24 kHz AudioContext playback queue, live transcript, `ToolCard` tool executions, state badge, stop button, and mic-denied notice.
+
+## 6. Components (source)
+
+All primitives are project-kit components in `src/design/primitives.tsx` following shadcn/ui anatomy (button, card, badge, input, select, dialog, sheet, tabs, toast), restyled with the tokens above.
+
+## 7. Surfaces
+
+Flat panels on a canvas: `--bg-surface` with a 1px `--border-subtle` hairline and `--radius-lg`. Tonal grouping uses `--bg-elevated`. Inside a panel, rows are separated by hairline dividers, never by bordered boxes. No glass, no gradients, no grain, no glow.
+
+## 8. Accepted Debt
+
+- Feature screens (herd, devices, cameras, settings, chat) still carry many inline styles; they inherit the new tokens and primitives but were not restructured in the 2026-11-05 redesign.

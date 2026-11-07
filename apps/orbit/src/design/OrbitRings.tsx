@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import { type MessageKey, useT } from "../i18n";
 
 export interface OrbitSatellite {
   id: string;
@@ -16,13 +17,29 @@ export interface OrbitRingsProps extends SVGProps<SVGSVGElement> {
   satellites?: OrbitSatellite[];
 }
 
-const DEFAULT_SATELLITES: OrbitSatellite[] = [
-  { id: "cattle", label: "Cattle", ring: 1, angleDeg: -38, tone: "ok", count: 24 },
-  { id: "horses", label: "Horses", ring: 1, angleDeg: 142, tone: "ok", count: 4 },
-  { id: "sensors", label: "Sensors", ring: 2, angleDeg: 32, tone: "accent", count: 24 },
-  { id: "robot", label: "Milking robot", ring: 2, angleDeg: 215, tone: "ok", count: 1 },
-  { id: "cameras", label: "Cameras", ring: 3, angleDeg: -115, tone: "ok", count: 3 },
-  { id: "alerts", label: "Alerts", ring: 3, angleDeg: 85, tone: "warn", count: 3 },
+type DefaultSatellite = Omit<OrbitSatellite, "label"> & { labelKey: MessageKey };
+
+const DEFAULT_SATELLITES: readonly DefaultSatellite[] = [
+  { id: "cattle", labelKey: "design.orbit.cattle", ring: 1, angleDeg: -38, tone: "ok", count: 24 },
+  { id: "horses", labelKey: "design.orbit.horses", ring: 1, angleDeg: 142, tone: "ok", count: 4 },
+  {
+    id: "sensors",
+    labelKey: "design.orbit.sensors",
+    ring: 2,
+    angleDeg: 32,
+    tone: "accent",
+    count: 24,
+  },
+  { id: "robot", labelKey: "design.orbit.robot", ring: 2, angleDeg: 215, tone: "ok", count: 1 },
+  {
+    id: "cameras",
+    labelKey: "design.orbit.cameras",
+    ring: 3,
+    angleDeg: -115,
+    tone: "ok",
+    count: 3,
+  },
+  { id: "alerts", labelKey: "design.orbit.alerts", ring: 3, angleDeg: 85, tone: "warn", count: 3 },
 ];
 
 const RING_RADII: Record<1 | 2 | 3, number> = {
@@ -46,11 +63,17 @@ function toneColor(tone: OrbitSatellite["tone"]): string {
 
 export function OrbitRings({
   size = 296,
-  centerLabel = "BARN",
-  centerSublabel = "Calm orbit",
-  satellites = DEFAULT_SATELLITES,
+  centerLabel: centerLabelProp,
+  centerSublabel: centerSublabelProp,
+  satellites: satellitesProp,
   ...rest
 }: OrbitRingsProps) {
+  const t = useT();
+  const centerLabel = centerLabelProp ?? t("design.orbit.center");
+  const centerSublabel = centerSublabelProp ?? t("design.orbit.sublabel");
+  const satellites: OrbitSatellite[] =
+    satellitesProp ??
+    DEFAULT_SATELLITES.map(({ labelKey, ...sat }) => ({ ...sat, label: t(labelKey) }));
   const cx = 150;
   const cy = 150;
 
@@ -60,20 +83,10 @@ export function OrbitRings({
       height={size}
       viewBox="0 0 300 300"
       role="img"
-      aria-label={`Farm orbit diagram: ${centerLabel} ${centerSublabel}`}
+      aria-label={t("design.orbit.diagram", { center: centerLabel, sublabel: centerSublabel })}
       style={{ display: "block", maxInlineSize: "100%", blockSize: "auto" }}
       {...rest}
     >
-      <defs>
-        <radialGradient id="orbit-core-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="var(--accent-primary)" stopOpacity="0.18" />
-          <stop offset="70%" stopColor="var(--accent-primary)" stopOpacity="0.04" />
-          <stop offset="100%" stopColor="var(--accent-primary)" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      <circle cx={cx} cy={cy} r={140} fill="url(#orbit-core-glow)" />
-
       <line
         x1={cx - 134}
         y1={cy}
@@ -124,8 +137,8 @@ export function OrbitRings({
         cy={cy}
         r={34}
         fill="var(--orbit-core-bg)"
-        stroke="var(--accent-primary)"
-        strokeWidth="2"
+        stroke="var(--text-primary)"
+        strokeWidth="1.5"
       />
       <text
         x={cx}
@@ -147,8 +160,8 @@ export function OrbitRings({
         textAnchor="middle"
         fill="var(--text-secondary)"
         style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: "9.5px",
+          fontFamily: "var(--font-sans)",
+          fontSize: "10px",
           fontWeight: 600,
         }}
       >
@@ -170,7 +183,7 @@ export function OrbitRings({
               r={12}
               fill="var(--bg-surface)"
               stroke={color}
-              strokeWidth="2.25"
+              strokeWidth="1.75"
             />
             {sat.count !== undefined ? (
               <text
@@ -179,9 +192,10 @@ export function OrbitRings({
                 textAnchor="middle"
                 fill="var(--text-primary)"
                 style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "9.5px",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: "10px",
                   fontWeight: 700,
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
                 {sat.count}

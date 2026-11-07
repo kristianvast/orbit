@@ -1,72 +1,42 @@
-import type { ApprovalMode, Settings, SnapshotSummary, ThinkingLevel } from "@orbit/protocol";
+import type { Settings, SnapshotSummary, ThinkingLevel } from "@orbit/protocol";
 import {
-  CheckCircle2,
   Clock,
   Cpu,
   FolderOpen,
   History,
-  KeyRound,
+  Languages,
   RefreshCw,
   RotateCcw,
   Scale,
-  ShieldAlert,
-  ShieldCheck,
-  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Button, Card, EmptyState, Input, Select, Skeleton, useToast } from "../../design";
-import { useOrion } from "../../lib/orion";
+import { useLocation } from "react-router";
+import { Badge, Button, Card, EmptyState, Select, Skeleton, useToast } from "../../design";
+import { isLocale, LOCALE_NAMES, LOCALES, type MessageKey, useI18n } from "../../i18n";
+import { useOrion, useOrionEvent } from "../../lib/orion";
+import { AccountCard, AccountSection, BillingSection } from "./AccountCard";
+import { ProvidersCard } from "./ProvidersCard";
+import { YourOrbitCard } from "./YourOrbitCard";
 
-const THINKING_OPTIONS: { value: ThinkingLevel; label: string }[] = [
-  { value: "off", label: "Off (fastest replies)" },
-  { value: "minimal", label: "Minimal" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium (balanced)" },
-  { value: "high", label: "High (thorough checks)" },
-  { value: "xhigh", label: "Extra high" },
-];
+export { AccountCard, AccountSection, BillingSection };
 
-const APPROVAL_MODES: {
-  mode: ApprovalMode;
-  title: string;
-  description: string;
-  badge: string;
-}[] = [
-  {
-    mode: "ask",
-    title: "Ask every time",
-    description:
-      "Orion asks for your permission before updating herd records, binding sensors, scanning for cameras, or editing files in the farm workspace.",
-    badge: "Recommended",
-  },
-  {
-    mode: "auto",
-    title: "Auto-approve normal actions (dangerous actions always ask)",
-    description:
-      "Orion runs normal farm and workspace tools automatically. Deleting files, changing network/firewall rules, installing software, or touching files outside the workspace always ask.",
-    badge: "Hands-free",
-  },
-  {
-    mode: "read_only",
-    title: "Read-only mode",
-    description:
-      "Orion can look up cows, horses, sensors, and alerts, but cannot make any changes or run commands.",
-    badge: "View only",
-  },
+const THINKING_OPTIONS: { value: ThinkingLevel; labelKey: MessageKey }[] = [
+  { value: "off", labelKey: "settings.thinking.off" },
+  { value: "minimal", labelKey: "settings.thinking.minimal" },
+  { value: "low", labelKey: "settings.thinking.low" },
+  { value: "medium", labelKey: "settings.thinking.medium" },
+  { value: "high", labelKey: "settings.thinking.high" },
+  { value: "xhigh", labelKey: "settings.thinking.xhigh" },
 ];
 
 const COMMON_PROVIDERS = ["anthropic", "openai", "google", "orbit-gateway", "orion-mock"];
 
-function formatSnapshotTimestamp(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const SNAPSHOT_TIME_FORMAT: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+};
 
 function defaultPlatformDataPath(): string {
   if (typeof navigator === "undefined") {
@@ -81,6 +51,16 @@ function defaultPlatformDataPath(): string {
 export default function SettingsPage() {
   const { client, state: connState, endpoint } = useOrion();
   const { pushToast } = useToast();
+  const { t, locale, setLocale, formatDate } = useI18n();
+  const location = useLocation();
+  const formatSnapshotTimestamp = (iso: string) => formatDate(iso, SNAPSHOT_TIME_FORMAT);
+
+  useEffect(() => {
+    const hash = location.hash.replace(/^#/, "");
+    if (!hash) return;
+    const el = document.getElementById(hash);
+    el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [location.hash]);
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
@@ -91,15 +71,10 @@ export default function SettingsPage() {
   const [selectedThinking, setSelectedThinking] = useState<ThinkingLevel>("off");
   const [savingModel, setSavingModel] = useState(false);
 
-  const [keyProvider, setKeyProvider] = useState<string>("anthropic");
-  const [apiKeyInput, setApiKeyInput] = useState<string>("");
-  const [savingKey, setSavingKey] = useState(false);
-
-  const [savingApprovalMode, setSavingApprovalMode] = useState<ApprovalMode | null>(null);
   const [undoingId, setUndoingId] = useState<string | null>(null);
 
-  const loadAll = useCallback(async () => {
-    if (!client) return;
+  const loadAll = useCallback(async (): Promise<Settings | null> => {
+    if (!client) return null;
     setLoading(true);
     try {
       const [loadedSettings, loadedSnapshots] = await Promise.all([
@@ -120,16 +95,18 @@ export default function SettingsPage() {
       setSelectedProvider(initialProvider);
       setSelectedModel(initialModel);
       setSelectedThinking(loadedSettings.thinkingLevel);
+      return loadedSettings;
     } catch (err) {
       pushToast({
-        title: "Could not load settings",
+        title: t("settings.toast.loadFailed"),
         description: err instanceof Error ? err.message : String(err),
         tone: "warn",
       });
+      return null;
     } finally {
       setLoading(false);
     }
-  }, [client, pushToast]);
+  }, [client, pushToast, t]);
 
   useEffect(() => {
     if (!client) return;
@@ -137,6 +114,8 @@ export default function SettingsPage() {
       void loadAll();
     }
   }, [client, connState, loadAll]);
+  // Signing in or out switches the default model to or from the Orbit cloud model.
+  useOrionEvent("account.updated", () => void loadAll());
 
   useEffect(() => {
     if (!client) return;
@@ -163,12 +142,6 @@ export default function SettingsPage() {
     return [...set];
   }, [settings]);
 
-  const keyProvidersList = useMemo(() => {
-    const set = new Set<string>(COMMON_PROVIDERS);
-    for (const p of providersList) set.add(p);
-    return [...set];
-  }, [providersList]);
-
   const modelsForProvider = useMemo(() => {
     return (settings?.availableModels ?? []).filter((m) => m.provider === selectedProvider);
   }, [settings, selectedProvider]);
@@ -177,6 +150,15 @@ export default function SettingsPage() {
     setSelectedProvider(nextProvider);
     const firstModel = (settings?.availableModels ?? []).find((m) => m.provider === nextProvider);
     setSelectedModel(firstModel?.id ?? "");
+  };
+
+  const handleProvidersChanged = async (connectedProviderId?: string) => {
+    const loaded = await loadAll();
+    const first = loaded?.availableModels.find((m) => m.provider === connectedProviderId);
+    if (connectedProviderId && first) {
+      setSelectedProvider(connectedProviderId);
+      setSelectedModel(first.id);
+    }
   };
 
   const handleSaveModelSettings = async () => {
@@ -190,120 +172,21 @@ export default function SettingsPage() {
       });
       setSettings(updated);
       pushToast({
-        title: "Model settings saved",
+        title: t("settings.toast.modelSaved"),
         description:
           updated.provider && updated.model
-            ? `Orion will use ${updated.provider}/${updated.model}.`
-            : "Updated Orion model preferences.",
+            ? t("settings.toast.modelSavedDesc", { model: `${updated.provider}/${updated.model}` })
+            : t("settings.toast.modelSavedDefault"),
         tone: "ok",
       });
     } catch (err) {
       pushToast({
-        title: "Could not save model settings",
+        title: t("settings.toast.modelSaveFailed"),
         description: err instanceof Error ? err.message : String(err),
         tone: "danger",
       });
     } finally {
       setSavingModel(false);
-    }
-  };
-
-  const handleSaveApiKey = async () => {
-    const trimmed = apiKeyInput.trim();
-    if (!client || !keyProvider || !trimmed) return;
-    setSavingKey(true);
-    try {
-      const updated = await client.request("settings.update", {
-        apiKey: { provider: keyProvider, key: trimmed },
-      });
-      setSettings(updated);
-      setApiKeyInput("");
-      pushToast({
-        title: "API key stored in keychain",
-        description: `Saved key for ${keyProvider}. The raw key is never echoed back.`,
-        tone: "ok",
-      });
-    } catch (err) {
-      pushToast({
-        title: "Could not save API key",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
-    } finally {
-      setSavingKey(false);
-    }
-  };
-
-  const handleRemoveApiKey = async (provider: string) => {
-    if (!client) return;
-    setSavingKey(true);
-    try {
-      const updated = await client.request("settings.update", {
-        apiKey: { provider, key: null },
-      });
-      setSettings(updated);
-      pushToast({
-        title: `Removed ${provider} API key`,
-        tone: "info",
-      });
-    } catch (err) {
-      pushToast({
-        title: "Could not remove API key",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
-    } finally {
-      setSavingKey(false);
-    }
-  };
-
-  const handleSelectApprovalMode = async (mode: ApprovalMode) => {
-    if (!client) return;
-    setSavingApprovalMode(mode);
-    try {
-      const updated = await client.request("settings.update", {
-        approvalMode: mode,
-      });
-      setSettings(updated);
-      pushToast({
-        title: "Approval mode updated",
-        description:
-          mode === "ask"
-            ? "Orion will ask before changing records or running commands."
-            : mode === "auto"
-              ? "Normal farm actions will run automatically; dangerous actions still ask."
-              : "Orion is now in read-only mode.",
-        tone: "ok",
-      });
-    } catch (err) {
-      pushToast({
-        title: "Could not update approval mode",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
-    } finally {
-      setSavingApprovalMode(null);
-    }
-  };
-
-  const handleRemoveAlwaysAllow = async (toolName: string) => {
-    if (!client || !settings) return;
-    const nextList = settings.alwaysAllow.filter((t) => t !== toolName);
-    try {
-      const updated = await client.request("settings.update", {
-        alwaysAllow: nextList,
-      });
-      setSettings(updated);
-      pushToast({
-        title: `Removed "${toolName}" from always-allowed tools`,
-        tone: "info",
-      });
-    } catch (err) {
-      pushToast({
-        title: "Could not update always-allowed list",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
     }
   };
 
@@ -314,13 +197,13 @@ export default function SettingsPage() {
       const res = await client.request("snapshots.undo", { snapshotId });
       setSnapshots((prev) => prev.map((s) => (s.id === snapshotId ? res.snapshot : s)));
       pushToast({
-        title: "Change undone",
-        description: `Restored "${res.snapshot.description}".`,
+        title: t("settings.toast.undone"),
+        description: t("settings.toast.undoneDesc", { description: res.snapshot.description }),
         tone: "ok",
       });
     } catch (err) {
       pushToast({
-        title: "Could not undo change",
+        title: t("settings.toast.undoFailed"),
         description: err instanceof Error ? err.message : String(err),
         tone: "danger",
       });
@@ -357,7 +240,7 @@ export default function SettingsPage() {
               letterSpacing: "var(--tracking-display)",
             }}
           >
-            Settings
+            {t("settings.title")}
           </h1>
           <p
             style={{
@@ -366,8 +249,7 @@ export default function SettingsPage() {
               fontSize: "var(--text-base)",
             }}
           >
-            Configure Orion&apos;s AI model, API keys, approval rules, local data folder, and undo
-            recent changes.
+            {t("settings.intro")}
           </p>
         </div>
 
@@ -378,19 +260,42 @@ export default function SettingsPage() {
           icon={<RefreshCw size={15} />}
           data-testid="settings-refresh-button"
         >
-          Refresh
+          {t("settings.refresh")}
         </Button>
       </header>
 
+      <AccountSection />
+
+      <Card
+        title={t("settings.language.title")}
+        subtitle={t("settings.language.subtitle")}
+        actions={
+          <Badge variant="neutral" icon={<Languages size={12} />}>
+            {LOCALE_NAMES[locale]}
+          </Badge>
+        }
+      >
+        <Select
+          label={t("settings.language.label")}
+          value={locale}
+          onChange={(e) => {
+            if (isLocale(e.target.value)) setLocale(e.target.value);
+          }}
+          options={LOCALES.map((code) => ({ value: code, label: LOCALE_NAMES[code] }))}
+          hint={t("settings.language.hint")}
+          data-testid="settings-language-select"
+        />
+      </Card>
+
       <div className="orbit-split-grid">
         <Card
-          title="AI Model & Thinking"
-          subtitle="Choose which provider and model Orion uses when answering questions"
+          title={t("settings.model.title")}
+          subtitle={t("settings.model.subtitle")}
           actions={
             <Badge variant="accent" icon={<Cpu size={12} />}>
               {settings?.provider && settings?.model
                 ? `${settings.provider}/${settings.model}`
-                : "Default"}
+                : t("settings.model.default")}
             </Badge>
           }
         >
@@ -415,23 +320,23 @@ export default function SettingsPage() {
               }}
             >
               <Select
-                label="AI Provider"
+                label={t("settings.model.provider")}
                 value={selectedProvider}
                 onChange={(e) => handleProviderChange(e.target.value)}
                 options={providersList.map((p) => ({
                   value: p,
                   label:
                     p === "orion-mock"
-                      ? "orion-mock (Local offline test model)"
+                      ? t("settings.model.providerMock")
                       : p === "orbit-gateway"
-                        ? "orbit-gateway (Orbit subscription)"
+                        ? t("settings.model.providerGateway")
                         : p,
                 }))}
                 data-testid="settings-provider-select"
               />
 
               <Select
-                label="Model"
+                label={t("settings.model.model")}
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 options={
@@ -447,16 +352,16 @@ export default function SettingsPage() {
                         },
                       ]
                 }
-                hint="Models come from the local Pi runtime and configured providers."
+                hint={t("settings.model.modelHint")}
                 data-testid="settings-model-select"
               />
 
               <Select
-                label="Thinking Depth"
+                label={t("settings.model.thinking")}
                 value={selectedThinking}
                 onChange={(e) => setSelectedThinking(e.target.value as ThinkingLevel)}
-                options={THINKING_OPTIONS}
-                hint="Higher thinking depth takes longer but checks complex herd data more carefully."
+                options={THINKING_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
+                hint={t("settings.model.thinkingHint")}
                 data-testid="settings-thinking-select"
               />
 
@@ -467,347 +372,19 @@ export default function SettingsPage() {
                   onClick={handleSaveModelSettings}
                   data-testid="settings-save-model-button"
                 >
-                  Save model settings
+                  {t("settings.model.save")}
                 </Button>
               </div>
             </div>
           )}
         </Card>
 
-        <Card
-          title="Provider API Keys"
-          subtitle="Stored securely in your system keychain — stored keys are never echoed back"
-          actions={
-            <Badge variant="neutral" icon={<KeyRound size={12} />}>
-              Keychain protected
-            </Badge>
-          }
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-4)",
-            }}
-          >
-            <Select
-              label="Provider for API key"
-              value={keyProvider}
-              onChange={(e) => setKeyProvider(e.target.value)}
-              options={keyProvidersList.map((p) => ({
-                value: p,
-                label: p,
-              }))}
-              data-testid="settings-apikey-provider-select"
-            />
-
-            <Input
-              type="password"
-              label="New API Key"
-              placeholder="Paste API key (e.g. sk-...)"
-              autoComplete="off"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              hint="Once saved, the input is cleared and only the last 4 characters are shown as a hint."
-              data-testid="settings-apikey-input"
-            />
-
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <Button
-                variant="primary"
-                loading={savingKey}
-                disabled={!apiKeyInput.trim()}
-                onClick={handleSaveApiKey}
-                data-testid="settings-save-apikey-button"
-              >
-                Save API key
-              </Button>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-2)",
-                paddingBlockStart: "var(--space-2)",
-                borderBlockStart: "1px solid var(--border-subtle)",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 600,
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Configured Keys
-              </span>
-
-              {Object.entries(settings?.apiKeys ?? {}).length === 0 ? (
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: "var(--text-xs)",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  No external API keys stored yet.
-                </p>
-              ) : (
-                <ul
-                  style={{
-                    listStyle: "none",
-                    margin: 0,
-                    padding: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "var(--space-2)",
-                  }}
-                  data-testid="settings-configured-keys-list"
-                >
-                  {Object.entries(settings?.apiKeys ?? {}).map(([provider, info]) => (
-                    <li
-                      key={provider}
-                      data-testid={`settings-key-row-${provider}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "var(--space-3)",
-                        padding: "var(--space-2) var(--space-3)",
-                        borderRadius: "var(--radius-md)",
-                        backgroundColor: "var(--bg-elevated)",
-                        border: "1px solid var(--border-subtle)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "var(--space-2)",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontWeight: 650,
-                            fontSize: "var(--text-sm)",
-                          }}
-                        >
-                          {provider}
-                        </span>
-                        <Badge variant="ok" icon={<CheckCircle2 size={11} />}>
-                          Configured
-                        </Badge>
-                        {info.hint && (
-                          <span
-                            className="tabular-nums"
-                            data-testid={`settings-key-hint-${provider}`}
-                            style={{
-                              fontFamily: "var(--font-mono)",
-                              fontSize: "var(--text-xs)",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            {info.hint}
-                          </span>
-                        )}
-                      </div>
-                      {provider !== "orion-mock" && (
-                        <Button
-                          variant="subtle"
-                          size="sm"
-                          onClick={() => handleRemoveApiKey(provider)}
-                          icon={<Trash2 size={14} />}
-                          data-testid={`settings-remove-key-${provider}`}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </Card>
+        <ProvidersCard onChanged={(id) => void handleProvidersChanged(id)} />
       </div>
 
       <Card
-        title="Command Approval Rules"
-        subtitle="AI can make mistakes. Choose when Orion must ask for your permission before acting."
-        actions={
-          <Badge
-            variant={settings?.approvalMode === "auto" ? "warn" : "ok"}
-            icon={
-              settings?.approvalMode === "auto" ? (
-                <ShieldAlert size={12} />
-              ) : (
-                <ShieldCheck size={12} />
-              )
-            }
-          >
-            {settings?.approvalMode === "ask"
-              ? "Ask every time"
-              : settings?.approvalMode === "auto"
-                ? "Auto-approve normal"
-                : "Read-only"}
-          </Badge>
-        }
-      >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "var(--space-4)",
-          }}
-        >
-          <div
-            role="radiogroup"
-            aria-label="Approval mode"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(min(18rem, 100%), 1fr))",
-              gap: "var(--space-3)",
-            }}
-          >
-            {APPROVAL_MODES.map((option) => {
-              const isSelected = settings?.approvalMode === option.mode;
-              return (
-                <div
-                  key={option.mode}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                    gap: "var(--space-3)",
-                    padding: "var(--space-4)",
-                    borderRadius: "var(--radius-lg)",
-                    backgroundColor: isSelected
-                      ? "var(--accent-primary-subtle)"
-                      : "var(--bg-elevated)",
-                    border: `1px solid ${
-                      isSelected ? "var(--accent-primary-border)" : "var(--border-subtle)"
-                    }`,
-                  }}
-                  data-testid={`settings-approval-card-${option.mode}`}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "var(--space-2)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "var(--space-2)",
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontFamily: "var(--font-display)",
-                          fontSize: "var(--text-base)",
-                          fontWeight: 700,
-                          color: "var(--text-primary)",
-                        }}
-                      >
-                        {option.title}
-                      </span>
-                      <Badge variant={isSelected ? "accent" : "neutral"}>
-                        {isSelected ? "Active" : option.badge}
-                      </Badge>
-                    </div>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: "var(--text-sm)",
-                        color: "var(--text-secondary)",
-                      }}
-                    >
-                      {option.description}
-                    </p>
-                  </div>
-
-                  <Button
-                    variant={isSelected ? "primary" : "secondary"}
-                    size="sm"
-                    loading={savingApprovalMode === option.mode}
-                    onClick={() => handleSelectApprovalMode(option.mode)}
-                    data-testid={`settings-approval-mode-${option.mode}`}
-                  >
-                    {isSelected ? "Selected" : `Choose "${option.title}"`}
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-
-          {settings && settings.alwaysAllow.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-2)",
-                paddingBlockStart: "var(--space-3)",
-                borderBlockStart: "1px solid var(--border-subtle)",
-              }}
-              data-testid="settings-always-allow-section"
-            >
-              <span
-                style={{
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 600,
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Tools you marked &quot;Always allow&quot;
-              </span>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "var(--space-2)",
-                }}
-              >
-                {settings.alwaysAllow.map((toolName) => (
-                  <div
-                    key={toolName}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "var(--space-2)",
-                      padding: "var(--space-1) var(--space-3)",
-                      borderRadius: "var(--radius-full)",
-                      backgroundColor: "var(--bg-elevated)",
-                      border: "1px solid var(--border-subtle)",
-                      fontSize: "var(--text-xs)",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    <span>{toolName}</span>
-                    <button
-                      type="button"
-                      className="orbit-icon-btn"
-                      onClick={() => handleRemoveAlwaysAllow(toolName)}
-                      aria-label={`Stop always allowing ${toolName}`}
-                      data-testid={`settings-remove-always-allow-${toolName}`}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      <Card
-        title="Undo & Change History"
-        subtitle="Undo is on — every update Orion makes is recorded here so you can undo mistakes in one click"
+        title={t("settings.undo.title")}
+        subtitle={t("settings.undo.subtitle")}
         actions={
           latestUndoableSnapshot ? (
             <Button
@@ -818,19 +395,19 @@ export default function SettingsPage() {
               icon={<RotateCcw size={15} />}
               data-testid="settings-undo-last-button"
             >
-              Undo last change
+              {t("settings.undo.last")}
             </Button>
           ) : (
             <Badge variant="neutral" icon={<History size={12} />}>
-              Up to date
+              {t("settings.undo.upToDate")}
             </Badge>
           )
         }
       >
         {snapshots.length === 0 ? (
           <EmptyState
-            title="No snapshots recorded yet"
-            description="When Orion adds an animal, changes a sensor binding, or edits a connector file, a snapshot appears here so you can undo it in one click."
+            title={t("settings.undo.emptyTitle")}
+            description={t("settings.undo.emptyDesc")}
           />
         ) : (
           <ul
@@ -888,8 +465,8 @@ export default function SettingsPage() {
                       ))}
                       <Badge variant={isUndone ? "neutral" : "info"}>
                         {isUndone
-                          ? "Undone"
-                          : `${snap.rowCount} item${snap.rowCount === 1 ? "" : "s"}`}
+                          ? t("settings.undo.undone")
+                          : t("settings.undo.items", { count: snap.rowCount })}
                       </Badge>
                     </div>
                     <div
@@ -906,7 +483,10 @@ export default function SettingsPage() {
                     >
                       <Clock size={11} aria-hidden="true" />
                       {formatSnapshotTimestamp(snap.createdAt)}
-                      {snap.undoneAt && ` · Undone ${formatSnapshotTimestamp(snap.undoneAt)}`}
+                      {snap.undoneAt &&
+                        t("settings.undo.undoneAt", {
+                          time: formatSnapshotTimestamp(snap.undoneAt),
+                        })}
                     </div>
                   </div>
 
@@ -920,7 +500,7 @@ export default function SettingsPage() {
                       icon={<RotateCcw size={14} />}
                       data-testid={`settings-snapshot-undo-${snap.id}`}
                     >
-                      {isUndone ? "Already undone" : "Undo"}
+                      {isUndone ? t("settings.undo.alreadyUndone") : t("settings.undo.undo")}
                     </Button>
                   </div>
                 </li>
@@ -930,13 +510,15 @@ export default function SettingsPage() {
         )}
       </Card>
 
+      <YourOrbitCard />
+
       <div className="orbit-split-grid">
         <Card
-          title="Farm Data on This PC"
-          subtitle="Where Orbit saves your herd records, conversations, and files on this computer"
+          title={t("settings.data.title")}
+          subtitle={t("settings.data.subtitle")}
           actions={
             <Badge variant="ok" icon={<FolderOpen size={12} />}>
-              Saved on this PC
+              {t("settings.data.badge")}
             </Badge>
           }
         >
@@ -957,7 +539,7 @@ export default function SettingsPage() {
                   marginBottom: "var(--space-1)",
                 }}
               >
-                Data Folder Path
+                {t("settings.data.folder")}
               </div>
               <pre className="orbit-code-block" data-testid="settings-data-folder-path">
                 {dataFolderPath}
@@ -974,12 +556,12 @@ export default function SettingsPage() {
               }}
             >
               <div>
-                <strong>Database file:</strong>{" "}
-                <code style={{ fontFamily: "var(--font-mono)" }}>orbit.sqlite</code> (animals,
-                devices, sensor bindings, observations)
+                <strong>{t("settings.data.dbFile")}</strong>{" "}
+                <code style={{ fontFamily: "var(--font-mono)" }}>orbit.sqlite</code>{" "}
+                {t("settings.data.dbContents")}
               </div>
               <div>
-                <strong>Orion endpoint:</strong>{" "}
+                <strong>{t("settings.data.endpoint")}</strong>{" "}
                 <code
                   style={{ fontFamily: "var(--font-mono)" }}
                   data-testid="settings-orion-endpoint"
@@ -988,7 +570,7 @@ export default function SettingsPage() {
                 </code>
               </div>
               <div>
-                <strong>Server version:</strong>{" "}
+                <strong>{t("settings.data.serverVersion")}</strong>{" "}
                 <code style={{ fontFamily: "var(--font-mono)" }}>
                   {client?.server?.serverVersion ?? "0.1.0"}
                 </code>
@@ -998,11 +580,11 @@ export default function SettingsPage() {
         </Card>
 
         <Card
-          title="About & License"
-          subtitle="Open-source farm desktop software for cattle and horse operations"
+          title={t("settings.about.title")}
+          subtitle={t("settings.about.subtitle")}
           actions={
             <Badge variant="accent" icon={<Scale size={12} />}>
-              AGPL-3.0 + Commercial
+              {t("settings.about.badge")}
             </Badge>
           }
         >
@@ -1017,14 +599,11 @@ export default function SettingsPage() {
             data-testid="settings-license-card"
           >
             <p style={{ margin: 0, color: "var(--text-primary)" }}>
-              <strong>Orbit &amp; Orion</strong> are dual-licensed under the{" "}
-              <strong>GNU Affero General Public License v3.0 (AGPL-3.0-only)</strong> and a paid
-              commercial license for enterprise and OEM partners.
+              <strong>Orbit &amp; Orion</strong> {t("settings.about.licenseBefore")}{" "}
+              <strong>GNU Affero General Public License v3.0 (AGPL-3.0-only)</strong>{" "}
+              {t("settings.about.licenseAfter")}
             </p>
-            <p style={{ margin: 0 }}>
-              You own your farm data on your own PC, with optional sync when you choose to turn it
-              on.
-            </p>
+            <p style={{ margin: 0 }}>{t("settings.about.ownData")}</p>
             <div
               style={{
                 padding: "var(--space-2) var(--space-3)",
@@ -1035,8 +614,7 @@ export default function SettingsPage() {
                 fontFamily: "var(--font-mono)",
               }}
             >
-              License: AGPL-3.0-only OR Commercial · Fonts: Bricolage Grotesque, Atkinson
-              Hyperlegible Next, Azeret Mono (SIL OFL 1.1)
+              {t("settings.about.footer")}
             </div>
           </div>
         </Card>

@@ -9,14 +9,10 @@ test("list cows streams an answer with a completed herd_query tool card", async 
   await expect(page.getByTestId("chat-send-button")).toBeVisible();
 });
 
-test("find cameras asks for approval and Don't allow blocks it", async ({ page }) => {
+test("find cameras runs camera_discover without an approval prompt", async ({ page }) => {
   await startChat(page, "find cameras on my network");
-  const approval = page.locator('[data-testid^="approval-card-"]');
-  await expect(approval).toBeVisible();
-  await expect(approval).toContainText("AI can make mistakes");
-  await approval.locator('[data-testid^="approval-deny-"]').click();
-  await expect(toolCard(page, "camera_discover")).toHaveAttribute("data-tool-status", "denied");
-  await expect(assistantMessages(page).last()).toContainText("Okay, I did not do that");
+  await expect(toolCard(page, "camera_discover")).toHaveAttribute("data-tool-status", "done");
+  await expect(assistantMessages(page).last()).toContainText("No ONVIF cameras answered");
 });
 
 test("a new session appears in the sidebar and survives a reload", async ({ page }) => {

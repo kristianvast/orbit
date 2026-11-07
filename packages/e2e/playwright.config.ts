@@ -38,7 +38,7 @@ export default defineConfig({
   webServer: [
     {
       name: "orion",
-      command: `bun packages/orion/src/main.ts --port ${E2E_ORION_PORT} --token ${E2E_TOKEN} --mock-model --seed --data-dir "${dataDir}"`,
+      command: `bun packages/orion/src/main.ts --port ${E2E_ORION_PORT} --token ${E2E_TOKEN} --mock-model --seed --data-dir "${dataDir}" --app-source "${repoRoot}"`,
       cwd: repoRoot,
       url: `http://127.0.0.1:${E2E_ORION_PORT}/health`,
       reuseExistingServer: false,
@@ -63,6 +63,7 @@ export default defineConfig({
       env: {
         VITE_ORION_URL: `ws://127.0.0.1:${E2E_ORION_PORT}/ws`,
         VITE_ORION_TOKEN: E2E_TOKEN,
+        VITE_LOCAL_UI_HANDOFF: "1",
       },
     },
   ],
