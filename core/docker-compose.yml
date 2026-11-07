@@ -59,6 +59,10 @@ services:
       LLM_UPSTREAM_API_KEY: ${LLM_UPSTREAM_API_KEY:-}
       LLM_UPSTREAM_AUTH: ${LLM_UPSTREAM_AUTH:-authorization}
       LLM_MONTHLY_TOKEN_BUDGET: ${LLM_MONTHLY_TOKEN_BUDGET:-2000000}
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-log}
+      MAIL_API_KEY: ${MAIL_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:3000}
     ports:
       - "8080:8080"
     depends_on:

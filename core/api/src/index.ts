@@ -22,9 +22,11 @@ export {
   apiTokens,
   type CoreDb,
   coreSchema,
+  emailTokens,
   farmBudgets,
   farmInvites,
   farmMembers,
+  farmSubscriptions,
   llmUsage,
   userSessions,
   users,
@@ -36,5 +38,12 @@ export {
   usageFrom,
   usedThisMonth,
 } from "./llm";
+export {
+  createLogMailer,
+  createMailer,
+  type EmailLinks,
+  type EmailMessage,
+  type Mailer,
+} from "./mailer";
 export { migrate } from "./migrate";
 export { type FetchLike, proxyShape } from "./shape";

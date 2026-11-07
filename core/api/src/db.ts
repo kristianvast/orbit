@@ -3,8 +3,10 @@ import { FARM_ROLES, pg } from "@orbit/schema";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import {
   bigint,
+  boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -61,8 +63,37 @@ export const users = pgTable(
     name: text("name"),
     passwordHash: text("password_hash").notNull(),
     createdAt: ts("created_at").notNull().defaultNow(),
+    emailVerifiedAt: ts("email_verified_at"),
+    termsVersion: text("terms_version"),
+    termsAcceptedAt: ts("terms_accepted_at"),
+    dataConsentAt: ts("data_consent_at"),
   },
   (t) => [uniqueIndex("users_email_unique").on(t.email)],
+);
+
+/** Single-use email links (verify address, reset password). Only the SHA-256 of the code is stored. */
+export const emailTokens = pgTable(
+  "email_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: uuid("user_id").notNull(),
+    purpose: text("purpose", { enum: ["verify", "reset"] }).notNull(),
+    email: text("email").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    expiresAt: ts("expires_at").notNull(),
+    usedAt: ts("used_at"),
+  },
+  (t) => [index("email_tokens_user_idx").on(t.userId, t.purpose, t.createdAt)],
+);
+
+export const loginFailures = pgTable(
+  "login_failures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    at: ts("at").notNull().defaultNow(),
+  },
+  (t) => [index("login_failures_email_at_idx").on(t.email, t.at)],
 );
 
 /** Signed-in sessions (an Orbit install or a browser). Only the SHA-256 of the token is stored. */
@@ -70,6 +101,7 @@ export const userSessions = pgTable(
   "user_sessions",
   {
     tokenHash: text("token_hash").primaryKey(),
+    id: uuid("id").notNull().defaultRandom(),
     userId: uuid("user_id").notNull(),
     deviceName: text("device_name"),
     createdAt: ts("created_at").notNull().defaultNow(),
@@ -121,16 +153,73 @@ export const coreMigrations = pgTable("__core_migrations", {
   appliedAt: ts("applied_at").notNull().defaultNow(),
 });
 
+export const billingCustomers = pgTable("billing_customers", {
+  farmId: uuid("farm_id").primaryKey(),
+  stripeCustomerId: text("stripe_customer_id").notNull().unique(),
+});
+
+export const farmSubscriptions = pgTable("farm_subscriptions", {
+  farmId: uuid("farm_id").primaryKey(),
+  plan: text("plan", { enum: ["free", "pen", "barn"] }).notNull(),
+  interval: text("interval", { enum: ["month", "year"] }),
+  status: text("status").notNull(),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  currentPeriodEnd: ts("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+  /** `created` of the Stripe event last applied; older events never overwrite newer state. */
+  stripeEventAt: ts("stripe_event_at"),
+});
+
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  receivedAt: ts("received_at").notNull().defaultNow(),
+});
+
+export const hardwareOrders = pgTable("hardware_orders", {
+  stripeCheckoutSessionId: text("stripe_checkout_session_id").primaryKey(),
+  email: text("email"),
+  boxes: integer("boxes").notNull().default(0),
+  cameras: integer("cameras").notNull().default(0),
+  status: text("status").notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  userId: uuid("user_id"),
+  shipping: jsonb("shipping"),
+  amountTotal: integer("amount_total"),
+  currency: text("currency"),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
+export const voiceUsage = pgTable(
+  "voice_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    farmId: uuid("farm_id").notNull(),
+    seconds: integer("seconds").notNull(),
+    model: text("model").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("voice_usage_farm_created_idx").on(t.farmId, t.createdAt)],
+);
+
 export const coreSchema = {
   ...pg.pgSchema,
   apiTokens,
   farmBudgets,
   llmUsage,
   users,
+  emailTokens,
+  loginFailures,
   userSessions,
   farmMembers,
   farmInvites,
   coreMigrations,
+  billingCustomers,
+  farmSubscriptions,
+  stripeEvents,
+  hardwareOrders,
+  voiceUsage,
 };
 
 /** Any Drizzle Postgres database (bun-sql in production, PGlite in tests) over coreSchema. */

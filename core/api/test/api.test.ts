@@ -35,7 +35,7 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   await db.execute(
-    sql`TRUNCATE farms, animals, devices, device_bindings, connectors, observations, cameras, api_tokens, farm_budgets, llm_usage`,
+    sql`TRUNCATE farms, animals, devices, device_bindings, connectors, observations, cameras, camera_layouts, api_tokens, farm_budgets, llm_usage`,
   );
 });
 
@@ -124,6 +124,28 @@ describe("basics", () => {
 });
 
 describe("POST /v1/changes", () => {
+  test("camera layouts migrate and accept farm-scoped JSON updates with row LWW", async () => {
+    const a = app();
+    const layout = { version: 2, tiles: [{ i: "barn", x: 0, y: 20, w: 400 }] };
+    const row = {
+      id: FARM,
+      farm_id: FARM,
+      layout,
+      created_at: "2026-11-04T00:00:00.000Z",
+      updated_at: "2026-11-04T00:00:00.000Z",
+      deleted_at: null,
+      hlc: hlc("2026-11-04T00:00:00Z"),
+      origin_device: "local",
+    };
+
+    expect(await push(a, "camera_layouts", row)).toMatchObject({ status: "applied" });
+    expect(await push(a, "camera_layouts", row)).toMatchObject({ status: "stale" });
+    expect((await db.select().from(pg.cameraLayouts))[0]?.layout).toEqual(layout);
+    expect(await push(a, "camera_layouts", { ...row, farm_id: OTHER_FARM })).toMatchObject({
+      status: "rejected",
+    });
+  });
+
   test("applies a valid row, then LWW: equal/older is stale, newer wins", async () => {
     const a = app();
     expect(await push(a, "animals", animalRow(hlc("2026-11-02T00:00:00Z")))).toMatchObject({
@@ -274,39 +296,42 @@ describe("single active wearable per animal", () => {
 });
 
 describe("GET /v1/shape", () => {
-  test("forces the farm filter and forwards Electric headers", async () => {
-    let upstream: URL | undefined;
-    const a = app({
-      fetch: async (input) => {
-        upstream = new URL(String(input));
-        return new Response("[]", {
-          headers: {
-            "electric-handle": "h-1",
-            "electric-offset": "0_0",
-            "content-type": "application/json",
-          },
-        });
-      },
-    });
-    const res = await a.request(
-      "/v1/shape?table=animals&offset=-1&where=1%3D1&params%5B1%5D=x&live=true",
-      { headers: auth },
-    );
-    expect(res.status).toBe(200);
-    expect(res.headers.get("electric-handle")).toBe("h-1");
-    expect(upstream?.origin + (upstream?.pathname ?? "")).toBe(
-      "http://electric.internal:3000/v1/shape",
-    );
-    expect(Object.fromEntries(upstream?.searchParams ?? [])).toEqual({
-      table: "animals",
-      offset: "-1",
-      live: "true",
-      where: "farm_id = $1",
-      "params[1]": FARM,
-      replica: "full",
-      secret: "electric-secret",
-    });
-  });
+  test.each(["animals", "camera_layouts"])(
+    "%s forces the farm filter and forwards Electric headers",
+    async (table) => {
+      let upstream: URL | undefined;
+      const a = app({
+        fetch: async (input) => {
+          upstream = new URL(String(input));
+          return new Response("[]", {
+            headers: {
+              "electric-handle": "h-1",
+              "electric-offset": "0_0",
+              "content-type": "application/json",
+            },
+          });
+        },
+      });
+      const res = await a.request(
+        `/v1/shape?table=${table}&offset=-1&where=1%3D1&params%5B1%5D=x&live=true`,
+        { headers: auth },
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("electric-handle")).toBe("h-1");
+      expect(upstream?.origin + (upstream?.pathname ?? "")).toBe(
+        "http://electric.internal:3000/v1/shape",
+      );
+      expect(Object.fromEntries(upstream?.searchParams ?? [])).toEqual({
+        table,
+        offset: "-1",
+        live: "true",
+        where: "farm_id = $1",
+        "params[1]": FARM,
+        replica: "full",
+        secret: "electric-secret",
+      });
+    },
+  );
 
   test("refuses non-synced tables", async () => {
     const res = await app().request("/v1/shape?table=api_tokens&offset=-1", { headers: auth });

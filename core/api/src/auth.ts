@@ -20,6 +20,7 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string | null;
+  emailVerified: boolean;
 }
 
 /** Who is calling a farm-scoped route: a member through a user session, or a legacy farm token. */
@@ -50,7 +51,12 @@ export async function resolveSession(
 ): Promise<SessionUser | null> {
   if (!token.startsWith(SESSION_PREFIX)) return null;
   const [row] = await db
-    .select({ id: users.id, email: users.email, name: users.name })
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      emailVerifiedAt: users.emailVerifiedAt,
+    })
     .from(userSessions)
     .innerJoin(users, eq(users.id, userSessions.userId))
     .where(
@@ -61,7 +67,13 @@ export async function resolveSession(
       ),
     )
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    emailVerified: row.emailVerifiedAt !== null,
+  };
 }
 
 export async function memberRole(

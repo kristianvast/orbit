@@ -3,6 +3,7 @@
 // row per request (token counts parsed from JSON or SSE responses). Billing is not built yet.
 import { and, eq, gte, sql } from "drizzle-orm";
 import { type CoreDb, farmBudgets, llmUsage } from "./db";
+import { entitlements, PLAN_REQUIRED } from "./entitlements";
 import type { FetchLike } from "./shape";
 
 export interface LlmGatewayOptions {
@@ -14,6 +15,11 @@ export interface LlmGatewayOptions {
   defaultMonthlyTokenBudget: number;
   /** Upstream model used when Orion asks for the generic "orbit-default" model. */
   defaultModel?: string;
+  /** Google OAuth token provider; supersedes the static upstream key. */
+  accessToken?: () => Promise<string>;
+  stripPrefix?: string;
+  /** Legacy farm tokens retain their original default/override budget behavior. */
+  sessionPrincipal?: boolean;
   fetch: FetchLike;
   now: () => Date;
 }
@@ -37,7 +43,13 @@ export function usageFrom(event: unknown, into: Usage): void {
   if (!u) return;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   into.input = Math.max(into.input, num(u.prompt_tokens), num(u.input_tokens));
-  into.output = Math.max(into.output, num(u.completion_tokens), num(u.output_tokens));
+  // Vertex reports thinking tokens in total_tokens even when completion_tokens only counts text.
+  into.output = Math.max(
+    into.output,
+    num(u.completion_tokens),
+    num(u.output_tokens),
+    num(u.total_tokens) - into.input,
+  );
 }
 
 export function monthStart(now: Date): string {
@@ -98,7 +110,11 @@ export async function handleLlm(
   path: string,
   options: LlmGatewayOptions,
 ): Promise<Response> {
-  if (!options.upstreamUrl || !options.upstreamApiKey) {
+  const entitlement = options.sessionPrincipal ? await entitlements(db, farmId) : null;
+  if (entitlement && entitlement.plan.id === "free") {
+    return Response.json(PLAN_REQUIRED, { status: 402 });
+  }
+  if (!options.upstreamUrl || (!options.upstreamApiKey && !options.accessToken)) {
     return Response.json(
       { error: { code: "not_configured", message: "LLM gateway is not configured" } },
       { status: 503 },
@@ -107,7 +123,9 @@ export async function handleLlm(
   const now = options.now();
   const [used, budget] = await Promise.all([
     usedThisMonth(db, farmId, now),
-    budgetFor(db, farmId, options.defaultMonthlyTokenBudget),
+    entitlement
+      ? Promise.resolve(entitlement.tokenAllowance)
+      : budgetFor(db, farmId, options.defaultMonthlyTokenBudget),
   ]);
   if (used >= budget) {
     return Response.json(
@@ -141,8 +159,9 @@ export async function handleLlm(
     const v = request.headers.get(h);
     if (v) headers.set(h, v);
   }
-  if (options.authHeader === "x-api-key") headers.set("x-api-key", options.upstreamApiKey);
-  else headers.set("authorization", `Bearer ${options.upstreamApiKey}`);
+  const key = options.accessToken ? await options.accessToken() : (options.upstreamApiKey ?? "");
+  if (options.authHeader === "x-api-key") headers.set("x-api-key", key);
+  else headers.set("authorization", `Bearer ${key}`);
 
   const record = async (status: number, usage: Usage) => {
     await db.insert(llmUsage).values({
@@ -159,7 +178,11 @@ export async function handleLlm(
 
   let upstream: Response;
   try {
-    upstream = await options.fetch(`${options.upstreamUrl.replace(/\/+$/, "")}${path}`, {
+    const upstreamPath =
+      options.stripPrefix && path.startsWith(`${options.stripPrefix}/`)
+        ? path.slice(options.stripPrefix.length)
+        : path;
+    upstream = await options.fetch(`${options.upstreamUrl.replace(/\/+$/, "")}${upstreamPath}`, {
       method: "POST",
       headers,
       body,

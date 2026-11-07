@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import { type Context, Hono, type Next } from "hono";
+import { cors } from "hono/cors";
 import { registerAccountRoutes } from "./accounts";
 import { memberRole, type Principal, resolveSession, type TokenResolver } from "./auth";
+import { registerBillingRoutes } from "./billing";
 import {
   type ApplyOptions,
   createChangeApplier,
@@ -10,7 +12,9 @@ import {
 } from "./changes";
 import type { CoreDb } from "./db";
 import { handleLlm, type LlmGatewayOptions } from "./llm";
+import { createLogMailer, type EmailLinks, type Mailer } from "./mailer";
 import { type FetchLike, proxyShape } from "./shape";
+import type { StripeOptions } from "./stripe";
 
 export interface AppOptions {
   db: CoreDb;
@@ -24,7 +28,18 @@ export interface AppOptions {
   now?: () => Date;
   apply?: ApplyOptions;
   version?: string;
+  billing?: Partial<Omit<StripeOptions, "fetch" | "now" | "mailer" | "links">>;
+  corsOrigins?: readonly string[];
+  /** Defaults to printing messages (development and tests). */
+  mailer?: Mailer;
+  links?: Partial<EmailLinks>;
+  termsVersion?: string;
 }
+
+export const DEFAULT_LINKS: EmailLinks = {
+  siteUrl: "http://localhost:3000",
+  downloadUrl: "https://github.com/kristianvast/orbit/releases/latest",
+};
 
 /** Header naming the farm a user session acts on (a session can belong to several farms). */
 export const FARM_HEADER = "x-orbit-farm";
@@ -36,15 +51,33 @@ export function createApp(options: AppOptions) {
   const doFetch: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
   const now = options.now ?? (() => new Date());
   const applyChanges = createChangeApplier(options.db, { now, ...options.apply });
+  const mailer = options.mailer ?? createLogMailer();
+  const links: EmailLinks = { ...DEFAULT_LINKS, ...options.links };
   const llmOptions: LlmGatewayOptions = {
     upstreamUrl: options.llm?.upstreamUrl,
     upstreamApiKey: options.llm?.upstreamApiKey,
     authHeader: options.llm?.authHeader ?? "authorization",
     defaultMonthlyTokenBudget: options.llm?.defaultMonthlyTokenBudget ?? 2_000_000,
     defaultModel: options.llm?.defaultModel,
+    accessToken: options.llm?.accessToken,
+    stripPrefix: options.llm?.stripPrefix,
     fetch: doFetch,
     now,
   };
+  const websiteCors = cors({
+    origin: [...(options.corsOrigins ?? ["http://localhost:3000"])],
+    allowHeaders: ["authorization", "content-type", "x-orbit-farm"],
+    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  });
+  for (const path of [
+    "/v1/auth/*",
+    "/v1/me",
+    "/v1/me/*",
+    "/v1/farms",
+    "/v1/farms/*",
+    "/v1/billing/*",
+  ])
+    app.use(path, websiteCors);
 
   app.get("/healthz", async (c) => {
     try {
@@ -58,6 +91,9 @@ export function createApp(options: AppOptions) {
   registerAccountRoutes(app as unknown as Hono, options.db, {
     now,
     loginThrottle: options.loginThrottle,
+    mailer,
+    links,
+    termsVersion: options.termsVersion,
   });
 
   // Farm-scoped routes accept a user session (+ x-orbit-farm, membership required) or a legacy
@@ -94,6 +130,16 @@ export function createApp(options: AppOptions) {
     c.set("principal", { farmId, role: "owner", userId: null });
     return next();
   };
+  for (const path of ["/v1/billing/checkout", "/v1/billing/portal", "/v1/billing/status"]) {
+    app.use(path, farmAuth);
+  }
+  registerBillingRoutes(app, options.db, {
+    ...options.billing,
+    mailer,
+    links,
+    fetch: doFetch,
+    now,
+  });
 
   app.post("/v1/changes", farmAuth, async (c) => {
     let body: { changes?: unknown };
@@ -133,7 +179,11 @@ export function createApp(options: AppOptions) {
 
   app.post("/v1/llm/*", farmAuth, (c) => {
     const path = c.req.path.slice("/v1/llm".length) || "/";
-    return handleLlm(options.db, c.req.raw, c.get("principal").farmId, path, llmOptions);
+    const principal = c.get("principal");
+    return handleLlm(options.db, c.req.raw, principal.farmId, path, {
+      ...llmOptions,
+      sessionPrincipal: principal.userId !== null,
+    });
   });
 
   return app;

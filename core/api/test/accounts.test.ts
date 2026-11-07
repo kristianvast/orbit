@@ -8,6 +8,7 @@ import {
   type CoreDb,
   coreSchema,
   createApp,
+  createLogMailer,
   createTokenResolver,
   farmInvites,
   llmUsage,
@@ -15,6 +16,7 @@ import {
   userSessions,
   users,
 } from "../src";
+import { farmSubscriptions } from "../src/db";
 
 const FARM = "00000000-0000-4000-8000-0000000000f1";
 const OTHER_FARM = "00000000-0000-4000-8000-0000000000f2";
@@ -24,6 +26,15 @@ const PASSWORD = "correct horse battery";
 let client: PGlite;
 let db: CoreDb;
 let clock = Date.parse("2026-11-05T12:00:00Z");
+const mail = createLogMailer(() => {});
+
+/** The code in the newest email of `template` sent to `to` (verify or reset link). */
+function codeFrom(to: string, template: string): string {
+  const message = mail.sent.findLast((m) => m.to === to && m.template === template);
+  const code = /(?:verify|reset)=([\w-]+)/.exec(message?.text ?? "")?.[1];
+  if (!code) throw new TypeError(`no ${template} email to ${to}`);
+  return code;
+}
 
 beforeAll(async () => {
   client = new PGlite();
@@ -35,8 +46,9 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   clock = Date.parse("2026-11-05T12:00:00Z");
+  mail.sent.length = 0;
   await db.execute(
-    sql`TRUNCATE farms, animals, devices, device_bindings, connectors, observations, cameras, api_tokens, farm_budgets, llm_usage, farm_invites, farm_members, user_sessions, users CASCADE`,
+    sql`TRUNCATE farms, animals, devices, device_bindings, connectors, observations, cameras, api_tokens, farm_budgets, llm_usage, farm_invites, farm_members, user_sessions, email_tokens, login_failures, farm_subscriptions, billing_customers, users CASCADE`,
   );
 });
 
@@ -47,6 +59,7 @@ function app(extra: Partial<AppOptions> = {}) {
     electricUrl: "http://electric.internal:3000",
     now: () => new Date(clock),
     loginThrottle: { maxFailures: 3, windowMs: 60_000 },
+    mailer: mail,
     ...extra,
   });
 }
@@ -64,8 +77,17 @@ async function call(a: App, method: string, path: string, body?: unknown, header
 }
 
 async function register(a: App, email: string) {
-  const r = await call(a, "POST", "/v1/auth/register", { email, password: PASSWORD, name: email });
+  const r = await call(a, "POST", "/v1/auth/register", {
+    email,
+    password: PASSWORD,
+    name: email,
+    acceptTerms: true,
+  });
   expect(r.status).toBe(201);
+  const verified = await call(a, "POST", "/v1/auth/verify-email", {
+    token: codeFrom(email, "verify_email"),
+  });
+  expect(verified.status).toBe(200);
   return { token: r.body.session.token as string, id: r.body.user.id as string };
 }
 
@@ -161,6 +183,7 @@ describe("registration and sign-in", () => {
       email: "Kari@Farm.Test ",
       password: PASSWORD,
       name: "Kari",
+      acceptTerms: true,
     });
     expect(r.status).toBe(201);
     expect(r.body.user).toMatchObject({ email: "kari@farm.test", name: "Kari" });
@@ -182,14 +205,20 @@ describe("registration and sign-in", () => {
     const dup = await call(a, "POST", "/v1/auth/register", {
       email: "KARI@farm.test",
       password: PASSWORD,
+      acceptTerms: true,
     });
     expect(dup.status).toBe(409);
     const weak = await call(a, "POST", "/v1/auth/register", {
       email: "b@farm.test",
       password: "short",
+      acceptTerms: true,
     });
     expect(weak.body.error.code).toBe("weak_password");
-    const bad = await call(a, "POST", "/v1/auth/register", { email: "nope", password: PASSWORD });
+    const bad = await call(a, "POST", "/v1/auth/register", {
+      email: "nope",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
     expect(bad.status).toBe(400);
   });
 
@@ -279,7 +308,7 @@ describe("farms and members", () => {
     expect(row).toMatchObject({ name: "Fjord stable", originDevice: "cloud" });
     const me = await call(a, "GET", "/v1/me", undefined, as(token));
     expect(me.body.farms).toEqual([
-      { farmId: r.body.farm.id, role: "owner", name: "Fjord stable" },
+      { farmId: r.body.farm.id, role: "owner", name: "Fjord stable", plan: "free" },
     ]);
   });
 
@@ -485,6 +514,9 @@ describe("farm data with user sessions", () => {
     });
     const owner = await ownerOfFarm(a);
     const viewer = await memberWith(a, owner.token, "v@farm.test", "viewer");
+    await db
+      .insert(farmSubscriptions)
+      .values({ farmId: FARM, plan: "pen", interval: "month", status: "active" });
     const r = await call(
       a,
       "POST",
@@ -497,5 +529,224 @@ describe("farm data with user sessions", () => {
     expect(await db.select().from(llmUsage)).toMatchObject([
       { farmId: FARM, model: "gpt-real", totalTokens: 7 },
     ]);
+  });
+});
+
+describe("account lifecycle", () => {
+  test("sign-up requires accepting the terms and records the data-sharing choice", async () => {
+    const a = app();
+    const refused = await call(a, "POST", "/v1/auth/register", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+    });
+    expect(refused).toMatchObject({ status: 400, body: { error: { code: "terms_required" } } });
+    const ok = await call(a, "POST", "/v1/auth/register", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+      dataConsent: true,
+    });
+    expect(ok.body.user.emailVerified).toBe(false);
+    const [stored] = await db.select().from(users);
+    expect(stored).toMatchObject({ termsVersion: "2026-11" });
+    expect(stored?.termsAcceptedAt).not.toBeNull();
+    expect(stored?.dataConsentAt).not.toBeNull();
+  });
+
+  test("a verify link works once, only before it expires, and gates invite acceptance", async () => {
+    const a = app();
+    const owner = await register(a, "owner@farm.test");
+    await call(a, "POST", "/v1/farms", { id: FARM, name: "Hill farm" }, as(owner.token));
+    const invite = await call(
+      a,
+      "POST",
+      `/v1/farms/${FARM}/invites`,
+      { email: "ola@farm.test", role: "worker" },
+      as(owner.token),
+    );
+    expect(mail.sent.at(-1)).toMatchObject({ to: "ola@farm.test", template: "farm_invite" });
+    expect(mail.sent.at(-1)?.text).toContain(invite.body.code);
+    const ola = await call(a, "POST", "/v1/auth/register", {
+      email: "ola@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    const token = ola.body.session.token as string;
+    const early = await call(
+      a,
+      "POST",
+      "/v1/invites/accept",
+      { code: invite.body.code },
+      as(token),
+    );
+    expect(early).toMatchObject({ status: 403, body: { error: { code: "email_unverified" } } });
+
+    const code = codeFrom("ola@farm.test", "verify_email");
+    clock += 49 * 60 * 60 * 1000;
+    expect((await call(a, "POST", "/v1/auth/verify-email", { token: code })).status).toBe(410);
+    expect((await call(a, "POST", "/v1/auth/resend-verification", {}, as(token))).status).toBe(202);
+    const again = await call(a, "POST", "/v1/auth/resend-verification", {}, as(token));
+    expect(again.status).toBe(429);
+    const fresh = codeFrom("ola@farm.test", "verify_email");
+    expect((await call(a, "POST", "/v1/auth/verify-email", { token: fresh })).status).toBe(200);
+    expect((await call(a, "POST", "/v1/auth/verify-email", { token: fresh })).status).toBe(410);
+    expect((await call(a, "GET", "/v1/me", undefined, as(token))).body.user.emailVerified).toBe(
+      true,
+    );
+    clock = Date.parse("2026-11-05T12:00:00Z");
+    expect(
+      (await call(a, "POST", "/v1/invites/accept", { code: invite.body.code }, as(token))).status,
+    ).toBe(200);
+  });
+
+  test("password reset never reveals accounts, signs out everywhere and works once", async () => {
+    const a = app();
+    const kari = await register(a, "kari@farm.test");
+    const unknown = await call(a, "POST", "/v1/auth/password-reset", { email: "who@farm.test" });
+    expect(unknown.status).toBe(202);
+    const known = await call(a, "POST", "/v1/auth/password-reset", { email: "kari@farm.test" });
+    expect(known).toEqual({ status: 202, body: unknown.body });
+    expect(mail.sent.filter((m) => m.template === "password_reset").map((m) => m.to)).toEqual([
+      "kari@farm.test",
+    ]);
+    const code = codeFrom("kari@farm.test", "password_reset");
+    const reset = await call(a, "POST", "/v1/auth/password-reset/confirm", {
+      token: code,
+      password: "a brand new password",
+    });
+    expect(reset.status).toBe(204);
+    expect((await call(a, "GET", "/v1/me", undefined, as(kari.token))).status).toBe(401);
+    const reuse = await call(a, "POST", "/v1/auth/password-reset/confirm", {
+      token: code,
+      password: "another new password",
+    });
+    expect(reuse.status).toBe(410);
+    const oldLogin = await call(a, "POST", "/v1/auth/login", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+    });
+    expect(oldLogin.status).toBe(401);
+    const newLogin = await call(a, "POST", "/v1/auth/login", {
+      email: "kari@farm.test",
+      password: "a brand new password",
+    });
+    expect(newLogin.status).toBe(200);
+    expect(mail.sent.at(-1)).toMatchObject({ template: "password_changed" });
+  });
+
+  test("sessions are listed per device and can be revoked one by one", async () => {
+    const a = app();
+    const first = await register(a, "kari@farm.test");
+    const second = await call(a, "POST", "/v1/auth/login", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+      deviceName: "Barn PC",
+    });
+    const listed = await call(a, "GET", "/v1/me/sessions", undefined, as(first.token));
+    expect(listed.body.sessions).toHaveLength(2);
+    const barn = listed.body.sessions.find(
+      (s: { deviceName: string }) => s.deviceName === "Barn PC",
+    );
+    expect(barn.current).toBe(false);
+    const revoke = await call(
+      a,
+      "DELETE",
+      `/v1/me/sessions/${barn.id}`,
+      undefined,
+      as(first.token),
+    );
+    expect(revoke.status).toBe(204);
+    expect((await call(a, "GET", "/v1/me", undefined, as(second.body.session.token))).status).toBe(
+      401,
+    );
+    expect((await call(a, "GET", "/v1/me", undefined, as(first.token))).status).toBe(200);
+  });
+
+  test("deleting an account needs the plan cancelled, wipes the sole-owned cloud farm and keeps exports", async () => {
+    const a = app();
+    const kari = await register(a, "kari@farm.test");
+    await call(a, "POST", "/v1/farms", { id: FARM, name: "Hill farm" }, as(kari.token));
+    await db
+      .insert(farmSubscriptions)
+      .values({ farmId: FARM, plan: "pen", interval: "month", status: "active" });
+    const exported = await call(a, "GET", "/v1/me/export", undefined, as(kari.token));
+    expect(exported.body).toMatchObject({
+      profile: { email: "kari@farm.test", termsVersion: "2026-11" },
+      memberships: [{ farmId: FARM, role: "owner", plan: "pen" }],
+    });
+    const wrong = await call(a, "DELETE", "/v1/me", { password: "not it at all" }, as(kari.token));
+    expect(wrong.status).toBe(401);
+    const blocked = await call(a, "DELETE", "/v1/me", { password: PASSWORD }, as(kari.token));
+    expect(blocked).toMatchObject({
+      status: 409,
+      body: { error: { code: "subscription_active" } },
+    });
+    await db.update(farmSubscriptions).set({ cancelAtPeriodEnd: true });
+    const deleted = await call(a, "DELETE", "/v1/me", { password: PASSWORD }, as(kari.token));
+    expect(deleted.status).toBe(204);
+    expect(await db.select().from(users)).toEqual([]);
+    expect(await db.select().from(userSessions)).toEqual([]);
+    expect((await call(a, "GET", "/v1/me", undefined, as(kari.token))).status).toBe(401);
+  });
+
+  test("an Orbit farm adopts the empty cloud farm bought on the website, plan included", async () => {
+    const a = app();
+    const kari = await register(a, "kari@farm.test");
+    const bought = await call(a, "POST", "/v1/farms", { name: "Website farm" }, as(kari.token));
+    const websiteFarm = bought.body.farm.id as string;
+    await db
+      .insert(farmSubscriptions)
+      .values({ farmId: websiteFarm, plan: "pen", interval: "year", status: "active" });
+    expect((await call(a, "GET", "/v1/me", undefined, as(kari.token))).body.farms).toMatchObject([
+      { farmId: websiteFarm, plan: "pen" },
+    ]);
+    const stranger = await register(a, "who@farm.test");
+    const theft = await call(
+      a,
+      "POST",
+      "/v1/farms",
+      { id: OTHER_FARM, name: "Mine", adopt: websiteFarm },
+      as(stranger.token),
+    );
+    expect(theft.status).toBe(403);
+    const adopted = await call(
+      a,
+      "POST",
+      "/v1/farms",
+      { id: FARM, name: "Hill farm", adopt: websiteFarm },
+      as(kari.token),
+    );
+    expect(adopted).toMatchObject({ status: 201, body: { farm: { id: FARM, role: "owner" } } });
+    expect((await call(a, "GET", "/v1/me", undefined, as(kari.token))).body.farms).toMatchObject([
+      { farmId: FARM, role: "owner", plan: "pen" },
+    ]);
+    expect(await db.select().from(pg.farms).where(eq(pg.farms.id, websiteFarm))).toEqual([]);
+    const status = await call(a, "GET", "/v1/billing/status", undefined, as(kari.token, FARM));
+    expect(status.body).toMatchObject({ plan: "pen", status: "active" });
+  });
+
+  test("a cloud farm that already holds data is never adopted", async () => {
+    const a = app();
+    const kari = await register(a, "kari@farm.test");
+    const made = await call(a, "POST", "/v1/farms", { name: "Busy farm" }, as(kari.token));
+    const busy = made.body.farm.id as string;
+    const ts = new Date(clock).toISOString();
+    await db.insert(pg.animals).values({
+      id: crypto.randomUUID(),
+      farmId: busy,
+      species: "cattle",
+      createdAt: ts,
+      updatedAt: ts,
+      hlc: hlc(0),
+      originDevice: "cloud",
+    });
+    const res = await call(
+      a,
+      "POST",
+      "/v1/farms",
+      { id: FARM, name: "Hill farm", adopt: busy },
+      as(kari.token),
+    );
+    expect(res).toMatchObject({ status: 409, body: { error: { code: "farm_not_empty" } } });
   });
 });

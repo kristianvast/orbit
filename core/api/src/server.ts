@@ -1,10 +1,9 @@
 // Production entry: `bun src/server.ts`. Configuration comes from the environment (see
 // core/.env.example).
 import { drizzle } from "drizzle-orm/bun-sql";
-import { createApp } from "./app";
-import { createTokenResolver } from "./auth";
 import { type CoreDb, coreSchema } from "./db";
 import { migrate } from "./migrate";
+import { serveCore } from "./runtime";
 
 function required(name: string): string {
   const v = process.env[name];
@@ -18,22 +17,8 @@ if (process.env.CORE_MIGRATE_ON_START !== "false") {
   if (applied.length > 0) console.log(`migrations applied: ${applied.join(", ")}`);
 }
 
-const authHeader = process.env.LLM_UPSTREAM_AUTH === "x-api-key" ? "x-api-key" : "authorization";
-const app = createApp({
-  db,
-  resolveToken: createTokenResolver(db, process.env.CORE_STATIC_TOKENS),
-  electricUrl: required("ELECTRIC_URL"),
-  electricSecret: process.env.ELECTRIC_SECRET || undefined,
-  llm: {
-    upstreamUrl: process.env.LLM_UPSTREAM_URL || undefined,
-    upstreamApiKey: process.env.LLM_UPSTREAM_API_KEY || undefined,
-    authHeader,
-    defaultMonthlyTokenBudget: Number(process.env.LLM_MONTHLY_TOKEN_BUDGET ?? 2_000_000),
-    defaultModel: process.env.LLM_DEFAULT_MODEL || undefined,
-  },
-  version: process.env.CORE_VERSION,
-});
-
-const port = Number(process.env.PORT ?? 8080);
-Bun.serve({ port, fetch: app.fetch, idleTimeout: 120 });
-console.log(`@core/api listening on :${port}`);
+required("ELECTRIC_URL");
+// A production API without email would let accounts sign up that can never verify or reset;
+// set MAIL_PROVIDER=log explicitly to run without real email (local compose stacks).
+required("MAIL_PROVIDER");
+serveCore(db, 8080);
