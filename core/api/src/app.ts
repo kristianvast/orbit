@@ -79,14 +79,17 @@ export function createApp(options: AppOptions) {
   ])
     app.use(path, websiteCors);
 
-  app.get("/healthz", async (c) => {
+  const health = async (c: Context<Env>) => {
     try {
       await options.db.execute(sql`select 1`);
       return c.json({ ok: true, version: options.version ?? "dev" });
     } catch (err) {
       return c.json({ ok: false, error: (err as Error).message }, 503);
     }
-  });
+  };
+  app.get("/healthz", health);
+  // Cloud Run's front end reserves paths ending in "z", so /healthz never reaches the service there.
+  app.get("/health", health);
 
   registerAccountRoutes(app as unknown as Hono, options.db, {
     now,

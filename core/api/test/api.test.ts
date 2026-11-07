@@ -97,8 +97,8 @@ async function push(
 const animal = async () => (await db.select().from(pg.animals).where(eq(pg.animals.id, A1)))[0];
 
 describe("basics", () => {
-  test("healthz reports ok without a token", async () => {
-    const res = await app().request("/healthz");
+  test.each(["/healthz", "/health"])("%s reports ok without a token", async (path) => {
+    const res = await app().request(path);
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true });
   });
