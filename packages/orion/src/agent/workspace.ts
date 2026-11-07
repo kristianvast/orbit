@@ -39,6 +39,7 @@ export class Workspace {
   /** Creates the workspace and a starter AGENTS.md once, and initialises git if it is installed. */
   async init(): Promise<void> {
     mkdirSync(join(this.dir, "connectors"), { recursive: true });
+    mkdirSync(join(this.dir, "pages"), { recursive: true });
     const agents = join(this.dir, "AGENTS.md");
     if (!existsSync(agents)) {
       writeFileSync(

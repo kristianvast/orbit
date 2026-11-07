@@ -1,4 +1,3 @@
-export { ApprovalGate, DENIED_PREFIX } from "./agent/gate";
 export { SessionHub } from "./agent/hub";
 export { MOCK_MODEL, MOCK_PROVIDER, MOCK_TRIGGERS } from "./agent/mock-model";
 export { FARM_TOOL_NAMES } from "./agent/tools";

@@ -8,6 +8,8 @@ import { ConnectorService } from "./connectors";
 export class FarmService {
   readonly connectors: ConnectorService;
   readonly cameras: CameraService;
+  /** Checked before every mutation (UI and agent alike); throws to refuse, e.g. a farm role. */
+  guard: ((mutation: DbMutateRequest["mutation"]) => void) | null = null;
 
   constructor(
     readonly repo: Repository,
@@ -20,7 +22,10 @@ export class FarmService {
   }
 
   async mutate(req: DbMutateRequest, origin?: Partial<WriteOrigin>): Promise<DbMutateResult> {
+    this.guard?.(req.mutation);
     switch (req.mutation) {
+      case "observations.add":
+        return this.repo.addObservation(req.params, origin);
       case "animals.upsert":
         return this.repo.upsertAnimal(req.params.animal, origin);
       case "devices.upsert":
@@ -37,6 +42,8 @@ export class FarmService {
       }
       case "cameras.upsert":
         return this.cameras.upsert(req.params.camera, origin);
+      case "cameraLayout.save":
+        return this.repo.saveCameraLayout(req.params.layout, origin);
     }
   }
 

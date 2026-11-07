@@ -11,7 +11,7 @@
     "orion": "./src/main.ts"
   },
   "scripts": {
-    "dev": "bun --watch src/main.ts --port 7717 --token dev --mock-model --seed --data-dir ./.dev-data",
+    "dev": "bun --watch src/main.ts --port 7717 --token dev --mock-model --seed --data-dir ./.dev-data --app-source ../..",
     "start": "bun src/main.ts",
     "typecheck": "tsc -p . --noEmit",
     "test": "bun test"
@@ -22,8 +22,13 @@
     "@earendil-works/pi-coding-agent": "^1.5.0",
     "@orbit/protocol": "workspace:*",
     "@orbit/schema": "workspace:*",
+    "@orbit/sync": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "onvif": "^0.8.3",
     "typebox": "^1.4.3"
+  },
+  "devDependencies": {
+    "@core/api": "workspace:*",
+    "@electric-sql/pglite": "^0.5.15"
   }
 }

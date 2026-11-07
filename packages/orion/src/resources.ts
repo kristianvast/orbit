@@ -12,6 +12,8 @@ import buildingFeaturesSkill from "../resources/skills/building-features/SKILL.m
 };
 import camerasSkill from "../resources/skills/cameras/SKILL.md" with { type: "text" };
 import connectorsSkill from "../resources/skills/connectors/SKILL.md" with { type: "text" };
+import customPagesSkill from "../resources/skills/custom-pages/SKILL.md" with { type: "text" };
+import editingOrbitSkill from "../resources/skills/editing-orbit/SKILL.md" with { type: "text" };
 import herdDataSkill from "../resources/skills/herd-data/SKILL.md" with { type: "text" };
 
 // The text loader yields a string, but TypeScript types a .ts import as its module shape.
@@ -23,6 +25,8 @@ export const EMBEDDED_RESOURCES: Readonly<Record<string, string>> = {
   "skills/building-features/SKILL.md": asText(buildingFeaturesSkill),
   "skills/cameras/SKILL.md": asText(camerasSkill),
   "skills/connectors/SKILL.md": asText(connectorsSkill),
+  "skills/custom-pages/SKILL.md": asText(customPagesSkill),
+  "skills/editing-orbit/SKILL.md": asText(editingOrbitSkill),
   "skills/herd-data/SKILL.md": asText(herdDataSkill),
   "connector-template/README.md": asText(templateReadme),
   "connector-template/fixture.csv": asText(templateFixture),

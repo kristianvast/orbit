@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import {
   CloseCode,
@@ -10,11 +10,13 @@ import {
   type UserItem,
 } from "@orbit/protocol";
 import { OrionRequestError } from "@orbit/protocol/client";
+import { memoryFile, rememberFact } from "../src/agent/memory";
 import { createFarmTools } from "../src/agent/tools";
-import type { OrionApp } from "../src/app";
+import { type OrionApp, startOrion } from "../src/app";
 import { openDatabase } from "../src/db/open";
 import { EncryptedFileStore } from "../src/secrets";
 import { FarmService } from "../src/services/farm";
+import { LocalUiService } from "../src/services/local-ui";
 import { connect, record, removeDir, startApp, TOKEN, tempDir, waitFor } from "./helpers";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -141,8 +143,8 @@ describe("mock model", () => {
   });
 });
 
-describe("approval gate", () => {
-  test("camera_discover waits for approval and runs once allowed", async () => {
+describe("tools run without approval prompts", () => {
+  test("camera_discover runs straight away", async () => {
     process.env.ORION_FAKE_CAMERAS = JSON.stringify([
       {
         urn: "urn:uuid:cam-1",
@@ -156,58 +158,17 @@ describe("approval gate", () => {
     cleanups.push(() => {
       delete process.env.ORION_FAKE_CAMERAS;
     });
-    const { client, dir } = await setup();
-    const events = record(client);
+    const { client } = await setup();
     const { session } = await client.request("sessions.create", {});
-    const request = waitFor(client, "approval.request", (e) => e.sessionId === session.id);
-    await client.request("chat.prompt", { sessionId: session.id, text: "find cameras" });
-    const approval = await request;
-    expect(approval).toMatchObject({ toolName: "camera_discover", risk: "ask" });
-    expect(approval.plainLanguage.length).toBeGreaterThan(10);
-    expect(events.some((e) => e.type === "tool.end")).toBe(false);
-
     const toolEnd = waitFor(client, "tool.end", (e) => e.sessionId === session.id);
     const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
-    await client.request("approval.respond", {
-      approvalId: approval.approvalId,
-      decision: "allow_once",
-    });
+    await client.request("chat.prompt", { sessionId: session.id, text: "find cameras" });
     const end = await toolEnd;
     expect(end.isError).toBe(false);
     expect(end.result).toContain("Acme Barn 4K");
-    await settled;
-    const audit = readFileSync(join(dir, "audit.log"), "utf8")
-      .trim()
-      .split("\n")
-      .map((l) => JSON.parse(l));
-    expect(audit.at(-1)).toMatchObject({
-      toolName: "camera_discover",
-      decision: "allow_once",
-      by: "user",
-    });
-  });
-
-  test("deny blocks the tool", async () => {
-    const { client } = await setup();
-    const { session } = await client.request("sessions.create", {});
-    const request = waitFor(client, "approval.request", (e) => e.sessionId === session.id);
-    await client.request("chat.prompt", { sessionId: session.id, text: "find cameras" });
-    const approval = await request;
-    const toolEnd = waitFor(client, "tool.end", (e) => e.sessionId === session.id);
-    const resolved = waitFor(
-      client,
-      "approval.resolved",
-      (e) => e.approvalId === approval.approvalId,
-    );
-    const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
-    await client.request("approval.respond", { approvalId: approval.approvalId, decision: "deny" });
-    expect(await resolved).toMatchObject({ decision: "deny", by: "user" });
-    const end = await toolEnd;
-    expect(end.isError).toBe(true);
-    expect(end.result).toContain("Not allowed");
     expect((await settled).reason).toBe("completed");
     const opened = await client.request("sessions.open", { sessionId: session.id });
-    expect(opened.items.find((i): i is ToolItem => i.kind === "tool")?.status).toBe("denied");
+    expect(opened.items.find((i): i is ToolItem => i.kind === "tool")?.status).toBe("done");
   });
 });
 
@@ -218,7 +179,8 @@ describe("one-wearable rule", () => {
     const db = openDatabase(dir, { seed: true });
     cleanups.push(() => db.close());
     const farm = new FarmService(db.repo, new EncryptedFileStore(dir), join(dir, "workspace"));
-    const bind = createFarmTools(farm).find((t) => t.name === "device_bind");
+    const localUi = new LocalUiService(dir, join(dir, "app"), TOKEN, () => {});
+    const bind = createFarmTools(farm, localUi).find((t) => t.name === "device_bind");
     const wearing = db.repo.listAnimals({ limit: 100 }).rows.find((a) => a.wearable);
     const spare = db.repo
       .listDevices()
@@ -259,19 +221,64 @@ describe("one-wearable rule", () => {
   });
 });
 
+describe("memory", () => {
+  const ctx = {
+    sessionManager: { getSessionId: () => "test-session" },
+  } as unknown as ExtensionToolContext;
+
+  test("remember and forget edit the farm and user memory files", async () => {
+    const dir = tempDir();
+    cleanups.push(() => removeDir(dir));
+    const db = openDatabase(dir, { seed: true });
+    cleanups.push(() => db.close());
+    const workspace = join(dir, "workspace");
+    const tools = createFarmTools(
+      new FarmService(db.repo, new EncryptedFileStore(dir), workspace),
+      new LocalUiService(dir, join(dir, "app"), TOKEN, () => {}),
+    );
+    const remember = tools.find((t) => t.name === "memory_remember");
+    const forget = tools.find((t) => t.name === "memory_forget");
+    const run = (t: typeof remember, args: Record<string, unknown>) =>
+      t?.execute("call", args, undefined, undefined, ctx);
+
+    await run(remember, { scope: "farm", fact: "Milking starts at 05:30." });
+    const again = await run(remember, { scope: "farm", fact: "milking starts at 05:30." });
+    await run(remember, { scope: "user", fact: "Prefers metric units." });
+    expect(again?.details).toMatchObject({ added: false });
+    const farmText = readFileSync(memoryFile(workspace, "farm"), "utf8");
+    expect(farmText.match(/Milking starts at 05:30\./gi)).toHaveLength(1);
+    expect(readFileSync(memoryFile(workspace, "user"), "utf8")).toContain("Prefers metric units.");
+
+    const forgot = await run(forget, { scope: "farm", match: "05:30" });
+    expect(forgot?.details).toMatchObject({ removed: ["Milking starts at 05:30."] });
+    expect(readFileSync(memoryFile(workspace, "farm"), "utf8")).not.toContain("05:30");
+    const missing = await run(forget, { scope: "farm", match: "05:30" });
+    expect(missing?.isError).toBe(true);
+  });
+
+  test("a new session's system prompt contains both memories", async () => {
+    const { app, client, dir } = await setup();
+    rememberFact(join(dir, "workspace"), "farm", "The calving pen is in barn 2.");
+    rememberFact(join(dir, "workspace"), "user", "Call the farmer Ingrid.");
+    const { session } = await client.request("sessions.create", {});
+    const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
+    await client.request("chat.prompt", { sessionId: session.id, text: "hello" });
+    await settled;
+    const live = (
+      app.hub as unknown as { live: Map<string, { agent: { systemPrompt: string } | null }> }
+    ).live;
+    const prompt = live.get(session.id)?.agent?.systemPrompt ?? "";
+    expect(prompt).toContain("The calving pen is in barn 2.");
+    expect(prompt).toContain("Call the farmer Ingrid.");
+  });
+});
+
 describe("snapshots", () => {
-  test("an approved file write is snapshotted and undo reverts it", async () => {
+  test("a file write is snapshotted and undo reverts it", async () => {
     const { client, dir } = await setup();
     const { session } = await client.request("sessions.create", {});
-    const request = waitFor(client, "approval.request", (e) => e.sessionId === session.id);
-    await client.request("chat.prompt", { sessionId: session.id, text: "write a note" });
-    const approval = await request;
-    expect(approval).toMatchObject({ toolName: "write", risk: "ask" });
     const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
-    await client.request("approval.respond", {
-      approvalId: approval.approvalId,
-      decision: "allow_once",
-    });
+    await client.request("chat.prompt", { sessionId: session.id, text: "write a note" });
     await settled;
     const note = join(dir, "workspace", "notes", "orion-note.md");
     expect(existsSync(note)).toBe(true);
@@ -301,5 +308,122 @@ describe("snapshots", () => {
     expect((await client.query("animals.get", { id: animal?.id as string })).animal.name).toBe(
       animal?.name ?? null,
     );
+  });
+});
+
+describe("custom pages", () => {
+  test("a page Orion writes is listed and served only with the session token", async () => {
+    const { app, client } = await setup();
+    const { session } = await client.request("sessions.create", {});
+    const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
+    await client.request("chat.prompt", { sessionId: session.id, text: "make a page" });
+    await settled;
+
+    const { pages } = await client.request("pages.list", {});
+    expect(pages).toEqual([
+      {
+        id: "herd-count",
+        title: "Herd count",
+        path: `/pages/${TOKEN}/herd-count/index.html`,
+      },
+    ]);
+    const origin = `http://127.0.0.1:${app.port}`;
+    const page = await fetch(origin + pages[0]?.path);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("<h1>Herd count</h1>");
+    const sdk = await fetch(`${origin}/pages/${TOKEN}/_orbit.js`);
+    expect(sdk.headers.get("content-type")).toContain("javascript");
+    expect(await sdk.text()).toContain("window.orbit");
+
+    expect((await fetch(`${origin}/pages/wrong-token/herd-count/index.html`)).status).toBe(401);
+    const traversal = await fetch(`${origin}/pages/${TOKEN}/herd-count/..%2F..%2FAGENTS.md`);
+    expect(traversal.status).toBe(404);
+  });
+});
+
+describe("app source editing", () => {
+  test("--app-source adds the checkout and its AGENTS.md to the system prompt", async () => {
+    const dir = tempDir();
+    const repoRoot = resolve(import.meta.dir, "../../..");
+    const app = await startOrion({
+      port: 0,
+      token: TOKEN,
+      dataDir: dir,
+      mockModel: true,
+      seed: true,
+      gatewayUrl: null,
+      appSource: repoRoot,
+    });
+    const client = await connect(app);
+    cleanups.push(() => removeDir(dir));
+    cleanups.push(async () => {
+      client.close();
+      await app.stop();
+    });
+    const { session } = await client.request("sessions.create", {});
+    const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
+    await client.request("chat.prompt", { sessionId: session.id, text: "hello" });
+    await settled;
+    const live = (
+      app.hub as unknown as { live: Map<string, { agent: { systemPrompt: string } | null }> }
+    ).live;
+    const prompt = live.get(session.id)?.agent?.systemPrompt ?? "";
+    expect(prompt).toContain(`Orbit's own source code is checked out at ${repoRoot}`);
+    expect(prompt).toContain("One-wearable domain rule");
+  });
+});
+
+function fakeCheckout(dataDir: string, scripts: Record<string, string>) {
+  const appDir = join(dataDir, "app", "apps", "orbit");
+  mkdirSync(appDir, { recursive: true });
+  mkdirSync(join(dataDir, "app", "node_modules"), { recursive: true });
+  writeFileSync(join(appDir, "package.json"), JSON.stringify({ name: "fake-orbit", scripts }));
+}
+
+const BUILD_OK =
+  "mkdir -p dist/assets && echo '<!doctype html><html><head><title>local</title></head><body>local build</body></html>' > dist/index.html && echo 'console.log(1)' > dist/assets/app.js";
+
+describe("local UI build", () => {
+  test("a checked build is served under the token and a launch that never boots reads as broken", async () => {
+    const dir = tempDir();
+    fakeCheckout(dir, { typecheck: "true", "build:local": BUILD_OK });
+    const { app, client } = await setup(dir);
+    const { session } = await client.request("sessions.create", {});
+    const updated = waitFor(client, "localUi.updated", () => true);
+    const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
+    await client.request("chat.prompt", { sessionId: session.id, text: "build my orbit" });
+    expect(await updated).toMatchObject({ state: "ready", path: `/app/${TOKEN}/` });
+    await settled;
+
+    const origin = `http://127.0.0.1:${app.port}`;
+    const deepRoute = await fetch(`${origin}/app/${TOKEN}/herd/abc`);
+    expect(deepRoute.status).toBe(200);
+    expect(await deepRoute.text()).toContain(`<base href="/app/${TOKEN}/">`);
+    expect((await fetch(`${origin}/app/${TOKEN}/assets/app.js`)).status).toBe(200);
+    expect((await fetch(`${origin}/app/wrong-token/`)).status).toBe(401);
+    expect((await fetch(`${origin}/app/${TOKEN}/..%2Fpackage.json`)).status).toBe(404);
+
+    expect((await client.request("localUi.launched", {})).state).toBe("broken");
+    expect((await client.request("localUi.status", {})).state).toBe("broken");
+    expect((await client.request("localUi.booted", {})).state).toBe("ready");
+    expect((await client.request("localUi.disable", {})).state).toBe("none");
+    expect((await fetch(`${origin}/app/${TOKEN}/`)).status).toBe(404);
+  });
+
+  test("a failing typecheck reports the step and leaves the original app in use", async () => {
+    const dir = tempDir();
+    fakeCheckout(dir, { typecheck: "echo 'TS2322 nope' && exit 1", "build:local": BUILD_OK });
+    const { client } = await setup(dir);
+    const { session } = await client.request("sessions.create", {});
+    const toolEnd = waitFor(client, "tool.end", (e) => e.sessionId === session.id);
+    const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
+    await client.request("chat.prompt", { sessionId: session.id, text: "build my orbit" });
+    const end = await toolEnd;
+    await settled;
+    expect(end.isError).toBe(true);
+    expect(end.result).toContain("typecheck step failed");
+    expect(end.result).toContain("TS2322 nope");
+    expect((await client.request("localUi.status", {})).state).toBe("none");
+    expect(existsSync(join(dir, "app", "apps", "orbit", "dist"))).toBe(false);
   });
 });

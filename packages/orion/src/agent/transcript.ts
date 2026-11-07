@@ -1,6 +1,5 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { AssistantItem, ToolItem, TranscriptItem, UserItem } from "@orbit/protocol";
-import { DENIED_PREFIX } from "./gate";
 
 type AnyMessage = { role: string; content?: unknown; timestamp?: number } & Record<string, unknown>;
 
@@ -49,9 +48,8 @@ export function assistantItem(id: string, message: AnyMessage, fallbackTs: strin
   return item;
 }
 
-export function toolStatus(isError: boolean, resultText: string): ToolItem["status"] {
-  if (!isError) return "done";
-  return resultText.startsWith(DENIED_PREFIX) ? "denied" : "error";
+export function toolStatus(isError: boolean): ToolItem["status"] {
+  return isError ? "error" : "done";
 }
 
 /** Converts the active branch of a Pi session into UI transcript items, oldest first. */
@@ -104,7 +102,7 @@ export function buildTranscript(
       tool.result = result;
       tool.details = message.details;
       tool.isError = isError;
-      tool.status = toolStatus(isError, result);
+      tool.status = toolStatus(isError);
       if (typeof message.durationMs === "number") tool.durationMs = message.durationMs;
     }
   }

@@ -1,4 +1,5 @@
 // Command-line and environment configuration for the Orion sidecar.
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -11,6 +12,10 @@ export interface OrionConfig {
   seed: boolean;
   /** Core LLM gateway base URL (env ORBIT_GATEWAY_URL); enables the orbit-gateway provider. */
   gatewayUrl: string | null;
+  /** Orbit cloud (Core) base URL (--core-url or ORBIT_CORE_URL): accounts, sync, cloud model. */
+  coreUrl?: string | null;
+  /** Orbit source checkout Orion may edit (--app-source or ORBIT_APP_SOURCE); null in installed builds. */
+  appSource: string | null;
 }
 
 /** OS application-data directory for Orbit (Windows %APPDATA%, macOS Application Support, XDG on Linux). */
@@ -47,7 +52,7 @@ export function parseConfig(
     }
     const name = arg.slice(2);
     const next = argv[i + 1];
-    if (["port", "token", "data-dir"].includes(name)) {
+    if (["port", "token", "data-dir", "app-source", "core-url"].includes(name)) {
       if (next === undefined) throw new ConfigError(`--${name} needs a value`);
       values.set(name, next);
       i++;
@@ -55,7 +60,16 @@ export function parseConfig(
       values.set(name, true);
     }
   }
-  const known = new Set(["port", "token", "data-dir", "mock-model", "seed", "dev"]);
+  const known = new Set([
+    "port",
+    "token",
+    "data-dir",
+    "app-source",
+    "core-url",
+    "mock-model",
+    "seed",
+    "dev",
+  ]);
   for (const key of values.keys()) {
     if (!known.has(key)) throw new ConfigError(`unknown option: --${key}`);
   }
@@ -72,6 +86,11 @@ export function parseConfig(
   }
   const token = str("token") ?? env.ORION_TOKEN ?? (dev ? "dev" : undefined);
   if (!token) throw new ConfigError("--token (or ORION_TOKEN) is required");
+  const appSourceRaw = str("app-source") ?? env.ORBIT_APP_SOURCE?.trim();
+  const appSource = appSourceRaw ? resolve(appSourceRaw) : null;
+  if (appSource && !existsSync(join(appSource, "apps", "orbit", "package.json"))) {
+    throw new ConfigError(`--app-source ${appSource} is not an Orbit checkout (no apps/orbit)`);
+  }
 
   return {
     port,
@@ -80,5 +99,7 @@ export function parseConfig(
     mockModel: values.get("mock-model") === true || truthy(env.ORION_MOCK_MODEL),
     seed: values.get("seed") === true || truthy(env.ORION_SEED),
     gatewayUrl: env.ORBIT_GATEWAY_URL?.trim() || null,
+    coreUrl: (str("core-url") ?? env.ORBIT_CORE_URL)?.trim().replace(/\/+$/, "") || null,
+    appSource,
   };
 }

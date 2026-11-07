@@ -7,6 +7,7 @@ import type {
   CameraInput,
   ConnectorInput,
   DbMutateResult,
+  DbMutationParams,
   DbQueryName,
   DbQueryParams,
   DbQueryResults,
@@ -14,11 +15,13 @@ import type {
   FarmSummary,
   SnapshotSummary,
 } from "@orbit/protocol";
+import { CameraMapLayout } from "@orbit/protocol";
 import {
   ALERT_KINDS,
   type Animal,
   animals,
   assertSingleWearable,
+  cameraLayouts,
   cameras,
   connectors,
   createHlc,
@@ -42,6 +45,7 @@ import {
 import type { LocalDb } from "@orbit/schema/local";
 import { and, count, desc, eq, gte, inArray, isNull, like, or, type SQL, sql } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { Value } from "typebox/value";
 
 export type SyncedTableName = keyof typeof sqliteSyncedTables;
 type Row = Record<string, unknown>;
@@ -115,6 +119,27 @@ export class Repository {
       this.db.select().from(farms).where(isNull(farms.deletedAt)).orderBy(farms.createdAt).get() ??
       null
     );
+  }
+
+  /**
+   * Drops a local farm that holds nothing but its own row (a placeholder from first start), so a
+   * signed-in install can open the account's cloud farm instead. Returns false when it has data.
+   */
+  discardEmptyFarm(id: string): boolean {
+    return this.db.transaction(() => {
+      for (const [name, table] of Object.entries(sqliteSyncedTables)) {
+        if (name === "farms") continue;
+        const t = table as unknown as AnyTable & { farmId: SQLiteColumn };
+        const [row] = this.db.select({ n: count() }).from(t).where(eq(t.farmId, id)).all();
+        if ((row?.n ?? 0) > 0) return false;
+      }
+      this.db
+        .delete(outbox)
+        .where(and(eq(outbox.table, "farms"), eq(outbox.rowId, id)))
+        .run();
+      this.db.delete(farms).where(eq(farms.id, id)).run();
+      return true;
+    });
   }
 
   /** The farm every local write belongs to; creates "My farm" on first use. */
@@ -255,6 +280,8 @@ export class Repository {
             .orderBy(cameras.name)
             .all(),
         } as DbQueryResults[Q];
+      case "cameraLayout.get":
+        return { layout: this.cameraLayout() } as DbQueryResults[Q];
       default:
         throw new RepoError("bad_request", `unknown query ${String(name)}`);
     }
@@ -468,6 +495,43 @@ export class Repository {
 
   // ------------------------------------------------------------------ mutations
 
+  cameraLayout(): CameraMapLayout | null {
+    const farm = this.farm();
+    if (!farm) return null;
+    const row = this.db
+      .select()
+      .from(cameraLayouts)
+      .where(and(eq(cameraLayouts.farmId, farm.id), isNull(cameraLayouts.deletedAt)))
+      .get();
+    if (!row) return null;
+    if (!Value.Check(CameraMapLayout, row.layout))
+      throw new RepoError("bad_request", "invalid stored camera layout");
+    return row.layout;
+  }
+
+  saveCameraLayout(layout: unknown, origin?: Partial<WriteOrigin>): DbMutateResult {
+    if (!Value.Check(CameraMapLayout, layout))
+      throw new RepoError("bad_request", "invalid camera layout");
+    const farm = this.ensureFarm();
+    const existing = this.db
+      .select()
+      .from(cameraLayouts)
+      .where(and(eq(cameraLayouts.farmId, farm.id), isNull(cameraLayouts.deletedAt)))
+      .get();
+    // A stable farm UUID also makes independently created layouts converge through row LWW.
+    const id = existing?.id ?? farm.id;
+    const result = this.write(
+      "camera_layouts",
+      id,
+      { layout, deletedAt: null },
+      {
+        description: "Saved camera layout",
+        ...origin,
+      },
+    );
+    return { ids: [id], snapshotId: result.snapshotId };
+  }
+
   upsertAnimal(input: AnimalInput, origin?: Partial<WriteOrigin>): DbMutateResult {
     const { id: givenId, ...fields } = input;
     const existing = givenId ? this.getRow("animals", givenId) : null;
@@ -637,6 +701,29 @@ export class Repository {
         ...(error ? {} : { lastSyncAt: this.iso() }),
       }),
     );
+  }
+
+  addObservation(
+    input: DbMutationParams<"observations.add">,
+    origin?: Partial<WriteOrigin>,
+  ): DbMutateResult {
+    if (input.animalId) this.getAnimal(input.animalId);
+    const id = crypto.randomUUID();
+    const result = this.write(
+      "observations",
+      id,
+      {
+        animalId: input.animalId ?? null,
+        deviceId: null,
+        source: "orion",
+        kind: input.kind,
+        ts: input.ts,
+        valueNum: input.valueNum ?? null,
+        valueJson: input.valueJson ?? null,
+      },
+      { ...origin, description: "Added observation" },
+    );
+    return { ids: [id], snapshotId: result.snapshotId };
   }
 
   insertObservations(

@@ -11,9 +11,9 @@ description: Build small features for the farmer in the farm workspace (reports,
    reports in `reports/`, connectors in `connectors/`.
 3. Read farm data through the farm tools, not by opening `orbit.sqlite`.
 4. Keep it small: one file if possible, plain TypeScript run with Bun, no new dependencies unless
-   the farmer agrees (installs always need approval).
+   the farmer agrees (ask in the chat before installing anything).
 5. Run it once, show the result, and tell the farmer they can undo the change.
-6. Record useful facts about the farm (routines, barn layout) in the workspace `AGENTS.md`.
+6. Record useful facts about the farm (routines, barn layout) with `memory_remember`.
 
 Rules
 - Never delete the farmer's files without asking. Never change network or firewall settings.

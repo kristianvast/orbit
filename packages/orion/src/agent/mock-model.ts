@@ -22,12 +22,32 @@ export interface MockTrigger {
 export const MOCK_TRIGGERS: MockTrigger[] = [
   { match: /list cows/i, tool: "herd_query", args: { species: "cattle" } },
   { match: /find cameras/i, tool: "camera_discover", args: { timeoutMs: 1500 } },
+  { match: /build my orbit/i, tool: "local_ui_build", args: {} },
   {
     match: /write a note/i,
     tool: "write",
     args: {
       path: "notes/orion-note.md",
       content: "# Note from Orion\n\nWritten by the mock model.\n",
+    },
+  },
+  {
+    match: /make a page/i,
+    tool: "write",
+    args: {
+      path: "pages/herd-count/index.html",
+      content: [
+        "<!doctype html>",
+        '<html><head><meta charset="utf-8"><title>Herd count</title></head>',
+        '<body><h1>Herd count</h1><p id="count">Loading...</p>',
+        '<script src="../_orbit.js"></script>',
+        "<script>",
+        "orbit.query('farm.summary').then((s) => {",
+        "  document.getElementById('count').textContent = s.counts.cattle + ' cattle';",
+        "});",
+        "</script></body></html>",
+        "",
+      ].join("\n"),
     },
   },
 ];
@@ -50,9 +70,6 @@ function replyFor(messages: Message[]): { text: string } | { call: ToolCall } {
   if (last?.role === "toolResult") {
     const result = textOf(last);
     const isError = (last as { isError?: boolean }).isError === true;
-    if (isError && result.startsWith("Not allowed:")) {
-      return { text: "Okay, I did not do that. Tell me if you want to try something else." };
-    }
     const firstLines = result.split("\n").slice(0, 6).join("\n");
     return {
       text: isError

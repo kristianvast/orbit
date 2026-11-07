@@ -11,6 +11,8 @@ import {
 import { type Static, type TSchema, Type } from "typebox";
 import { RepoError, type WearableViolation } from "../db/repo";
 import type { FarmService } from "../services/farm";
+import type { LocalUiService } from "../services/local-ui";
+import { forgetFacts, MEMORY_SCOPES, rememberFact } from "./memory";
 
 const Opt = <T extends TSchema>(schema: T) => Type.Optional(schema);
 const OptStr = (description: string) => Type.Optional(Type.String({ description }));
@@ -85,7 +87,7 @@ const AnimalParams = Type.Object({
   notes: OptStr("Free-text notes"),
 });
 
-export function createFarmTools(farm: FarmService): ToolDefinition[] {
+export function createFarmTools(farm: FarmService, localUi: LocalUiService): ToolDefinition[] {
   const repo = farm.repo;
   return [
     tool({
@@ -105,7 +107,7 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
         if (p.id) {
           const animal = repo.findAnimal(p.id);
           if (!animal) return text(`No animal matches "${p.id}".`, { found: false });
-          const detail = repo.getAnimal(animal.id);
+          const detail = repo.query("animals.get", { id: animal.id });
           const obs = detail.recentObservations
             .slice(0, 10)
             .map((o) => `  - ${o.ts} ${o.kind}${o.valueNum !== null ? ` ${o.valueNum}` : ""}`);
@@ -118,7 +120,7 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
             detail,
           );
         }
-        const { rows, total } = repo.listAnimals({
+        const { rows, total } = repo.query("animals.list", {
           species: p.species,
           status: p.status ?? "active",
           groupName: p.groupName,
@@ -134,8 +136,11 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
       label: "Update herd records",
       description: "Add a new animal or update an existing one (pass id to update).",
       parameters: AnimalParams,
-      run(p, origin) {
-        const result = repo.upsertAnimal(p, origin);
+      async run(p, origin) {
+        const result = await farm.mutate(
+          { mutation: "animals.upsert", params: { animal: p } },
+          origin,
+        );
         return text(
           `${p.id ? "Updated" : "Added"} ${p.name ?? p.earTagNumber ?? "the animal"} (id ${result.ids[0]}). The farmer can undo this.`,
           result,
@@ -149,7 +154,7 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
         "List devices (collars, boluses, ear tag sensors, milking robots, cameras, scales...) and which animal each is on.",
       parameters: Type.Object({ kind: Opt(Type.Enum([...DEVICE_KINDS])) }),
       run(p) {
-        const { rows } = repo.listDevices(p.kind);
+        const { rows } = repo.query("devices.list", { kind: p.kind });
         const lines = rows.map(
           (d) =>
             `- ${d.kind} ${d.vendor ?? ""} ${d.model ?? ""} serial=${d.serial ?? "?"} status=${d.status}${d.batteryPct !== null ? ` battery=${d.batteryPct}%` : ""}${d.boundAnimalId ? ` on animal ${d.boundAnimalId}` : " (not on an animal)"} id=${d.id}`,
@@ -167,9 +172,12 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
         animalId: OptStr("Animal id, ear tag or name (required for bind)"),
         action: Opt(Type.Enum(["bind", "unbind"])),
       }),
-      run(p, origin) {
+      async run(p, origin) {
         if (p.action === "unbind") {
-          const r = repo.clearBinding(p.deviceId, origin);
+          const r = await farm.mutate(
+            { mutation: "bindings.clear", params: { deviceId: p.deviceId } },
+            origin,
+          );
           return text(`Device ${p.deviceId} is no longer on an animal.`, r);
         }
         if (!p.animalId) return text("Not done: say which animal (animalId).", {}, true);
@@ -178,7 +186,10 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
         const violation = repo.checkWearable(p.deviceId, animal.id);
         if (violation)
           return text(wearableExplanation(violation), { ruleViolation: violation }, true);
-        const r = repo.setBinding(p.deviceId, animal.id, origin);
+        const r = await farm.mutate(
+          { mutation: "bindings.set", params: { deviceId: p.deviceId, animalId: animal.id } },
+          origin,
+        );
         return text(
           `Device ${p.deviceId} is now on ${animal.name ?? animal.earTagNumber ?? animal.id}.`,
           r,
@@ -200,7 +211,7 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
       run(p) {
         const animal = p.animalId ? repo.findAnimal(p.animalId) : null;
         if (p.animalId && !animal) return text(`No animal matches "${p.animalId}".`, { rows: [] });
-        const rows = repo.recentObservations({
+        const { rows } = repo.query("observations.recent", {
           animalId: animal?.id,
           kind: p.kind,
           alertsOnly: p.alertsOnly,
@@ -224,7 +235,7 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
         "List data connectors (milking robots, sensor clouds, CSV imports, custom) with status.",
       parameters: Type.Object({}),
       run() {
-        const rows = repo.listConnectors();
+        const { rows } = repo.query("connectors.list", {});
         const lines = rows.map(
           (c) =>
             `- ${c.name ?? c.vendor} (${c.vendor}, ${c.kind}) ${c.enabled ? "on" : "off"}; last sync ${c.lastSyncAt ?? "never"}${c.lastError ? `; error: ${c.lastError}` : ""} id=${c.id}`,
@@ -244,6 +255,7 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
         "Create a new connector folder in the farm workspace (connectors/<name>) from the Orbit template and register it switched off. Then edit its code with the file tools.",
       parameters: Type.Object({ name: Type.String({ description: "lowercase-with-dashes" }) }),
       run(p, origin) {
+        farm.guard?.("connectors.upsert");
         const r = farm.connectors.scaffold(p.name, origin);
         return text(
           `Created ${r.path} (${r.usedTemplate ? "from the Orbit template" : "from the built-in starter"}). It is switched off until the farmer turns it on. Connector id ${r.id}.`,
@@ -257,6 +269,7 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
       description: "Run an enabled connector's sync once and import what it returns.",
       parameters: Type.Object({ id: Type.String() }),
       async run(p) {
+        farm.guard?.("connectors.syncNow");
         const r = await farm.connectors.run(p.id);
         return text(
           `Imported ${r.imported} observation${r.imported === 1 ? "" : "s"}${r.skipped ? `, skipped ${r.skipped} invalid` : ""}.${r.logs.length ? `\nLog:\n${r.logs.slice(-20).join("\n")}` : ""}`,
@@ -302,10 +315,77 @@ export function createFarmTools(farm: FarmService): ToolDefinition[] {
         password: OptStr("Camera login password"),
       }),
       async run(p, origin) {
-        const r = await farm.cameras.upsert(p, origin);
+        const r = await farm.mutate({ mutation: "cameras.upsert", params: { camera: p } }, origin);
         return text(
           `Saved camera "${p.name}"${p.password ? " with its login stored in the keychain" : ""} (id ${r.ids[0]}).`,
           { ids: r.ids, snapshotId: r.snapshotId },
+        );
+      },
+    }),
+    tool({
+      name: "local_ui_build",
+      label: "Build your Orbit",
+      description: `Typecheck and build the farm's own copy of the Orbit app from the checkout at ${localUi.checkoutDir} (installs dependencies the first time). Only a build that passes is switched on; Orbit then opens it at startup and a running copy reloads. Read the editing-orbit skill first.`,
+      parameters: Type.Object({}),
+      async run(_p, _origin, signal) {
+        const r = await localUi.build(signal);
+        if (!r.ok) {
+          return text(
+            `Not done: the ${r.step} step failed, so Orbit keeps ${r.status.state === "none" ? "the original app" : "the previous build"}.\n${r.output}`,
+            { step: r.step, status: r.status },
+            true,
+          );
+        }
+        return text(
+          "Built and checked. Orbit opens this version from the next start, and a running copy reloads now. The farmer can switch back in Settings > Your Orbit.",
+          { status: r.status },
+        );
+      },
+    }),
+    tool({
+      name: "local_ui_disable",
+      label: "Use the original Orbit",
+      description:
+        "Stop using the farm's own build of the Orbit app; the original app is used from the next start. The checkout and its changes stay.",
+      parameters: Type.Object({}),
+      run() {
+        return text("Orbit will start with the original app.", { status: localUi.disable() });
+      },
+    }),
+    tool({
+      name: "memory_remember",
+      label: "Remember",
+      description:
+        'Save one lasting fact, without asking first. scope "farm" is for the farm (animals, routines, barn layout, devices, vet); scope "user" is for the person using Orbit (name, preferences, units, how they like answers). One short sentence per fact. Never store passwords or keys.',
+      parameters: Type.Object({
+        scope: Type.Enum([...MEMORY_SCOPES]),
+        fact: Type.String({ description: "One short, self-contained sentence" }),
+      }),
+      run(p) {
+        const added = rememberFact(farm.workspace, p.scope, p.fact);
+        return text(
+          added ? `Remembered (${p.scope}): ${p.fact}` : `Already remembered (${p.scope}).`,
+          { scope: p.scope, added },
+        );
+      },
+    }),
+    tool({
+      name: "memory_forget",
+      label: "Forget",
+      description:
+        "Remove remembered facts that are wrong or out of date, without asking first. Removes every fact in the scope containing the given text.",
+      parameters: Type.Object({
+        scope: Type.Enum([...MEMORY_SCOPES]),
+        match: Type.String({ description: "Text the facts to remove contain" }),
+      }),
+      run(p) {
+        const removed = forgetFacts(farm.workspace, p.scope, p.match);
+        if (removed.length === 0) {
+          return text(`Nothing in ${p.scope} memory matches "${p.match}".`, { removed }, true);
+        }
+        return text(
+          [`Forgot ${removed.length} (${p.scope}):`, ...removed.map((f) => `- ${f}`)].join("\n"),
+          { scope: p.scope, removed },
         );
       },
     }),
@@ -323,4 +403,8 @@ export const FARM_TOOL_NAMES = [
   "connector_run",
   "camera_discover",
   "camera_add",
+  "local_ui_build",
+  "local_ui_disable",
+  "memory_remember",
+  "memory_forget",
 ] as const;

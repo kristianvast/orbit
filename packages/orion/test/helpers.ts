@@ -26,6 +26,7 @@ export async function startApp(dataDir: string, seed = true): Promise<OrionApp> 
     mockModel: true,
     seed,
     gatewayUrl: null,
+    appSource: null,
   });
 }
 

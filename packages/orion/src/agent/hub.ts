@@ -16,8 +16,9 @@ import {
 import type { EventBody, EventType, SessionSummary, TranscriptItem } from "@orbit/protocol";
 import type { Repository } from "../db/repo";
 import type { SettingsStore } from "../settings";
+import { billingError } from "./billing-error";
 import { FileCredentialStore } from "./credentials";
-import type { ApprovalGate } from "./gate";
+import { MEMORY_SCOPES, memoryFile } from "./memory";
 import { MOCK_MODEL, MOCK_PROVIDER, registerMockProvider } from "./mock-model";
 import { assistantItem, buildTranscript, contentText, toolStatus, userItem } from "./transcript";
 import type { Workspace } from "./workspace";
@@ -61,19 +62,30 @@ export interface HubOptions {
   resourcesDir: string;
   repo: Repository;
   settings: SettingsStore;
-  gate: ApprovalGate;
   tools: ToolDefinition[];
   emit: Emit;
   mockModel: boolean;
   gatewayUrl: string | null;
+  appSource: string | null;
 }
 
 export const GATEWAY_PROVIDER = "orbit-gateway";
 
 const ORION_SYSTEM_PROMPT = `You are Orion, the assistant inside Orbit, a farm app running on the farmer's own computer.
 You help a farmer with cattle (dairy and beef) and horses: herd records, sensors, robots, cameras and small features built in the farm workspace.
-Use the farm tools to read and change farm data; use file and shell tools only inside the farm workspace.
-Speak plainly, keep answers short, and explain what you are about to change before changing it.`;
+Use the farm tools to read and change farm data. You also have the full file and shell tools: your working directory is the farm workspace, and you may work anywhere on this computer when the job needs it.
+With the computer tool you can see the screen and use the mouse and keyboard to work in other programs on this computer, such as a vendor herd or robot program that has no connector.
+Speak plainly and keep answers short. Before anything risky or hard to undo (deleting files, installing software, changing system or network settings, touching files outside the farm workspace, contacting devices on the network), say what you will do and why, and wait for the farmer to say yes in the chat. Routine reads and small, undoable changes need no permission; just say what you did.
+When you learn a lasting fact about the farm or about the farmer, save it with memory_remember right away, without asking; fix wrong or outdated facts with memory_forget. Do not save one-off details or secrets.
+To add a screen to Orbit, build a custom page in pages/<id>/ (see the custom-pages skill); it appears in the app's menu. To change Orbit's existing screens, follow the editing-orbit skill and finish with local_ui_build.`;
+
+function appSourcePrompt(dir: string): string {
+  return `
+
+Orbit's own source code is checked out at ${dir}, and you may change the app itself there.
+The UI is in ${join(dir, "apps/orbit/src")} (React + Vite; the running dev app reloads on save). Orion, the agent you are, is in ${join(dir, "packages/orion")} and restarts on save in dev.
+Follow that checkout's AGENTS.md. After a change, run \`bun run typecheck\` and the affected package's tests from ${dir}, and fix what you broke. Never run cargo, tauri or other heavy builds there. Prefer a custom page when the farmer only needs a new screen.`;
+}
 
 function sameMessage(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   return a === b || (a.role === b.role && a.timestamp === b.timestamp);
@@ -306,7 +318,6 @@ export class SessionHub {
     if (!e) return false;
     const live = this.live.get(id);
     if (live) {
-      this.opts.gate.cancelSession(id);
       if (live.agent) {
         await live.agent.abort().catch(() => undefined);
         live.unsubscribe?.();
@@ -364,37 +375,24 @@ export class SessionHub {
       }
       return live.agent;
     }
-    const gate = this.opts.gate;
-    const sessionId = live.id;
     const agentsFile = join(this.opts.resourcesDir, "AGENTS.md");
     const workspaceAgents = join(this.opts.workspace.dir, "AGENTS.md");
     const loader = new DefaultResourceLoader({
       cwd: this.opts.workspace.dir,
       agentDir: this.agentDir,
-      systemPrompt: ORION_SYSTEM_PROMPT,
+      systemPrompt:
+        ORION_SYSTEM_PROMPT + (this.opts.appSource ? appSourcePrompt(this.opts.appSource) : ""),
       additionalSkillPaths: [join(this.opts.resourcesDir, "skills")],
       agentsFilesOverride: () => ({
-        agentsFiles: [agentsFile, workspaceAgents]
+        agentsFiles: [
+          agentsFile,
+          workspaceAgents,
+          ...(this.opts.appSource ? [join(this.opts.appSource, "AGENTS.md")] : []),
+          ...MEMORY_SCOPES.map((s) => memoryFile(this.opts.workspace.dir, s)),
+        ]
           .filter((p) => existsSync(p))
           .map((p) => ({ path: p, content: readFileSync(p, "utf8") })),
       }),
-      extensionFactories: [
-        {
-          name: "orbit-approval-gate",
-          factory: (pi) => {
-            pi.on("tool_call", async (event, ctx) => {
-              const reason = await gate.decide({
-                sessionId,
-                toolCallId: event.toolCallId,
-                toolName: event.toolName,
-                args: event.input as Record<string, unknown>,
-                signal: ctx.signal,
-              });
-              return reason ? { block: true, reason } : undefined;
-            });
-          },
-        },
-      ],
     });
     await loader.reload();
     const { session } = await createAgentSession({
@@ -405,7 +403,8 @@ export class SessionHub {
       thinkingLevel: this.opts.settings.get().thinkingLevel,
       resourceLoader: loader,
       sessionManager: live.sm,
-      settingsManager: SettingsManager.inMemory({}),
+      // Pi owns retries so terminal cloud allowance errors reach Orion before HTTP retries.
+      settingsManager: SettingsManager.inMemory({ retry: { provider: { maxRetries: 0 } } }),
       customTools: this.opts.tools,
     });
     live.agent = session;
@@ -438,6 +437,14 @@ export class SessionHub {
       }
       case "message_end": {
         const message = event.message as unknown as Record<string, unknown>;
+        if (
+          message.role === "assistant" &&
+          live.agent?.model?.provider === GATEWAY_PROVIDER &&
+          typeof message.errorMessage === "string" &&
+          billingError(message.errorMessage)
+        ) {
+          live.agent.setAutoRetryEnabled(false);
+        }
         let messageId: string;
         if (message.role === "user") {
           messageId = `msg_${crypto.randomUUID()}`;
@@ -551,6 +558,9 @@ export class SessionHub {
     const failed =
       errorMessage ??
       (last?.stopReason === "error" ? (last.errorMessage ?? "the model failed") : undefined);
+    const planError =
+      failed && live.agent?.model?.provider === GATEWAY_PROVIDER ? billingError(failed) : null;
+    if (planError && !aborted) this.opts.emit("error", { sessionId: live.id, ...planError });
     const entry = this.index.get(live.id);
     try {
       const snap = await this.opts.workspace.snapshot(`Orion: ${entry?.title ?? live.id}`);
@@ -584,6 +594,7 @@ export class SessionHub {
       return;
     }
     const agent = await this.ensureAgent(live);
+    agent.setAutoRetryEnabled(true);
     const entry = this.entry(id);
     live.streaming = true;
     live.settledEmitted = false;
@@ -593,7 +604,9 @@ export class SessionHub {
     this.touch(id);
     agent.prompt(text).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
-      this.opts.emit("error", { sessionId: id, code: "internal", message });
+      if (live.agent?.model?.provider !== GATEWAY_PROVIDER || !billingError(message)) {
+        this.opts.emit("error", { sessionId: id, code: "internal", message });
+      }
       void this.settle(live, false, message);
     });
   }
@@ -601,14 +614,12 @@ export class SessionHub {
   async abort(id: string) {
     const live = this.live.get(id);
     if (!live?.agent) return false;
-    this.opts.gate.cancelSession(id);
     await live.agent.abort();
     return true;
   }
 
   async dispose() {
     for (const live of this.live.values()) {
-      this.opts.gate.cancelSession(live.id);
       live.unsubscribe?.();
       live.agent?.dispose();
     }
