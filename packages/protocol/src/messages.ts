@@ -2,12 +2,19 @@
 // Wire frames are flat JSON: request = { id, type, ...params }, event = { type, ...body },
 // response = { type: "response", id, ok: true, result } | { type: "response", id, ok: false, error }.
 import { type Static, type TSchema, Type } from "typebox";
+import { AccountEvents, AccountRequests } from "./account";
+import { BillingRequests } from "./billing";
 import { DbMutateRequest, DbMutateResult, DbQueryRequest } from "./db";
 import {
-  ApprovalDecision,
   AssistantItem,
+  AuthMethod,
+  AuthNotice,
+  AuthPromptInfo,
+  AuthProviderInfo,
+  CustomPage,
+  ErrorCode,
+  LocalUiStatus,
   ProtocolError,
-  Risk,
   SessionSummary,
   Settings,
   SettingsUpdate,
@@ -16,6 +23,7 @@ import {
   TranscriptItem,
   UserItem,
 } from "./model";
+import { VoiceEvents, VoiceRequests } from "./voice";
 
 const SessionRef = Type.Object({ sessionId: Type.String() });
 const Accepted = Type.Object({ accepted: Type.Boolean() });
@@ -74,12 +82,39 @@ export const Requests = {
     result: Accepted,
   },
   "chat.abort": { params: SessionRef, result: Accepted },
-  "approval.respond": {
-    params: Type.Object({ approvalId: Type.String(), decision: ApprovalDecision }),
-    result: Accepted,
-  },
+  /** Pages Orion built in the farm workspace. */
+  "pages.list": { params: Empty, result: Type.Object({ pages: Type.Array(CustomPage) }) },
+  /** Whether a checked local build of the UI exists (see LocalUiState). */
+  "localUi.status": { params: Empty, result: LocalUiStatus },
+  /** The shipped UI is about to hand off to the local build. */
+  "localUi.launched": { params: Empty, result: LocalUiStatus },
+  /** The local build mounted its shell; clears the broken check for this launch. */
+  "localUi.booted": { params: Empty, result: LocalUiStatus },
+  /** Stop using the local build; the shipped UI is used from the next start. */
+  "localUi.disable": { params: Empty, result: LocalUiStatus },
   "settings.get": { params: Empty, result: Settings },
   "settings.update": { params: SettingsUpdate, result: Settings },
+  /** Model providers Orion can sign in to, with their current status (Pi's /login list). */
+  "auth.providers": {
+    params: Empty,
+    result: Type.Object({ providers: Type.Array(AuthProviderInfo) }),
+  },
+  /** Starts a sign-in. Steps stream as auth.notice / auth.prompt; auth.finished ends it. */
+  "auth.login": {
+    params: Type.Object({ providerId: Type.String(), method: AuthMethod }),
+    result: Type.Object({ loginId: Type.String() }),
+  },
+  /** Answers an auth.prompt (a select answers with the option id). */
+  "auth.respond": {
+    params: Type.Object({ loginId: Type.String(), promptId: Type.String(), value: Type.String() }),
+    result: Accepted,
+  },
+  "auth.cancel": { params: Type.Object({ loginId: Type.String() }), result: Accepted },
+  /** Removes the credential saved by sign-in. Environment variables are left alone. */
+  "auth.logout": {
+    params: Type.Object({ providerId: Type.String() }),
+    result: Type.Object({ providers: Type.Array(AuthProviderInfo) }),
+  },
   "db.query": { params: DbQueryRequest, result: Type.Unknown() },
   "db.mutate": { params: DbMutateRequest, result: DbMutateResult },
   "snapshots.list": {
@@ -96,6 +131,9 @@ export const Requests = {
       restored: Type.Array(Type.Object({ table: Type.String(), ids: Type.Array(Type.String()) })),
     }),
   },
+  ...AccountRequests,
+  ...BillingRequests,
+  ...VoiceRequests,
 } as const satisfies Record<string, { params: TSchema; result: TSchema }>;
 
 export type RequestType = keyof typeof Requests;
@@ -172,24 +210,6 @@ export const Events = {
     isError: Type.Boolean(),
     durationMs: Type.Number(),
   }),
-  "approval.request": Type.Object({
-    ...Chat,
-    approvalId: Type.String(),
-    toolCallId: Type.Optional(Type.String()),
-    toolName: Type.String(),
-    title: Type.String(),
-    /** What will happen, in words a farmer understands. */
-    plainLanguage: Type.String(),
-    /** Exact shell command or SQL, when there is one. */
-    command: Type.Optional(Type.String()),
-    risk: Risk,
-  }),
-  "approval.resolved": Type.Object({
-    ...Chat,
-    approvalId: Type.String(),
-    decision: ApprovalDecision,
-    by: Type.Enum(["user", "policy", "abort", "timeout"]),
-  }),
   /** The agent finished and will not continue on its own. */
   "agent.settled": Type.Object({
     ...Chat,
@@ -197,6 +217,22 @@ export const Events = {
     errorMessage: Type.Optional(Type.String()),
   }),
   "db.changed": Type.Object({ table: Type.String(), ids: Type.Array(Type.String()) }),
+  /** A new local UI build passed its checks; a running local UI reloads. */
+  "localUi.updated": LocalUiStatus,
+  "auth.notice": Type.Object({ loginId: Type.String(), notice: AuthNotice }),
+  "auth.prompt": Type.Object({
+    loginId: Type.String(),
+    promptId: Type.String(),
+    prompt: AuthPromptInfo,
+  }),
+  /** A sign-in ended. cancelled is true when the user stopped it. */
+  "auth.finished": Type.Object({
+    loginId: Type.String(),
+    providerId: Type.String(),
+    ok: Type.Boolean(),
+    cancelled: Type.Boolean(),
+    error: Type.Optional(Type.String()),
+  }),
   "sync.status": Type.Object({
     state: SyncState,
     pendingOutbox: Type.Integer(),
@@ -205,9 +241,11 @@ export const Events = {
   }),
   error: Type.Object({
     sessionId: Type.Optional(Type.String()),
-    code: Type.String(),
+    code: ErrorCode,
     message: Type.String(),
   }),
+  ...AccountEvents,
+  ...VoiceEvents,
 } as const satisfies Record<string, TSchema>;
 
 export type EventType = keyof typeof Events;

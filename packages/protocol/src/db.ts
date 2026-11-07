@@ -15,6 +15,7 @@ import { type Static, Type } from "typebox";
 import {
   AnimalInput,
   CameraInput,
+  CameraMapLayout,
   ConnectorInput,
   DeviceInput,
   ObservationKindSchema,
@@ -51,12 +52,22 @@ export const DbQueries = {
     limit: Limit,
   }),
   "cameras.list": Type.Object({}),
+  /** Whether the local video relay (go2rtc) can serve live camera streams. */
+  "cameras.relay": Type.Object({}),
+  "cameraLayout.get": Type.Object({}),
 } as const;
 export type DbQueryName = keyof typeof DbQueries;
 export const DB_QUERY_NAMES = Object.keys(DbQueries) as DbQueryName[];
 export type DbQueryParams<Q extends DbQueryName> = Static<(typeof DbQueries)[Q]>;
 
 export const DbMutations = {
+  "observations.add": Type.Object({
+    animalId: Type.Optional(Type.String()),
+    kind: ObservationKindSchema,
+    ts: Type.String(),
+    valueNum: Type.Optional(Type.Number()),
+    valueJson: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  }),
   "animals.upsert": Type.Object({ animal: AnimalInput }),
   "devices.upsert": Type.Object({ device: DeviceInput }),
   /** Binds a device to an animal. Fails with rule_violation if the animal already wears a wearable. */
@@ -66,6 +77,8 @@ export const DbMutations = {
   "connectors.upsert": Type.Object({ connector: ConnectorInput }),
   "connectors.syncNow": Type.Object({ id: Type.String() }),
   "cameras.upsert": Type.Object({ camera: CameraInput }),
+  /** Replaces the farm's barn-map layout. */
+  "cameraLayout.save": Type.Object({ layout: CameraMapLayout }),
 } as const;
 export type DbMutationName = keyof typeof DbMutations;
 export const DB_MUTATION_NAMES = Object.keys(DbMutations) as DbMutationName[];
@@ -130,6 +143,18 @@ export interface DbQueryResults {
   "connectors.list": { rows: Connector[] };
   "observations.recent": { rows: Observation[] };
   "cameras.list": { rows: Camera[] };
+  "cameras.relay": CameraRelayStatus;
+  "cameraLayout.get": { layout: CameraMapLayout | null };
+}
+
+/**
+ * Live video relay state. Streams are served by Orion at
+ * /camera/<token>/<cameraId>/ws (go2rtc MSE WebSocket) and /camera/<token>/<cameraId>/frame.jpeg.
+ */
+export interface CameraRelayStatus {
+  available: boolean;
+  /** Why the relay is unavailable (e.g. go2rtc binary not found); null when available. */
+  reason: string | null;
 }
 
 export const DbMutateResult = Type.Object({

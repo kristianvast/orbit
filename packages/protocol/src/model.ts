@@ -38,6 +38,9 @@ export const ErrorCode = Type.Enum([
   "internal",
   "timeout",
   "disconnected",
+  "forbidden",
+  "plan_required",
+  "budget_exceeded",
 ]);
 export type ErrorCode = Static<typeof ErrorCode>;
 
@@ -63,7 +66,7 @@ export const SessionSummary = Type.Object({
 });
 export type SessionSummary = Static<typeof SessionSummary>;
 
-export const ToolStatus = Type.Enum(["running", "done", "error", "denied", "aborted"]);
+export const ToolStatus = Type.Enum(["running", "done", "error", "aborted"]);
 export type ToolStatus = Static<typeof ToolStatus>;
 
 export const UserItem = Type.Object({
@@ -112,22 +115,7 @@ export type ToolItem = Static<typeof ToolItem>;
 export type SystemItem = Static<typeof SystemItem>;
 export type TranscriptItem = Static<typeof TranscriptItem>;
 
-// ------------------------------------------------------------------ approvals & settings
-
-/** safe: runs without asking. ask: asks unless always-allowed or mode=auto. always_ask: always asks. */
-export const Risk = Type.Enum(["safe", "ask", "always_ask"]);
-export type Risk = Static<typeof Risk>;
-
-export const ApprovalDecision = Type.Enum(["allow_once", "always_allow", "deny"]);
-export type ApprovalDecision = Static<typeof ApprovalDecision>;
-
-/**
- * ask: prompt for ask + always_ask tiers (default).
- * auto: auto-allow the ask tier, prompt only for always_ask.
- * read_only: deny every non-safe tool call without prompting.
- */
-export const ApprovalMode = Type.Enum(["ask", "auto", "read_only"]);
-export type ApprovalMode = Static<typeof ApprovalMode>;
+// ------------------------------------------------------------------ settings
 
 export const ThinkingLevel = Type.Enum(["off", "minimal", "low", "medium", "high", "xhigh"]);
 export type ThinkingLevel = Static<typeof ThinkingLevel>;
@@ -136,14 +124,11 @@ export const Settings = Type.Object({
   provider: Type.Union([Type.String(), Type.Null()]),
   model: Type.Union([Type.String(), Type.Null()]),
   thinkingLevel: ThinkingLevel,
-  approvalMode: ApprovalMode,
   /** Per provider: whether a key is stored (in the OS keychain) and a masked hint. Never the key. */
   apiKeys: Type.Record(
     Type.String(),
     Type.Object({ configured: Type.Boolean(), hint: Type.Optional(Type.String()) }),
   ),
-  /** Tool names (or rule ids) the farmer chose "always allow" for. */
-  alwaysAllow: Type.Array(Type.String()),
   availableModels: Type.Array(
     Type.Object({ provider: Type.String(), id: Type.String(), name: Type.String() }),
   ),
@@ -154,14 +139,117 @@ export const SettingsUpdate = Type.Object({
   provider: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   model: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   thinkingLevel: Type.Optional(ThinkingLevel),
-  approvalMode: Type.Optional(ApprovalMode),
   /** key null removes the stored key. */
   apiKey: Type.Optional(
     Type.Object({ provider: Type.String(), key: Type.Union([Type.String(), Type.Null()]) }),
   ),
-  alwaysAllow: Type.Optional(Type.Array(Type.String())),
 });
 export type SettingsUpdate = Static<typeof SettingsUpdate>;
+
+// ------------------------------------------------------------------ custom pages
+
+/** A page Orion built in the farm workspace (pages/<id>/index.html), shown in the app nav. */
+export const CustomPage = Type.Object({
+  id: Type.String(),
+  title: Type.String(),
+  description: Type.Optional(Type.String()),
+  /** Server path of the entry file, relative to Orion's HTTP origin. Carries the session token. */
+  path: Type.String(),
+});
+export type CustomPage = Static<typeof CustomPage>;
+
+// ------------------------------------------------------------------ local UI build
+
+/**
+ * none: no usable local build (never built, turned off, or the last build failed).
+ * ready: a checked build exists; the shipped UI hands off to it at startup.
+ * broken: the last hand-off never reported booted, so the shipped UI stays (safe mode).
+ */
+export const LocalUiState = Type.Enum(["none", "ready", "broken"]);
+export type LocalUiState = Static<typeof LocalUiState>;
+
+export const LocalUiStatus = Type.Object({
+  state: LocalUiState,
+  /** Server path of the local build's entry, relative to Orion's HTTP origin. Carries the token. */
+  path: Type.Union([Type.String(), Type.Null()]),
+  builtAt: Type.Union([Type.String(), Type.Null()]),
+  /** git HEAD of the checkout the build came from, when known. */
+  commit: Type.Union([Type.String(), Type.Null()]),
+});
+export type LocalUiStatus = Static<typeof LocalUiStatus>;
+
+// ------------------------------------------------------------------ model provider sign-in
+
+/** oauth: sign in with an account (often a subscription). api_key: paste a key. */
+export const AuthMethod = Type.Enum(["oauth", "api_key"]);
+export type AuthMethod = Static<typeof AuthMethod>;
+
+/** A model provider Orion can sign in to, mirroring Pi's /login list. Never carries secrets. */
+export const AuthProviderInfo = Type.Object({
+  id: Type.String(),
+  name: Type.String(),
+  oauth: Type.Union([
+    Type.Object({
+      name: Type.String(),
+      subscription: Type.Boolean(),
+      label: Type.Optional(Type.String()),
+    }),
+    Type.Null(),
+  ]),
+  apiKey: Type.Union([Type.Object({ name: Type.String() }), Type.Null()]),
+  status: Type.Object({
+    configured: Type.Boolean(),
+    /** How the provider is authenticated when configured. */
+    method: Type.Union([AuthMethod, Type.Null()]),
+    /** stored: saved by sign-in here; environment: an env var or ambient config on this PC. */
+    source: Type.Union([Type.String(), Type.Null()]),
+  }),
+  modelCount: Type.Integer(),
+});
+export type AuthProviderInfo = Static<typeof AuthProviderInfo>;
+
+/** A question a sign-in flow asks; answered with auth.respond. */
+export const AuthPromptInfo = Type.Object({
+  type: Type.Enum(["text", "secret", "select", "manual_code"]),
+  message: Type.String(),
+  placeholder: Type.Optional(Type.String()),
+  options: Type.Optional(
+    Type.Array(
+      Type.Object({
+        id: Type.String(),
+        label: Type.String(),
+        description: Type.Optional(Type.String()),
+      }),
+    ),
+  ),
+});
+export type AuthPromptInfo = Static<typeof AuthPromptInfo>;
+
+/** Progress shown while a sign-in flow runs. */
+export const AuthNotice = Type.Union([
+  Type.Object({
+    type: Type.Literal("info"),
+    message: Type.String(),
+    links: Type.Optional(
+      Type.Array(Type.Object({ url: Type.String(), label: Type.Optional(Type.String()) })),
+    ),
+  }),
+  Type.Object({
+    type: Type.Literal("auth_url"),
+    url: Type.String(),
+    instructions: Type.Optional(Type.String()),
+    /** True when Orion already opened the page in the system browser. */
+    opened: Type.Boolean(),
+  }),
+  Type.Object({
+    type: Type.Literal("device_code"),
+    userCode: Type.String(),
+    verificationUri: Type.String(),
+    expiresInSeconds: Type.Optional(Type.Number()),
+  }),
+  Type.Object({ type: Type.Literal("progress"), message: Type.String() }),
+]);
+export type AuthNotice = Static<typeof AuthNotice>;
 
 // ------------------------------------------------------------------ snapshots & sync
 
@@ -244,5 +332,24 @@ export const CameraInput = Type.Object({
   status: Type.Optional(Type.Enum([...CAMERA_STATUS])),
 });
 export type CameraInput = Static<typeof CameraInput>;
+
+/** One camera tile on the barn map, in world px. Height is derived from w / ar, never stored. */
+export const CameraMapTile = Type.Object({
+  /** Camera id. */
+  i: Type.String({ minLength: 1 }),
+  x: Type.Number(),
+  y: Type.Number(),
+  w: Type.Number({ exclusiveMinimum: 0 }),
+  /** Width / height of the camera frame. */
+  ar: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+});
+export type CameraMapTile = Static<typeof CameraMapTile>;
+
+/** Farm-wide barn-map arrangement of camera tiles (shared through sync, one per farm). */
+export const CameraMapLayout = Type.Object({
+  version: Type.Literal(2),
+  tiles: Type.Array(CameraMapTile, { maxItems: 500 }),
+});
+export type CameraMapLayout = Static<typeof CameraMapLayout>;
 
 export const ObservationKindSchema = Type.Enum([...OBSERVATION_KINDS]);

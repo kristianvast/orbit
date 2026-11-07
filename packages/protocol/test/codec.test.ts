@@ -68,8 +68,8 @@ describe("decodeClientMessage", () => {
       [JSON.stringify({ id: "1", type: "nope" }), /unknown request type/],
       [JSON.stringify({ type: "sessions.list" }), /id/],
       [
-        JSON.stringify({ id: "1", type: "approval.respond", approvalId: "a", decision: "maybe" }),
-        /approval.respond/,
+        JSON.stringify({ id: "1", type: "settings.update", thinkingLevel: "maybe" }),
+        /settings.update/,
       ],
       [JSON.stringify({ id: "1", type: "chat.prompt", sessionId: "s", text: "" }), /chat.prompt/],
     ];
@@ -97,18 +97,16 @@ describe("decodeServerMessage", () => {
         }),
       ).ok,
     ).toBe(false);
-    const ev = encodeEvent("approval.request", {
+    const ev = encodeEvent("tool.start", {
       sessionId: "s",
-      approvalId: "a1",
-      toolName: "bash",
-      title: "Run a command",
-      plainLanguage: "List files in your farm folder",
-      command: "ls",
-      risk: "ask",
+      toolCallId: "t1",
+      name: "bash",
+      label: "Run a command",
+      args: { command: "ls" },
     });
     expect(decodeServerMessage(ev)).toMatchObject({
       ok: true,
-      value: { type: "approval.request", risk: "ask" },
+      value: { type: "tool.start", name: "bash" },
     });
     expect(
       decodeServerMessage(encodeEvent("db.changed", { table: "animals", ids: ["a"] })).ok,
