@@ -5,6 +5,8 @@
 import { sql } from "drizzle-orm";
 import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
+  ANIMAL_LACTATION_STATUS,
+  ANIMAL_REPRODUCTION_STATUS,
   ANIMAL_SEX,
   ANIMAL_STATUS,
   CAMERA_STATUS,
@@ -47,12 +49,20 @@ export const animals = sqliteTable(
     name: text("name"),
     earTagNumber: text("ear_tag_number"),
     nationalId: text("national_id"),
+    /** ICAR ADE identifier scheme (reverse domain) that issued national_id, e.g. "eu.official". */
+    identifierScheme: text("identifier_scheme"),
+    /** Extra ADE identifiers (transponders, herdbook ids...): [{ id, scheme }]. */
+    alternativeIdentifiers: text("alternative_identifiers", { mode: "json" }).$type<
+      { id: string; scheme: string }[]
+    >(),
     breed: text("breed"),
     sex: text("sex", { enum: ANIMAL_SEX }).notNull().default("unknown"),
     /** YYYY-MM-DD */
     birthDate: text("birth_date"),
     groupName: text("group_name"),
     status: text("status", { enum: ANIMAL_STATUS }).notNull().default("active"),
+    reproductionStatus: text("reproduction_status", { enum: ANIMAL_REPRODUCTION_STATUS }),
+    lactationStatus: text("lactation_status", { enum: ANIMAL_LACTATION_STATUS }),
     notes: text("notes"),
     ...syncColumns(),
   },
@@ -159,6 +169,18 @@ export const cameras = sqliteTable(
   (t) => [index("cameras_farm_idx").on(t.farmId)],
 );
 
+export const cameraLayouts = sqliteTable(
+  "camera_layouts",
+  {
+    id: text("id").primaryKey(),
+    layout: text("layout", { mode: "json" }).$type<JsonObject>().notNull(),
+    ...syncColumns(),
+  },
+  (t) => [
+    uniqueIndex("camera_layouts_one_live_per_farm").on(t.farmId).where(sql`${t.deletedAt} is null`),
+  ],
+);
+
 // ---------------------------------------------------------------- local-only tables
 
 /** Local writes waiting to be POSTed to the Core write API, in seq order. */
@@ -220,6 +242,7 @@ export const sqliteSchema = {
   connectors,
   observations,
   cameras,
+  cameraLayouts,
   outbox,
   snapshots,
   syncState,
@@ -234,6 +257,7 @@ export const sqliteSyncedTables = {
   connectors,
   observations,
   cameras,
+  camera_layouts: cameraLayouts,
 } as const;
 
 export type Farm = typeof farms.$inferSelect;

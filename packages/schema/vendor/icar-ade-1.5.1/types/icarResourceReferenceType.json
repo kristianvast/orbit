@@ -1,0 +1,34 @@
+{
+  "description": "Defines a reference to another resource.",
+
+  "type": "object",
+
+  "properties": {
+    "@context": {
+      "type": "string",
+      "description": "Deprecated. Tells us the type of the referenced resource object (eg. icarAnimalCore)."
+    },
+    "@id": {
+      "type": "string",
+      "format": "uri",
+      "description": "Deprecated - use href and identifier. Uniform resource idendentifier (URI) of the referenced resource."
+    },
+    "@type": {
+      "type": "string",
+      "description": "Deprecated - use reltype. Specifies whether this is a single resource Link or a Collection."
+    },
+    "identifier": {
+      "$ref": "../types/icarIdentifierType.json",
+      "description": "Provides the identifier of the referenced resource."
+    },
+    "reltype": {
+      "type": "string",
+      "description": "Defines the relationship between the current resource and the referenced resource. Defined in well-known/relationshipCatalog.md"
+    },
+    "href": {
+      "type": "string",
+      "format": "uri",
+      "description": "Where provided, this is the URI to the referenced resource."
+    }
+  }
+}

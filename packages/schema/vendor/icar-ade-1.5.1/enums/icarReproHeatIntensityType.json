@@ -1,0 +1,13 @@
+{
+  "description": "The intensity of the heat (Very weak,Weak,Normal,Strong,Very strong)",
+
+  "type": "string",
+
+  "enum": [
+    "VeryWeak",
+    "Weak",
+    "Normal",
+    "Strong",
+    "VeryStrong"
+  ]
+}

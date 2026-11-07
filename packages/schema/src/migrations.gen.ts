@@ -27,5 +27,21 @@ export const sqliteMigrations: { tag: string; statements: string[] }[] = [
       "\nCREATE INDEX `snapshots_created_idx` ON `snapshots` (`created_at`);",
       "\nCREATE TABLE `sync_state` (\n\t`key` text PRIMARY KEY NOT NULL,\n\t`value` text NOT NULL,\n\t`updated_at` text NOT NULL\n);\n"
     ]
+  },
+  {
+    "tag": "0001_salty_inertia",
+    "statements": [
+      "CREATE TABLE `camera_layouts` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`layout` text NOT NULL,\n\t`farm_id` text NOT NULL,\n\t`created_at` text NOT NULL,\n\t`updated_at` text NOT NULL,\n\t`deleted_at` text,\n\t`hlc` text NOT NULL,\n\t`origin_device` text NOT NULL\n);\n",
+      "\nCREATE UNIQUE INDEX `camera_layouts_one_live_per_farm` ON `camera_layouts` (`farm_id`) WHERE \"camera_layouts\".\"deleted_at\" is null;"
+    ]
+  },
+  {
+    "tag": "0002_steep_thunderbolts",
+    "statements": [
+      "ALTER TABLE `animals` ADD `identifier_scheme` text;",
+      "\nALTER TABLE `animals` ADD `alternative_identifiers` text;",
+      "\nALTER TABLE `animals` ADD `reproduction_status` text;",
+      "\nALTER TABLE `animals` ADD `lactation_status` text;"
+    ]
   }
 ];

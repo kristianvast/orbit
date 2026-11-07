@@ -10,6 +10,22 @@ export type AnimalSex = (typeof ANIMAL_SEX)[number];
 export const ANIMAL_STATUS = ["active", "sold", "dead"] as const;
 export type AnimalStatus = (typeof ANIMAL_STATUS)[number];
 
+/** ICAR ADE icarAnimalReproductionStatusType, snake_cased. */
+export const ANIMAL_REPRODUCTION_STATUS = [
+  "open",
+  "inseminated",
+  "pregnant",
+  "not_pregnant",
+  "birthed",
+  "do_not_breed",
+  "pregnant_multiple_foetus",
+] as const;
+export type AnimalReproductionStatus = (typeof ANIMAL_REPRODUCTION_STATUS)[number];
+
+/** ICAR ADE icarAnimalLactationStatusType, snake_cased. */
+export const ANIMAL_LACTATION_STATUS = ["dry", "lead", "fresh", "early", "lactating"] as const;
+export type AnimalLactationStatus = (typeof ANIMAL_LACTATION_STATUS)[number];
+
 export const DEVICE_KINDS = [
   "milking_robot",
   "collar",
@@ -69,6 +85,17 @@ export const OBSERVATION_KINDS = [
   "health_event",
   "calving_alert",
   "heat_alert",
+  // Recorded animal events, mapped 1:1 to ICAR ADE event resources (see ./ade.ts).
+  "insemination",
+  "pregnancy_check",
+  "calving",
+  "abortion",
+  "dry_off",
+  "treatment",
+  "arrival",
+  "departure",
+  "birth",
+  "death",
 ] as const;
 export type ObservationKind = (typeof OBSERVATION_KINDS)[number];
 
@@ -93,6 +120,7 @@ export const SYNCED_TABLES = [
   "connectors",
   "observations",
   "cameras",
+  "camera_layouts",
 ] as const;
 export type SyncedTable = (typeof SYNCED_TABLES)[number];
 

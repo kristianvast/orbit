@@ -1,0 +1,39 @@
+{
+  "description": "Core schema for representing an event.",
+
+  "allOf": [
+    {
+      "$ref": "../resources/icarResource.json"
+    },
+    {
+      "type": "object",
+
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier in the source system for this event."
+        },
+        "eventDateTime": {
+          "$ref": "../types/icarDateTimeType.json",
+          "description": "RFC3339 UTC date and time (see https://ijmacd.github.io/rfc3339-iso8601/)."
+        },
+        "traitLabel": {
+          "$ref": "../types/icarTraitLabelIdentifierType.json",
+          "description": "If the event represents a formal trait, identifies the recording system and trait."
+        },
+        "responsible": {
+          "type": "string",
+          "description": "Use if an observation is manually recorded, or an event is carried out or authorised by a person. SHOULD be a person object."
+        },
+        "contemporaryGroup": {
+          "type": "string",
+          "description": "For manually recorded events, record any contemporary group code that would affect statistical analysis."
+        },
+        "remark": {
+          "type": "string",
+          "description": "A comment or remark field for additional user-specified information about the event."
+        }        
+      }
+    }
+  ]
+}

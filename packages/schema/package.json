@@ -12,7 +12,8 @@
     "./hlc": "./src/hlc.ts",
     "./roles": "./src/roles.ts",
     "./local": "./src/local.ts",
-    "./seed": "./src/seed.ts"
+    "./seed": "./src/seed.ts",
+    "./ade": "./src/ade.ts"
   },
   "scripts": {
     "typecheck": "tsc -p . --noEmit",
@@ -23,6 +24,8 @@
     "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "drizzle-kit": "^0.31.11"
   }
 }

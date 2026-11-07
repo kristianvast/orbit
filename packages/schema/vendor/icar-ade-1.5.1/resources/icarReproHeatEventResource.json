@@ -1,0 +1,91 @@
+{
+  "description": "Event for recording heats.",
+
+  "allOf": [
+    {
+      "$ref": "../resources/icarAnimalEventCoreResource.json"
+    },
+    {
+      "type": "object",
+
+      "properties": {
+        "heatDetectionMethod": {
+          "$ref": "../enums/icarReproHeatDetectionMethodType.json"
+        },
+        "certainty": {
+          "$ref": "../enums/icarReproHeatCertaintyType.json"
+        },
+        "commencementDateTime": {
+          "$ref": "../types/icarDateTimeType.json",
+          "description": "RFC3339 UTC date/time when the heat will start (see https://ijmacd.github.io/rfc3339-iso8601/ for format guidance)."
+        },
+        "expirationDateTime": {
+          "$ref": "../types/icarDateTimeType.json",
+          "description": "RFC3339 UTC date/time when the heat will end (see https://ijmacd.github.io/rfc3339-iso8601/ for format guidance)."
+        },
+        "visualDetection": {
+          "type": "object",
+          "description": "Specific info when the heat was visually detected.",
+          "properties": {
+            "heatSigns": {
+              "type": "array",
+              "items": {
+                "$ref": "../enums/icarReproHeatSignType.json",
+                "description": "Array of heat signs."
+              }
+            },
+            "heatIntensity": {
+              "$ref": "../enums/icarReproHeatIntensityType.json"
+            }
+          }
+        },
+        "optimumInseminationWindow": {
+          "type": "array",
+          "description": "Details of the optimum breeding windows",
+          "items": {
+            "$ref": "../types/icarReproHeatWindowType.json"
+          }
+        },
+        "deviceHeatProbability": {
+          "type": "number",
+          "format": "integer",
+          "description": "The manufacturer specific indication for the certainty of the heat"
+        },
+        "heatReportScrSenseTime": {
+          "type": "object",
+          "description": "Specific info when the heat was detected by SenseTime from SCR",
+          "deprecated": true,
+          "properties": {
+            "breedingWindow": {
+              "type": "integer",
+              "description": "Number of hours to AI."
+            },
+            "heatIndex": {
+              "type": "integer",
+              "description": "Gives an indication of the certainty of the heat indication."
+            }
+          }
+        },
+        "heatReportNedapCowControl": {
+          "type": "object",
+          "description": "Specific info when the heat was detected by CowControl from NEDAP",
+          "deprecated": true,
+          "properties": {
+            "expirationDateTime": {
+              "$ref": "../types/icarDateTimeType.json",
+              "description": "RFC3339 UTC date/time when the heat will end (see https://ijmacd.github.io/rfc3339-iso8601/ for format guidance)."
+            },
+            "heatChance": {
+              "type": "integer",
+              "description": "Gives an indication of the certainty of the heat indication."
+            }
+          }
+        },
+        "device": {
+          "$ref": "../types/icarDeviceReferenceType.json",
+          "description": "Optional information about the device used for the measurement."
+        }
+      }
+    }
+  ]
+}

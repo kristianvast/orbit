@@ -1,0 +1,25 @@
+{
+  "description": "Subset of units that are helpful for medicine doses from UN/CEFACT trade facilitation recommendation 20.\nSee https://unece.org/trade/uncefact/cl-recommendations#ui-id-17",
+  
+  "type": "string",
+
+  "enum": [
+    "MLT",
+    "LTR",
+    "MGM",
+    "GRM",
+    "XTU",
+    "XVI",
+    "XAR",
+    "XCQ",
+    "GJ",
+    "GL",
+    "GRN",
+    "L19",
+    "NA",
+    "SYR",
+    "WW",
+    "TU",
+    "EA"
+  ]
+} 

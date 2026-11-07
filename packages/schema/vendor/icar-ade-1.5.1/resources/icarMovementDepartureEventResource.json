@@ -1,0 +1,33 @@
+{
+  "description": "Event for recording live animal departure.",
+
+  "allOf": [{
+      "$ref": "../resources/icarAnimalEventCoreResource.json"
+    },
+    {
+      "type": "object",
+
+      "properties": {
+        "departureKind": {
+          "$ref": "../enums/icarDepartureKindType.json",
+          "description": "Identifies the kind of departure of the animal from the holding."
+        },
+        "departureReason": {
+          "$ref": "../enums/icarDepartureReasonType.json",
+          "description": "Identifies the reason for the departure of the animal from the holding."
+        },
+        "consignment": {
+          "$ref": "../types/icarConsignmentType.json",
+          "description": "Identifies the consignment of the animal from the holding."
+        },
+        "extendedReasons": {
+          "description": "Extended reason codes why this animal has departed.",
+          "type": "array",
+          "items": {
+            "$ref": "../types/icarReasonIdentifierType.json"
+          }
+        }
+      }
+    }
+  ]
+}

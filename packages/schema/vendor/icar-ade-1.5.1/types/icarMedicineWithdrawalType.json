@@ -1,0 +1,17 @@
+{
+    "type": "object",
+    "properties": {
+        "productType": {
+            "$ref": "../enums/icarWithdrawalProductType.json",
+            "description": "Product or food item affected by this withdrawal."
+        },
+        "endDate": {
+            "$ref":"../types/icarDateTimeType.json",
+            "description": "RFC3339 UTC end date of withdrawal calculated based on treatment date and medicine rules (see https://ijmacd.github.io/rfc3339-iso8601/ for format guidance)."
+        },
+        "market" : {
+            "type": "string",
+            "description": "The market to which the withdrawal applies, using a scheme such as au.gov.apvma.esi or au.gov.apvma.whp"
+        }
+    }
+} 

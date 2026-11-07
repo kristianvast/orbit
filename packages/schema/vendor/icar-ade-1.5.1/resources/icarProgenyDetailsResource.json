@@ -1,0 +1,47 @@
+{
+  "description": "Schema for representing progeny details",
+  
+  "allOf": [
+    {
+      "$ref": "../resources/icarAnimalBaseResource.json"
+    },
+    {
+      "type": "object",      
+
+      "properties": {       
+        "identifier": {
+          "$ref": "../types/icarAnimalIdentifierType.json",
+          "description": "Unique animal scheme and identifier combination."
+        },
+        "taggingDate": {
+          "description": "Progeny tagging date in RFC3339 UTC (see https://ijmacd.github.io/rfc3339-iso8601/ for format guidance).",
+          "anyOf": [
+              {"type": "null"},
+              {"$ref": "../types/icarDateTimeType.json"}
+          ]
+        },
+        "birthStatus": {
+          "description": "Birth status of the progeny.",
+          "anyOf": [
+              {"type": "null"},
+              {"$ref": "../enums/icarParturitionBirthStatusType.json"}
+          ]
+        },
+        "birthSize": {
+          "description": "Size of the progeny.",
+          "anyOf": [
+              {"type": "null"},
+              {"$ref": "../enums/icarParturitionBirthSizeType.json"}
+          ]
+        },
+        "birthWeight": {
+          "description": "Weight of the progeny.",
+          "anyOf": [
+              {"type": "null"},
+              {"$ref": "../types/icarMassMeasureType.json"}
+          ]
+        }
+      }
+    }
+  ]
+}

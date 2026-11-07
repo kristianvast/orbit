@@ -1,0 +1,49 @@
+{
+  "description": "Event for recording animal death on farm.",
+
+  "allOf": [{
+      "$ref": "../resources/icarAnimalEventCoreResource.json"
+    },
+    {
+      "type": "object",
+
+      "properties": {
+        "deathReason": {
+          "$ref": "../enums/icarDeathReasonType.json",
+          "description": "Coded reasons for death including disease, parturition complications, consumption by humans or animals."
+        },
+        "explanation": {
+          "type": "string",
+          "description": "Free text explanation of the reason for death."
+        },
+        "disposalMethod": {
+          "$ref": "../enums/icarDeathDisposalMethodType.json",
+          "description": "Coded disposal methods including approved service, consumption by humans or animals, etc."
+        },
+        "disposalOperator": {
+          "type": "string",
+          "description": "Disposal operator official name (should really be schema.org/organization)."
+        },
+        "disposalReference": {
+          "type": "string",
+          "description": "Reference (receipt, docket, or ID) for disposal."
+        },
+        "consignment": {
+          "$ref": "../types/icarConsignmentType.json",
+          "description": "Identifies the consignment of the animal from the holding."
+        },        
+        "deathMethod": {
+          "$ref": "../enums/icarDeathMethodType.json",
+          "description": "Defines the method of death, including an accident, natural causes, or euthanised."
+        },
+        "extendedReasons": {
+          "description": "Extended reason codes why this animal has died.",
+          "type": "array",
+          "items": {
+            "$ref": "../types/icarReasonIdentifierType.json"
+          }
+        }        
+      }
+    }
+  ]
+}

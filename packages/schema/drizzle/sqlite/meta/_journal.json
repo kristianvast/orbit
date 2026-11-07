@@ -8,6 +8,20 @@
       "when": 1793731166667,
       "tag": "0000_majestic_ezekiel",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793902566475,
+      "tag": "0001_salty_inertia",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794060557447,
+      "tag": "0002_steep_thunderbolts",
+      "breakpoints": true
     }
   ]
 }

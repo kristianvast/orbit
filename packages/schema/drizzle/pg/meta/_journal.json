@@ -8,6 +8,20 @@
       "when": 1793731166927,
       "tag": "0000_wise_anthem",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793902566716,
+      "tag": "0001_fast_komodo",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794060557673,
+      "tag": "0002_optimal_johnny_storm",
+      "breakpoints": true
     }
   ]
 }

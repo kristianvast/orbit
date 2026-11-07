@@ -1,0 +1,53 @@
+{
+  "description": "Generic meta data on this event",
+
+  "type": "object",
+
+  "required": [
+    "source",
+    "modified"
+  ],  
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "Source where data is retrieved from. URI  or reverse DNS that identifies the source system."
+    },
+    "sourceId": {
+      "type": "string",
+      "description": "Unique Id within Source (e.g. UUID, IRI, URI, or composite ID if needed) for the resource in the original source system. \n Systems should generate (if needed), store, and return sourceId if at all possible.\nICAR ADE working group intend to make use of metadata, source and sourceId mandatory in the next major release (2.0)."
+    },  
+    "isDeleted": {
+      "type": "boolean",
+      "description": "Boolean value indicating if this resource has been deleted in the source system."
+    },
+    "modified": {
+      "$ref": "../types/icarDateTimeType.json",
+      "description": "RFC3339 UTC date/time of last modification (see https://ijmacd.github.io/rfc3339-iso8601/ for format guidance)."
+    },
+    "created": {
+      "description": "RFC3339 UTC date/time of creation (see https://ijmacd.github.io/rfc3339-iso8601/ for format guidance).",
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "../types/icarDateTimeType.json"}
+      ]
+    },
+    "creator": {
+      "type": "string",
+      "description": "Person or organisation who created the object"
+    },
+    "validFrom": {
+      "description": "RFC3339 UTC start of period when the resource is valid (see https://ijmacd.github.io/rfc3339-iso8601/ for format guidance).",
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "../types/icarDateTimeType.json"}
+      ]
+    },
+    "validTo": {
+      "description": "RFC3339 UTC end of the period when the resoure is valid (see https://ijmacd.github.io/rfc3339-iso8601/ for format guidance).",
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "../types/icarDateTimeType.json"}
+      ]
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "description": "Defines the breeds of the animal by fraction expressed as a denominator and, for each breed, a numerator.",
+
+  "type": "object",
+
+  "required": [
+    "denominator"
+  ],
+
+  "properties": {
+    "denominator": {
+      "type": "integer",
+      "description": "The denominator of breed fractions - for instance 16, 64, or 100."
+    },
+    "fractions": {
+      "type": "array",
+      "description": "The numerators of breed fractions for each breed proportion.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "breed": {
+            "$ref": "icarBreedIdentifierType.json",
+            "description": "The breed for this breed fraction using a scheme and id."
+          },
+          "fraction": {
+            "type": "number",
+            "format": "double",
+            "description": "The proportion of the denominator that this breed comprises."
+          }
+        }
+      }
+    }
+  }
+}

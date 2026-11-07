@@ -16,6 +16,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import {
+  ANIMAL_LACTATION_STATUS,
+  ANIMAL_REPRODUCTION_STATUS,
   ANIMAL_SEX,
   ANIMAL_STATUS,
   CAMERA_STATUS,
@@ -54,11 +56,16 @@ export const animals = pgTable(
     name: text("name"),
     earTagNumber: text("ear_tag_number"),
     nationalId: text("national_id"),
+    identifierScheme: text("identifier_scheme"),
+    alternativeIdentifiers:
+      jsonb("alternative_identifiers").$type<{ id: string; scheme: string }[]>(),
     breed: text("breed"),
     sex: text("sex", { enum: ANIMAL_SEX }).notNull().default("unknown"),
     birthDate: date("birth_date", { mode: "string" }),
     groupName: text("group_name"),
     status: text("status", { enum: ANIMAL_STATUS }).notNull().default("active"),
+    reproductionStatus: text("reproduction_status", { enum: ANIMAL_REPRODUCTION_STATUS }),
+    lactationStatus: text("lactation_status", { enum: ANIMAL_LACTATION_STATUS }),
     notes: text("notes"),
     ...syncColumns(),
   },
@@ -157,6 +164,18 @@ export const cameras = pgTable(
   (t) => [index("cameras_farm_idx").on(t.farmId)],
 );
 
+export const cameraLayouts = pgTable(
+  "camera_layouts",
+  {
+    id: uuid("id").primaryKey(),
+    layout: jsonb("layout").$type<JsonObject>().notNull(),
+    ...syncColumns(),
+  },
+  (t) => [
+    uniqueIndex("camera_layouts_one_live_per_farm").on(t.farmId).where(sql`${t.deletedAt} is null`),
+  ],
+);
+
 export const pgSchema = {
   farms,
   animals,
@@ -165,6 +184,7 @@ export const pgSchema = {
   connectors,
   observations,
   cameras,
+  cameraLayouts,
 };
 
 export const pgSyncedTables = {
@@ -175,6 +195,7 @@ export const pgSyncedTables = {
   connectors,
   observations,
   cameras,
+  camera_layouts: cameraLayouts,
 } as const;
 
 export type PgFarm = typeof farms.$inferSelect;

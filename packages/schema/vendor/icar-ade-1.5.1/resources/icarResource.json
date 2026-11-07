@@ -1,0 +1,32 @@
+{
+  "description": "Base class for a resource, defining self-link and meta data. Resources should use AllOf to incorporate this class.",
+
+  "type": "object",
+
+  "discriminator": {
+    "propertyName": "resourceType"
+  },
+
+  "required": [
+    "resourceType"
+  ],
+
+  "properties": {
+    "resourceType" : {
+      "type": "string",
+      "description": "Uniform resource identifier (URI) or shortname of the logical resourceType. The ResourceType catalog defines the set of allowed resourceTypes."
+    },
+    "@self": {
+      "type": "string",
+      "description": "Uniform resource identifier (URI) of the resource (rel=self)."
+    },
+    "meta": {
+      "$ref": "../types/icarMetaDataType.json",
+      "description": "Meta-data for the resource. Mandatory if you wish to support synchronisation.\n Systems should maintain and provide meta data if at all possible.\nICAR ADE working group intend meta to be required in the next major release of ADE."
+    },
+    "location": {
+      "$ref": "../types/icarLocationIdentifierType.json",
+      "description": "Unique location scheme and identifier combination."
+    }
+  }
+}
