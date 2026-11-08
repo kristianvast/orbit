@@ -1,0 +1,37 @@
+diff --git a/dist/api/openai-completions.js b/dist/api/openai-completions.js
+index 12ec37eaf976340d2b29234dab2f17964ed56c91..9ac6199071984ef4223bb2e47d3800333379a1f9 100644
+--- a/dist/api/openai-completions.js
++++ b/dist/api/openai-completions.js
+@@ -427,6 +427,12 @@ export const stream = (model, context, options) => {
+                     if (choice?.delta?.tool_calls) {
+                         for (const toolCall of choice.delta.tool_calls) {
+                             const { block, state } = ensureToolCallBlock(toolCall);
++                            // Gemini (OpenAI-compatible endpoint) attaches a thought signature to tool calls
++                            // that must be sent back with the call on the next turn.
++                            const googleThoughtSignature = toolCall.extra_content?.google?.thought_signature;
++                            if (typeof googleThoughtSignature === "string" && googleThoughtSignature.length > 0) {
++                                block.thoughtSignature = googleThoughtSignature;
++                            }
+                             if (!block.id && toolCall.id) {
+                                 block.id = toolCall.id;
+                                 toolCallBlocksById.set(toolCall.id, block);
+@@ -1021,7 +1027,7 @@ export function convertMessages(model, context, compat, options) {
+                             },
+                         };
+                     }
+-                    return {
++                    const functionCall = {
+                         id: tc.id,
+                         type: "function",
+                         function: {
+@@ -1029,6 +1035,10 @@ export function convertMessages(model, context, compat, options) {
+                             arguments: JSON.stringify(tc.arguments),
+                         },
+                     };
++                    if (tc.thoughtSignature && !parseLegacyEncryptedReasoningDetail(tc.thoughtSignature)) {
++                        functionCall.extra_content = { google: { thought_signature: tc.thoughtSignature } };
++                    }
++                    return functionCall;
+                 });
+             }
+             if (preservedReasoningDetails) {

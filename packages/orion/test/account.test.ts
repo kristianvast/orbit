@@ -31,6 +31,8 @@ let db: CoreDb;
 let core: ReturnType<typeof Bun.serve>;
 let coreUrl: string;
 let upstream: { model: unknown; auth: string | null }[] = [];
+/** When set, answers model requests instead of the default SSE reply (one call per request). */
+let scriptedUpstream: ((body: { messages: Record<string, unknown>[] }) => Response) | null = null;
 const mail = createLogMailer(() => {});
 
 beforeAll(async () => {
@@ -50,10 +52,9 @@ beforeAll(async () => {
           headers: { "electric-handle": "h1", "electric-offset": "0_0", "electric-up-to-date": "" },
         });
       }
-      upstream.push({
-        model: JSON.parse(String(init?.body)).model,
-        auth: new Headers(init?.headers).get("authorization"),
-      });
+      const body = JSON.parse(String(init?.body));
+      upstream.push({ model: body.model, auth: new Headers(init?.headers).get("authorization") });
+      if (scriptedUpstream) return scriptedUpstream(body);
       return new Response(new Blob(SSE).stream(), {
         headers: { "content-type": "text/event-stream" },
       });
@@ -73,6 +74,7 @@ let client: OrionClient | null = null;
 
 beforeEach(async () => {
   upstream = [];
+  scriptedUpstream = null;
   dir = tempDir();
   await db.execute(
     sql`TRUNCATE farms, animals, devices, device_bindings, connectors, observations, cameras, api_tokens, farm_budgets, llm_usage, farm_invites, farm_members, user_sessions, email_tokens, login_failures, farm_subscriptions, billing_customers, users CASCADE`,
@@ -293,8 +295,111 @@ describe("Orion account", () => {
       (e) => e.sessionId === session.id && e.item.kind === "assistant",
       15_000,
     );
+    const settled = waitFor(c, "agent.settled", (e) => e.sessionId === session.id, 15_000);
     await c.request("chat.prompt", { sessionId: session.id, text: "How is the herd?" });
     expect((await reply).item.text).toBe("Hello from the cloud");
+    expect((await settled).reason).toBe("completed");
     expect(await db.select().from(llmUsage)).toMatchObject([{ farmId: localFarmId }]);
+  });
+
+  test("Gemini thought signatures on tool calls go back to the model on the next turn", async () => {
+    const sse = (chunks: object[]) =>
+      new Response(
+        new Blob([
+          ...chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`),
+          "data: [DONE]\n\n",
+        ]).stream(),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    const followUps: unknown[] = [];
+    scriptedUpstream = (body) => {
+      const toolTurn = body.messages.find((m) => m.role === "assistant" && m.tool_calls);
+      if (!toolTurn) {
+        return sse([
+          {
+            id: "g1",
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  role: "assistant",
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call-1",
+                      type: "function",
+                      function: { name: "herd_query", arguments: "{}" },
+                      extra_content: { google: { thought_signature: "sig-from-gemini" } },
+                    },
+                  ],
+                },
+                finish_reason: null,
+              },
+            ],
+          },
+          {
+            id: "g1",
+            choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+            usage: { prompt_tokens: 5, completion_tokens: 2 },
+          },
+        ]);
+      }
+      followUps.push((toolTurn.tool_calls as Record<string, unknown>[])[0]);
+      // Gemini rejects a replayed tool call without its signature, exactly like this.
+      const signed = (
+        toolTurn.tool_calls as { extra_content?: { google?: { thought_signature?: string } } }[]
+      )[0]?.extra_content?.google?.thought_signature;
+      if (signed !== "sig-from-gemini") {
+        return Response.json(
+          { error: { message: "Function call is missing a thought_signature" } },
+          { status: 400 },
+        );
+      }
+      return sse([
+        {
+          id: "g2",
+          choices: [
+            {
+              index: 0,
+              delta: { role: "assistant", content: "28 animals, 4 pregnant" },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: "g2",
+          choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+          usage: { prompt_tokens: 9, completion_tokens: 6 },
+        },
+      ]);
+    };
+    const c = await boot();
+    const farmId = c.server?.farmId as string;
+    await c.request("account.register", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    await db.execute(sql`
+      INSERT INTO farm_subscriptions (farm_id, plan, interval, status)
+      VALUES (${farmId}, 'pen', 'month', 'active')
+    `);
+    const { session } = await c.request("sessions.create", {});
+    const reply = waitFor(
+      c,
+      "message.end",
+      (e) => e.sessionId === session.id && e.item.kind === "assistant" && e.item.text.length > 0,
+      15_000,
+    );
+    const settled = waitFor(c, "agent.settled", (e) => e.sessionId === session.id, 15_000);
+    await c.request("chat.prompt", {
+      sessionId: session.id,
+      text: "How many animals, and which are pregnant?",
+    });
+    expect((await reply).item.text).toBe("28 animals, 4 pregnant");
+    expect((await settled).reason).toBe("completed");
+    expect(followUps).toMatchObject([
+      { id: "call-1", extra_content: { google: { thought_signature: "sig-from-gemini" } } },
+    ]);
   });
 });
