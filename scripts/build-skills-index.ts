@@ -3,7 +3,7 @@
 // keywords. Tests, lockfiles and node_modules are not published.
 // Usage: bun scripts/build-skills-index.ts [--check]
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 
 const SKIP = /(^|\/)(node_modules|bun\.lock|[^/]+\.test\.ts|fixtures)(\/|$)/;
 
@@ -11,7 +11,8 @@ function files(dir: string, root = dir): string[] {
   return readdirSync(dir)
     .flatMap((name) => {
       const path = join(dir, name);
-      const rel = relative(root, path);
+      // Catalog paths are URL paths, so Windows separators become "/".
+      const rel = relative(root, path).split(sep).join("/");
       if (SKIP.test(rel)) return [];
       return statSync(path).isDirectory() ? files(path, root) : [rel];
     })
