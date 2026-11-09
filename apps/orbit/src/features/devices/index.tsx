@@ -1,7 +1,16 @@
 import type { AnimalListItem, DeviceInput, DeviceListItem } from "@orbit/protocol";
 import type { Connector, DeviceKind, DeviceStatus } from "@orbit/schema";
 import { isWearableKind } from "@orbit/schema";
-import { AlertTriangle, Battery, Link2, Plus, RefreshCw, Sparkles, Unlink } from "lucide-react";
+import {
+  AlertTriangle,
+  Battery,
+  KeyRound,
+  Link2,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Unlink,
+} from "lucide-react";
 import { createElement, type FormEvent, Fragment, type ReactNode, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -537,6 +546,96 @@ function AddDeviceDialog({ open, onClose, onSaved }: AddDeviceDialogProps) {
   );
 }
 
+export interface ConnectorPasswordDialogProps {
+  connector: Connector | null;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+/** Sends the password once over db.mutate; Orion keeps it in the OS keychain, never in the database. */
+export function ConnectorPasswordDialog({
+  connector,
+  onClose,
+  onSaved,
+}: ConnectorPasswordDialogProps) {
+  const t = useT();
+  const { client } = useOrion();
+  const { pushToast } = useToast();
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const name = connector ? (connector.name ?? formatVendorLabel(t, connector.vendor)) : "";
+
+  const close = () => {
+    setPassword("");
+    onClose();
+  };
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!client || !connector || !password) return;
+    setSaving(true);
+    try {
+      await client.mutate("connectors.upsert", {
+        connector: {
+          id: connector.id,
+          vendor: connector.vendor,
+          kind: connector.kind,
+          name: connector.name,
+          secret: password,
+        },
+      });
+      pushToast({ title: t("devices.password.toast.saved"), description: name, tone: "ok" });
+      setPassword("");
+      onSaved();
+    } catch (err) {
+      pushToast({
+        title: t("devices.password.toast.error"),
+        description: err instanceof Error ? err.message : String(err),
+        tone: "danger",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={connector !== null}
+      onClose={close}
+      title={t("devices.password.title", { name })}
+      description={t("devices.password.description")}
+      footer={
+        <>
+          <Button variant="secondary" onClick={close} data-testid="connector-password-cancel">
+            {t("devices.common.cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            type="submit"
+            form="connector-password-form"
+            loading={saving}
+            disabled={!password}
+            data-testid="connector-password-save"
+          >
+            {t("devices.password.save")}
+          </Button>
+        </>
+      }
+    >
+      <form id="connector-password-form" onSubmit={(e) => void save(e)}>
+        <Input
+          label={t("devices.password.label")}
+          type="password"
+          autoComplete="new-password"
+          data-testid="connector-password-input"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      </form>
+    </Dialog>
+  );
+}
+
 export interface DevicesPageProps {
   initialTab?: "devices" | "connections";
 }
@@ -552,6 +651,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
   const [addDeviceOpen, setAddDeviceOpen] = useState(false);
   const [syncingConnectorId, setSyncingConnectorId] = useState<string | null>(null);
   const [togglingConnectorId, setTogglingConnectorId] = useState<string | null>(null);
+  const [passwordConnector, setPasswordConnector] = useState<Connector | null>(null);
 
   const {
     data: devicesData,
@@ -1256,6 +1356,15 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                             : t("devices.connector.turnOn")}
                         </Button>
                         <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<KeyRound size={14} />}
+                          data-testid={`connector-password-${conn.vendor}`}
+                          onClick={() => setPasswordConnector(conn)}
+                        >
+                          {t("devices.connector.password")}
+                        </Button>
+                        <Button
                           variant="primary"
                           size="sm"
                           icon={<RefreshCw size={14} />}
@@ -1273,6 +1382,15 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
               </div>
             </Card>
           ) : null}
+
+          <ConnectorPasswordDialog
+            connector={passwordConnector}
+            onClose={() => setPasswordConnector(null)}
+            onSaved={() => {
+              setPasswordConnector(null);
+              void refetchConnectors();
+            }}
+          />
 
           <Card
             variant="elevated"

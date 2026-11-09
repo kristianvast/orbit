@@ -174,6 +174,14 @@ export const devices: Catalog<typeof en> = {
   "connector.lastSync": "Sist synkronisert: {time}",
   "connector.turnOff": "Slå av",
   "connector.turnOn": "Slå på",
+  "connector.password": "Passord",
+  "password.title": "Passord for {name}",
+  "password.description":
+    "Lagres i datamaskinens sikre nøkkelring og brukes bare av denne koblingen. Orion ser det aldri.",
+  "password.label": "Passord",
+  "password.save": "Lagre passord",
+  "password.toast.saved": "Passordet er lagret",
+  "password.toast.error": "Kunne ikke lagre passordet",
   "connector.syncNow": "Synkroniser nå",
 
   "connectNew.title": "Koble til noe nytt",

@@ -172,6 +172,14 @@ export const devices = {
   "connector.turnOff": "Turn off",
   "connector.turnOn": "Turn on",
   "connector.syncNow": "Sync now",
+  "connector.password": "Password",
+  "password.title": "Password for {name}",
+  "password.description":
+    "Stored in this computer's secure keychain and used only by this connector. Orion never sees it.",
+  "password.label": "Password",
+  "password.save": "Save password",
+  "password.toast.saved": "Password saved",
+  "password.toast.error": "Could not save the password",
 
   "connectNew.title": "Connect something new",
   "connectNew.subtitle":
