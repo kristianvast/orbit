@@ -1,6 +1,6 @@
 // Deterministic demo farm used by `orion --seed`, the UI in browser dev mode and e2e tests.
 // 24 cattle (16 dairy, 8 beef), 4 horses, a milking robot, one wearable per tagged animal
-// (collar OR bolus OR ear tag sensor), 3 cameras, 4 connectors and 7 days of observations with
+// (collar OR bolus OR ear tag sensor), 3 cameras, 1 connector (generic CSV) and 7 days of observations with
 // a heat alert, a calving alert and a health event.
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -204,7 +204,6 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
     return row;
   };
   const robot = mkDevice("milking_robot", "Lely", "Astronaut A5", "LA5-0001", null);
-  robot.connection = { host: "192.168.1.20", connector: "lely" };
   // Wearables: collars on milking cows 0-9, boluses on cows 10-15, ear tag sensors on beef 0-5.
   const collars = dairy
     .slice(0, 10)
@@ -282,24 +281,6 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
 
   const connectorRows = [
     {
-      vendor: "lely" as const,
-      kind: "local_api" as const,
-      name: "Lely Horizon",
-      config: { host: "192.168.1.20" },
-    },
-    {
-      vendor: "smaxtec" as const,
-      kind: "cloud_api" as const,
-      name: "smaXtec Messenger",
-      config: { credentialRef: "orbit/connector/smaxtec" },
-    },
-    {
-      vendor: "cowmanager" as const,
-      kind: "cloud_api" as const,
-      name: "CowManager",
-      config: { credentialRef: "orbit/connector/cowmanager" },
-    },
-    {
       vendor: "generic_csv" as const,
       kind: "file_import" as const,
       name: "Herd register CSV",
@@ -329,7 +310,7 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
           ts: at(day * DAY + (24 - hour) * 3_600_000),
           valueNum: Math.round((9 + rand() * 5) * 10) / 10,
           valueJson: { unit: "kg" },
-          source: "connector:lely",
+          source: "demo",
         });
       }
       push({
@@ -339,7 +320,7 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
         ts: at(day * DAY),
         valueNum: Math.round(480 + rand() * 120),
         valueJson: { unit: "min/day" },
-        source: "connector:nedap",
+        source: "demo",
       });
       push({
         animalId: cow.id,
@@ -348,7 +329,7 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
         ts: at(day * DAY),
         valueNum: Math.round(300 + rand() * 200),
         valueJson: { unit: "index" },
-        source: "connector:nedap",
+        source: "demo",
       });
     });
     dairy.slice(10).forEach((cow, i) => {
@@ -361,7 +342,7 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
           ts: at(day * DAY + h * 3_600_000),
           valueNum: spike ? 40.4 : Math.round((38.4 + rand() * 0.6) * 10) / 10,
           valueJson: { unit: "C" },
-          source: "connector:smaxtec",
+          source: "demo",
         });
       }
     });
@@ -373,7 +354,7 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
         ts: at(day * DAY),
         valueNum: Math.round(200 + rand() * 250),
         valueJson: { unit: "index" },
-        source: "connector:cowmanager",
+        source: "demo",
       });
     });
   }
@@ -398,7 +379,7 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
       severity: "info",
       message: "Activity spike consistent with heat; best insemination window in 6-12 h",
     },
-    source: "connector:nedap",
+    source: "demo",
   });
   push({
     animalId: dairy[11]?.id,
@@ -407,7 +388,7 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
     ts: at(23 * 3_600_000),
     valueNum: 40.4,
     valueJson: { severity: "warning", message: "Body temperature 40.4 C" },
-    source: "connector:smaxtec",
+    source: "demo",
   });
   push({
     animalId: dairy[12]?.id,

@@ -16,7 +16,9 @@ test("seedDemoFarm creates the demo farm and respects the one-wearable rule", ()
   expect(all.filter((a) => a.species === "cattle")).toHaveLength(24);
   expect(all.filter((a) => a.species === "horse")).toHaveLength(4);
   expect(db.select().from(cameras).all()).toHaveLength(3);
-  expect(db.select().from(connectors).all()).toHaveLength(4);
+  expect(db.select({ vendor: connectors.vendor }).from(connectors).all()).toEqual([
+    { vendor: "generic_csv" },
+  ]);
   expect(db.select().from(devices).where(eq(devices.kind, "milking_robot")).all()).toHaveLength(1);
 
   const active = db
