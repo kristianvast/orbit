@@ -2,9 +2,9 @@
 
 **Status:** Early development. Interfaces, database tables, and sync endpoints may change before the first release.
 
-Orbit is an open-source desktop application for livestock farms raising cattle (dairy and beef) and horses. A farmer installs it on a Windows, macOS, or Linux PC on the farm, such as the management computer next to a milking robot.
+Orbit is an open-source desktop application for livestock farms raising cattle (dairy and beef) and horses. You install it on a Windows, macOS, or Linux PC on the farm, talk to **Orion**, and Orbit grows the screens your farm needs.
 
-Inside the app lives **Orion**, an AI agent that knows your herd, reads your sensors, finds cameras on your local network, and writes new connectors or features right on your machine. Every change Orion makes is saved in an invisible local snapshot so you can undo it with one click, and Orion explains risky steps and asks you in the chat before taking them.
+A fresh install starts minimal with **Home**, **Ask Orion** (chat and voice), and **Settings**. Built-in screens for **Cows & Horses** (`herd`), **Sensors & Robots** (`devices`), and **Cameras** (`cameras`) start disabled and turn on when Orion enables them with `orbit_modules`, when data for that area first appears, or when you toggle them in Settings. For anything else, Orion builds custom pages in your farm workspace (`pages/<id>/index.html`) or edits a local copy of the Orbit UI (`local_ui_build`). Every change Orion makes is saved in a local snapshot so you can undo it with one click, and Orion explains risky steps and asks in the chat before taking them.
 
 ## The three names
 
@@ -20,7 +20,7 @@ Inside the app lives **Orion**, an AI agent that knows your herd, reads your sen
 - **Connect sensors and robots:** Pull data from milking robots (Lely, DeLaval), wearables (Allflex collars, smaXtec boluses, CowManager ear tag sensors), scales, or custom CSV and XML exports.
 - **Enforce real barn rules:** An animal wears a collar OR a bolus OR an ear tag sensor, never several at once. Orbit enforces at most one active wearable sensor binding per animal across the UI, the database schema, and cloud sync.
 - **Discover local cameras:** Probe your barn LAN for ONVIF cameras without sending credentials over the wire or storing passwords in the database.
-- **Build custom tools with Orion:** Ask Orion to scaffold a connector for a local file export or write a script in your farm workspace. Every workspace edit is backed by a local snapshot you can revert.
+- **Start minimal and grow with Orion:** Turn on built-in Herd, Devices, and Cameras modules only when your farm uses them, or ask Orion to build custom pages, connectors, and scripts in your farm workspace. Every workspace and database edit is backed by a local snapshot you can revert.
 
 ## Quick start for developers
 

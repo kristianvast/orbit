@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
 import { Button, Dialog, useToast } from "../../design";
 import { type MessageKey, useT } from "../../i18n";
 import { useOrion } from "../../lib/orion";
@@ -119,6 +119,13 @@ export default function ChatPage() {
   const { pushToast } = useToast();
   const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const statePrefill =
+    typeof (location.state as { prefill?: unknown } | null)?.prefill === "string"
+      ? ((location.state as { prefill: string }).prefill ?? "")
+      : typeof (location.state as { prompt?: unknown } | null)?.prompt === "string"
+        ? ((location.state as { prompt: string }).prompt ?? "")
+        : "";
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
@@ -126,7 +133,9 @@ export default function ChatPage() {
   const [chatState, dispatch] = useReducer(chatReducer, undefined, () =>
     createInitialChatState(null),
   );
-  const [composerText, setComposerText] = useState(() => searchParams.get("prompt") ?? "");
+  const [composerText, setComposerText] = useState(
+    () => searchParams.get("prompt") ?? statePrefill,
+  );
   const [sendingPrompt, setSendingPrompt] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -156,15 +165,22 @@ export default function ChatPage() {
     [setSearchParams],
   );
 
+  // `?prompt=...&send=1` (Home and "Ask Orion to add it") sends once Orion is connected.
+  const [autoSend, setAutoSend] = useState<string | null>(null);
+
   useEffect(() => {
     const promptParam = searchParams.get("prompt");
     if (promptParam?.trim()) {
       setComposerText(promptParam);
+      if (searchParams.get("send") === "1") setAutoSend(promptParam);
       const next = new URLSearchParams(searchParams);
       next.delete("prompt");
+      next.delete("send");
       setSearchParams(next, { replace: true });
+    } else if (statePrefill.trim()) {
+      setComposerText(statePrefill);
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, statePrefill]);
 
   const upsertSession = useCallback((session: SessionSummary) => {
     setSessions((prev) => {
@@ -329,6 +345,14 @@ export default function ChatPage() {
       if (mode === "prompt") setSendingPrompt(false);
     }
   };
+  const sendRef = useRef(send);
+  sendRef.current = send;
+
+  useEffect(() => {
+    if (!autoSend || !client || connState !== "open") return;
+    setAutoSend(null);
+    void sendRef.current("prompt", autoSend);
+  }, [autoSend, client, connState]);
 
   const stopRun = async () => {
     if (!client || !chatState.sessionId) return;

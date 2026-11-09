@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { ExtensionToolContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type { AnimalListItem } from "@orbit/protocol";
+import { type AnimalListItem, MODULE_IDS } from "@orbit/protocol";
 import {
   ANIMAL_SEX,
   ANIMAL_STATUS,
@@ -14,6 +14,7 @@ import { RepoError, type WearableViolation } from "../db/repo";
 import type { ConnectorSource } from "../services/connectors";
 import type { FarmService } from "../services/farm";
 import type { LocalUiService } from "../services/local-ui";
+import { describeModules, type ModulesStore } from "../services/modules";
 import type { SkillService } from "../services/skills";
 import { forgetFacts, MEMORY_SCOPES, rememberFact } from "./memory";
 
@@ -96,11 +97,13 @@ export function createFarmTools(
   farm: FarmService,
   localUi: LocalUiService,
   skills: SkillService | null = null,
+  modules: ModulesStore | null = null,
 ): ToolDefinition[] {
   const repo = farm.repo;
   const skillTools = skills ? createSkillTools(farm, skills) : [];
   return [
     ...skillTools,
+    ...(modules ? [createModulesTool(modules)] : []),
     tool({
       name: "herd_query",
       label: "Look up the herd",
@@ -464,6 +467,34 @@ export function createFarmTools(
   ];
 }
 
+function createModulesTool(modules: ModulesStore): ToolDefinition {
+  return tool({
+    name: "orbit_modules",
+    label: "Orbit screens",
+    description:
+      'List, enable or disable Orbit\'s built-in screens: "herd" (animal records), "devices" (sensors and robots), "cameras". Orbit starts with only Home, Chat and Settings; enable a module when the farmer starts using that area. Disabling only hides the screen; no data is deleted.',
+    parameters: Type.Object({
+      action: Type.Enum(["list", "enable", "disable"]),
+      id: Opt(Type.Enum([...MODULE_IDS])),
+    }),
+    run(p) {
+      if (p.action === "list") {
+        const state = modules.list();
+        return text(`Orbit modules:\n${describeModules(state)}`, state);
+      }
+      if (!p.id)
+        return text(`Not done: say which module (id: ${MODULE_IDS.join(", ")}).`, {}, true);
+      const was = modules.enabled(p.id);
+      const state = p.action === "enable" ? modules.enable(p.id, "orion") : modules.disable(p.id);
+      const changed = was !== (p.action === "enable");
+      const head = changed
+        ? `${p.action === "enable" ? "Enabled" : "Disabled"} the ${p.id} module.`
+        : `The ${p.id} module was already ${was ? "on" : "off"}.`;
+      return text(`${head}\nOrbit modules:\n${describeModules(state)}`, state);
+    },
+  });
+}
+
 function createSkillTools(farm: FarmService, skills: SkillService): ToolDefinition[] {
   return [
     tool({
@@ -514,6 +545,7 @@ export const FARM_TOOL_NAMES = [
   "devices_list",
   "device_bind",
   "observations_query",
+  "orbit_modules",
   "skill_search",
   "skill_install",
   "connectors_list",

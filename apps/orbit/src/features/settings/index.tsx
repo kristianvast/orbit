@@ -15,10 +15,11 @@ import { Badge, Button, Card, EmptyState, Select, Skeleton, useToast } from "../
 import { isLocale, LOCALE_NAMES, LOCALES, type MessageKey, useI18n } from "../../i18n";
 import { useOrion, useOrionEvent } from "../../lib/orion";
 import { AccountCard, AccountSection, BillingSection } from "./AccountCard";
+import { OrbitModulesCard } from "./OrbitModulesCard";
 import { ProvidersCard } from "./ProvidersCard";
 import { YourOrbitCard } from "./YourOrbitCard";
 
-export { AccountCard, AccountSection, BillingSection };
+export { AccountCard, AccountSection, BillingSection, OrbitModulesCard };
 
 const THINKING_OPTIONS: { value: ThinkingLevel; labelKey: MessageKey }[] = [
   { value: "off", labelKey: "settings.thinking.off" },
@@ -509,6 +510,8 @@ export default function SettingsPage() {
           </ul>
         )}
       </Card>
+
+      <OrbitModulesCard />
 
       <YourOrbitCard />
 

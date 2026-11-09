@@ -1,15 +1,17 @@
-import type {
-  AuthProviderInfo,
-  ConnectionState,
-  OrionClient,
-  RequestParams,
-  RequestResult,
-  RequestType,
-  ServerEvent,
-  SessionSummary,
-  Settings,
-  SnapshotSummary,
-  ToolItem,
+import {
+  type AuthProviderInfo,
+  type ConnectionState,
+  MODULE_IDS,
+  type ModulesState,
+  type OrionClient,
+  type RequestParams,
+  type RequestResult,
+  type RequestType,
+  type ServerEvent,
+  type SessionSummary,
+  type Settings,
+  type SnapshotSummary,
+  type ToolItem,
 } from "@orbit/protocol";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
@@ -84,6 +86,15 @@ function createMockClient(
       modelCount: 7,
     },
   ];
+
+  let modulesState: ModulesState = {
+    modules: MODULE_IDS.map((id) => ({
+      id,
+      enabled: false,
+      enabledAt: null,
+      enabledBy: null,
+    })),
+  };
 
   let snapshots: SnapshotSummary[] = [
     {
@@ -226,6 +237,28 @@ function createMockClient(
         case "auth.respond":
         case "auth.cancel":
           return { accepted: true } as RequestResult<T>;
+        case "modules.list":
+          return modulesState as RequestResult<T>;
+        case "modules.enable": {
+          const p = params as RequestParams<"modules.enable">;
+          modulesState = {
+            modules: modulesState.modules.map((m) =>
+              m.id === p.moduleId
+                ? { ...m, enabled: true, enabledAt: "2026-11-09T09:00:00.000Z", enabledBy: "user" }
+                : m,
+            ),
+          };
+          return modulesState as RequestResult<T>;
+        }
+        case "modules.disable": {
+          const p = params as RequestParams<"modules.disable">;
+          modulesState = {
+            modules: modulesState.modules.map((m) =>
+              m.id === p.moduleId ? { ...m, enabled: false, enabledAt: null, enabledBy: null } : m,
+            ),
+          };
+          return modulesState as RequestResult<T>;
+        }
         default:
           throw new Error(`Unhandled request: ${type}`);
       }

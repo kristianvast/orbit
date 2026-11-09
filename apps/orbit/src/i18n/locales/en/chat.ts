@@ -81,6 +81,7 @@ export const chat = {
   "tool.devicesList": "List sensors & equipment",
   "tool.deviceBind": "Put sensor on animal",
   "tool.observationsQuery": "Look at sensor data",
+  "tool.orbitModules": "Update Orbit screens",
   "tool.connectorsList": "List data connectors",
   "tool.connectorScaffold": "Create a new connector",
   "tool.connectorRun": "Run connector sync",

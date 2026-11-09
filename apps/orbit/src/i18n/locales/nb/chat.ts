@@ -82,6 +82,7 @@ export const chat: Catalog<typeof en> = {
   "tool.devicesList": "Vis sensorer og utstyr",
   "tool.deviceBind": "Sett sensor på dyr",
   "tool.observationsQuery": "Se på sensordata",
+  "tool.orbitModules": "Oppdater Orbit-skjermer",
   "tool.connectorsList": "Vis datatilkoblinger",
   "tool.connectorScaffold": "Lag en ny tilkobling",
   "tool.connectorRun": "Synkroniser tilkobling",

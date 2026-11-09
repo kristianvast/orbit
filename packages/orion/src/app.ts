@@ -39,6 +39,7 @@ import {
 } from "./services/camera-proxy";
 import { FarmService } from "./services/farm";
 import { LOCAL_UI_PREFIX, LocalUiService } from "./services/local-ui";
+import { liveRowsIn, ModulesStore } from "./services/modules";
 import { listPages, PAGE_SDK, PAGES_DIR, resolvePageFile } from "./services/pages";
 import { Go2rtcRelay } from "./services/relay";
 import { DEFAULT_SKILLS_URL, SkillService } from "./services/skills";
@@ -110,7 +111,14 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       }
     }
   };
-  repo.onChange((table, ids) => emit("db.changed", { table, ids }));
+  const modules = new ModulesStore(config.dataDir, liveRowsIn(repo.db), (state) =>
+    emit("modules.updated", state),
+  );
+  const dbChanged = (table: string, ids: string[]) => {
+    emit("db.changed", { table, ids });
+    modules.noticeChange(table);
+  };
+  repo.onChange(dbChanged);
 
   const resources = materializeResources(config.dataDir);
   const farm = new FarmService(repo, secrets, workspace.dir, resources.connectorTemplateDir);
@@ -131,7 +139,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     resourcesDir: resources.dir,
     repo,
     settings,
-    tools: [...createFarmTools(farm, localUi, skills), createComputerTool()],
+    tools: [...createFarmTools(farm, localUi, skills, modules), createComputerTool()],
     emit,
     mockModel: config.mockModel,
     gatewayUrl: config.gatewayUrl,
@@ -148,7 +156,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     deviceName: `Orbit on ${hostname()}`,
     onStatus: (status) => emit("account.updated", status),
     onSync: (status) => emit("sync.status", status),
-    onRemoteChange: (table, ids) => emit("db.changed", { table, ids }),
+    onRemoteChange: dbChanged,
   });
   farm.guard = (mutation) => account.assertCanMutate(mutation);
   await account.start();
@@ -312,6 +320,12 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
         return localUi.booted();
       case "localUi.disable":
         return localUi.disable();
+      case "modules.list":
+        return modules.list();
+      case "modules.enable":
+        return modules.enable(msg.moduleId, "user");
+      case "modules.disable":
+        return modules.disable(msg.moduleId);
       case "pages.list":
         return { pages: listPages(workspace.dir, config.token) };
       case "settings.get":

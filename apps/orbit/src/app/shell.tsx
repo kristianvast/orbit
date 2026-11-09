@@ -16,6 +16,7 @@ import { Badge, Button } from "../design";
 import { CUSTOM_PAGE_ICON, useCustomPages } from "../features/pages";
 import { type MessageKey, useT } from "../i18n";
 import { useLocalUiLifecycle } from "../lib/local-ui";
+import { MODULE_IDS, type ModuleId, useModules } from "../lib/modules";
 import { OrionConnectionBanner, useOrion, useOrionQuery } from "../lib/orion";
 import { useTheme } from "./providers";
 
@@ -24,15 +25,41 @@ export interface NavItem {
   labelKey: MessageKey;
   end?: boolean;
   icon: typeof Home;
+  moduleId?: ModuleId;
 }
 
+export const MODULE_NAV_ITEMS: Record<ModuleId, NavItem> = {
+  herd: { to: "/herd", labelKey: "shell.nav.herd", icon: Tag, moduleId: "herd" },
+  devices: { to: "/devices", labelKey: "shell.nav.devices", icon: Radio, moduleId: "devices" },
+  cameras: { to: "/cameras", labelKey: "shell.nav.cameras", icon: Camera, moduleId: "cameras" },
+};
+
+export const SETTINGS_NAV_ITEM: NavItem = {
+  to: "/settings",
+  labelKey: "shell.nav.settings",
+  icon: SettingsIcon,
+};
+
+export const HOME_NAV_ITEM: NavItem = {
+  to: "/",
+  labelKey: "shell.nav.home",
+  end: true,
+  icon: Home,
+};
+
+export const CHAT_NAV_ITEM: NavItem = {
+  to: "/chat",
+  labelKey: "shell.nav.chat",
+  icon: MessageSquare,
+};
+
 export const NAV_ITEMS: NavItem[] = [
-  { to: "/", labelKey: "shell.nav.home", end: true, icon: Home },
-  { to: "/chat", labelKey: "shell.nav.chat", icon: MessageSquare },
-  { to: "/herd", labelKey: "shell.nav.herd", icon: Tag },
-  { to: "/devices", labelKey: "shell.nav.devices", icon: Radio },
-  { to: "/cameras", labelKey: "shell.nav.cameras", icon: Camera },
-  { to: "/settings", labelKey: "shell.nav.settings", icon: SettingsIcon },
+  HOME_NAV_ITEM,
+  CHAT_NAV_ITEM,
+  MODULE_NAV_ITEMS.herd,
+  MODULE_NAV_ITEMS.devices,
+  MODULE_NAV_ITEMS.cameras,
+  SETTINGS_NAV_ITEM,
 ];
 
 function SyncStatusBadge() {
@@ -106,6 +133,7 @@ function BrandMark() {
 export function AppShell() {
   const { state: connState } = useOrion();
   const { data: summary } = useOrionQuery("farm.summary");
+  const { isEnabled } = useModules();
   const { theme, toggleTheme } = useTheme();
   const customPages = useCustomPages();
   const t = useT();
@@ -115,6 +143,51 @@ export function AppShell() {
   const alertCount = summary?.recentAlerts?.length ?? 0;
   const totalAnimals = (summary?.counts?.cattle ?? 0) + (summary?.counts?.horses ?? 0);
   const orionOnline = connState === "open";
+
+  const topAndModuleNavItems: NavItem[] = [
+    HOME_NAV_ITEM,
+    CHAT_NAV_ITEM,
+    ...MODULE_IDS.filter((id) => isEnabled(id)).map((id) => MODULE_NAV_ITEMS[id]),
+  ];
+
+  const renderNavItem = (item: NavItem) => {
+    const Icon = item.icon;
+    const count =
+      item.to === "/" && alertCount > 0
+        ? alertCount
+        : item.to === "/herd" && totalAnimals > 0
+          ? totalAnimals
+          : null;
+    const testId = item.moduleId
+      ? `nav-module-${item.moduleId}`
+      : item.to === "/"
+        ? "nav-home"
+        : item.to === "/chat"
+          ? "nav-chat"
+          : "nav-settings";
+    return (
+      <li key={item.to}>
+        <NavLink to={item.to} end={item.end} className="orbit-nav-link" data-testid={testId}>
+          <span className="orbit-nav-link-inner">
+            <Icon size={18} aria-hidden="true" />
+            <span>{t(item.labelKey)}</span>
+          </span>
+          {count !== null && (
+            <span
+              className={
+                item.to === "/" ? "orbit-nav-count orbit-nav-count--alert" : "orbit-nav-count"
+              }
+            >
+              {count}
+              {item.to === "/" && (
+                <span className="orbit-visually-hidden">{t("shell.nav.alerts")}</span>
+              )}
+            </span>
+          )}
+        </NavLink>
+      </li>
+    );
+  };
 
   return (
     <div className="orbit-shell">
@@ -127,39 +200,7 @@ export function AppShell() {
 
           <nav aria-label={t("shell.nav.main")}>
             <ul className="orbit-nav-list">
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const count =
-                  item.to === "/" && alertCount > 0
-                    ? alertCount
-                    : item.to === "/herd" && totalAnimals > 0
-                      ? totalAnimals
-                      : null;
-                return (
-                  <li key={item.to}>
-                    <NavLink to={item.to} end={item.end} className="orbit-nav-link">
-                      <span className="orbit-nav-link-inner">
-                        <Icon size={18} aria-hidden="true" />
-                        <span>{t(item.labelKey)}</span>
-                      </span>
-                      {count !== null && (
-                        <span
-                          className={
-                            item.to === "/"
-                              ? "orbit-nav-count orbit-nav-count--alert"
-                              : "orbit-nav-count"
-                          }
-                        >
-                          {count}
-                          {item.to === "/" && (
-                            <span className="orbit-visually-hidden">{t("shell.nav.alerts")}</span>
-                          )}
-                        </span>
-                      )}
-                    </NavLink>
-                  </li>
-                );
-              })}
+              {topAndModuleNavItems.map(renderNavItem)}
               {customPages.length > 0 && (
                 <li className="orbit-nav-section" aria-hidden="true">
                   {t("shell.nav.yourPages")}
@@ -180,6 +221,7 @@ export function AppShell() {
                   </NavLink>
                 </li>
               ))}
+              {renderNavItem(SETTINGS_NAV_ITEM)}
             </ul>
           </nav>
         </div>

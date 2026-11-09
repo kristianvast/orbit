@@ -2,6 +2,7 @@ import {
   type AccountStatus,
   type BillingStatus,
   type ConnectionState,
+  MODULE_IDS,
   type OrionClient,
   OrionRequestError,
   type RequestParams,
@@ -137,6 +138,15 @@ function createBillingVoiceClient(
         case "voice.audio":
         case "voice.text":
           return { accepted: true } as RequestResult<T>;
+        case "modules.list":
+          return {
+            modules: MODULE_IDS.map((id) => ({
+              id,
+              enabled: false,
+              enabledAt: null,
+              enabledBy: null,
+            })),
+          } as RequestResult<T>;
         default:
           throw new Error(`Unhandled request: ${type}`);
       }
