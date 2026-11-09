@@ -1,7 +1,11 @@
 #!/usr/bin/env bun
+import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { READY_LINE_PREFIX } from "@orbit/protocol";
 import { startOrion } from "./app";
 import { ConfigError, parseConfig } from "./config";
+
+// pi-ai loads OAuth flows through a variable import that `bun build --compile` cannot embed.
+registerBunOAuthFlows();
 
 try {
   const config = parseConfig(process.argv.slice(2));
