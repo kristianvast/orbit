@@ -70,6 +70,7 @@ export interface HubOptions {
 }
 
 export const GATEWAY_PROVIDER = "orbit-gateway";
+const ABORT_SETTLE_MS = 3_000;
 
 const ORION_SYSTEM_PROMPT = `You are Orion, the assistant inside Orbit, a farm app running on the farmer's own computer.
 You help a farmer with cattle (dairy and beef) and horses: herd records, sensors, robots, cameras and small features built in the farm workspace.
@@ -368,6 +369,16 @@ export class SessionHub {
         "No AI model is set up yet. Choose a model and add a key in Settings.",
       );
     }
+    if (
+      model.provider !== MOCK_PROVIDER &&
+      model.provider !== GATEWAY_PROVIDER &&
+      !this.runtime.getProviderAuthStatus(model.provider).configured
+    ) {
+      throw new HubError(
+        "not_ready",
+        `No AI model is set up yet: ${model.provider} has no key or sign-in. Add one in Settings.`,
+      );
+    }
     if (live.agent) {
       const current = live.agent.model;
       if (!current || current.provider !== model.provider || current.id !== model.id) {
@@ -617,8 +628,17 @@ export class SessionHub {
 
   async abort(id: string) {
     const live = this.live.get(id);
-    if (!live?.agent) return false;
-    await live.agent.abort();
+    if (!live?.agent || !live.streaming) return false;
+    // A provider call stuck in a retry or a hung socket must not keep the farmer's Stop waiting.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      live.agent.abort().catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ABORT_SETTLE_MS);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (!live.settledEmitted) await this.settle(live, true);
     return true;
   }
 

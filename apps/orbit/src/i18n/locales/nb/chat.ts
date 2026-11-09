@@ -146,6 +146,10 @@ export const chat: Catalog<typeof en> = {
     "Orbit og Orion har åpen kildekode og er gratis når du kobler til din egen KI-nøkkel eller et abonnement under Leverandører, eller du kan velge en Binge- eller Fjøs-plan for å kjøre Orion i Pecorvas sky.",
   "planError.budgetExceededBody":
     "Gården har brukt opp det inkluderte Orion-forbruket for denne perioden. Koble til din egen KI-nøkkel under Leverandører eller endre planen i Innstillinger.",
+  "planError.modelRequiredTitle": "Sett opp en KI-modell for Orion",
+  "planError.modelRequiredBody":
+    "Orion trenger en KI-modell for å svare. Logg inn med en modellkonto eller legg til en API-nøkkel i Innstillinger, og send meldingen på nytt.",
+  "planError.setUpModel": "Sett opp en modell",
   "planError.useOwnKey": "Bruk egen nøkkel",
   "planError.seePlans": "Se planer",
   "voice.talkToOrion": "Snakk med Orion",

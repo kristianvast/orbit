@@ -104,6 +104,51 @@ describe("sessions", () => {
   });
 });
 
+describe("no AI model set up", () => {
+  test("a prompt is refused with not_ready, nothing stays running, and abort reports nothing to stop", async () => {
+    const dir = tempDir();
+    const savedKey = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    const app = await startOrion({
+      port: 0,
+      token: TOKEN,
+      dataDir: dir,
+      mockModel: false,
+      seed: false,
+      gatewayUrl: null,
+      appSource: null,
+    });
+    const client = await connect(app);
+    cleanups.push(() => {
+      if (savedKey !== undefined) process.env.ANTHROPIC_API_KEY = savedKey;
+      removeDir(dir);
+    });
+    cleanups.push(async () => {
+      client.close();
+      await app.stop();
+    });
+    const { session } = await client.request("sessions.create", {});
+    const refused = (text: string) =>
+      client.request("chat.prompt", { sessionId: session.id, text }).then(
+        () => null,
+        (error: unknown) => error as OrionRequestError,
+      );
+
+    const noProvider = await refused("hello");
+    expect(noProvider?.code).toBe("not_ready");
+    expect(noProvider?.message).toContain("No AI model is set up");
+
+    await client.request("settings.update", { provider: "anthropic", model: "claude-sonnet-4-5" });
+    const noKey = await refused("hello again");
+    expect(noKey?.code).toBe("not_ready");
+    expect(noKey?.message).toContain("anthropic has no key or sign-in");
+
+    const { sessions } = await client.request("sessions.list", {});
+    expect(sessions.find((s) => s.id === session.id)?.streaming).toBe(false);
+    expect((await client.request("chat.abort", { sessionId: session.id })).accepted).toBe(false);
+  });
+});
+
 describe("mock model", () => {
   test("a prompt streams message.delta and ends with agent.settled", async () => {
     const { client } = await setup();

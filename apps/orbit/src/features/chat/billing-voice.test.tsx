@@ -59,7 +59,10 @@ const paidBarnBilling: BillingStatus = {
 };
 
 function createBillingVoiceClient(
-  options: { billing?: BillingStatus; promptErrorCode?: "plan_required" | "budget_exceeded" } = {},
+  options: {
+    billing?: BillingStatus;
+    promptErrorCode?: "plan_required" | "budget_exceeded" | "not_ready";
+  } = {},
 ) {
   const listeners = new Map<string, Set<(ev: ServerEvent) => void>>();
   let currentBilling: BillingStatus = options.billing ?? freeBilling;
@@ -98,7 +101,9 @@ function createBillingVoiceClient(
           if (options.promptErrorCode) {
             throw new OrionRequestError(
               options.promptErrorCode,
-              "Choose a plan or use your own AI key in Providers.",
+              options.promptErrorCode === "not_ready"
+                ? "No AI model is set up yet. Choose a model and add a key in Settings."
+                : "Choose a plan or use your own AI key in Providers.",
             );
           }
           return { accepted: true } as RequestResult<T>;
@@ -270,6 +275,37 @@ describe("Chat plan_required card", () => {
     expect(card).toHaveAttribute("data-error-code", "plan_required");
     expect(screen.getByTestId("chat-plan-error-use-key")).toHaveTextContent("Use your own key");
     expect(screen.getByTestId("chat-plan-error-see-plans")).toHaveTextContent("See plans");
+
+    fireEvent.click(screen.getByTestId("chat-plan-error-use-key"));
+    expect(await screen.findByTestId("route-probe")).toHaveTextContent("/settings#providers");
+  });
+});
+
+describe("Chat with no AI model set up", () => {
+  it("shows the setup card, stops working, and hands the message back to the composer", async () => {
+    const { client } = createBillingVoiceClient({ promptErrorCode: "not_ready" });
+
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <AppProviders initialClient={client}>
+          <Routes>
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/settings" element={<LocationProbe />} />
+          </Routes>
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    const input = await screen.findByTestId("chat-composer-input");
+    fireEvent.change(input, { target: { value: "How many cows are dry?" } });
+    fireEvent.click(screen.getByTestId("chat-send-button"));
+
+    const card = await screen.findByTestId("chat-plan-error-card");
+    expect(card).toHaveAttribute("data-error-code", "model_required");
+    expect(screen.queryByTestId("chat-streaming-indicator")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chat-composer-stop-button")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-composer-input")).toHaveValue("How many cows are dry?");
+    expect(screen.getByTestId("chat-transcript")).not.toHaveTextContent("How many cows are dry?");
 
     fireEvent.click(screen.getByTestId("chat-plan-error-use-key"));
     expect(await screen.findByTestId("route-probe")).toHaveTextContent("/settings#providers");

@@ -145,6 +145,10 @@ export const chat = {
     "Orbit and Orion are open source and free when you connect your own AI key or subscription in Providers, or you can choose a Pen or Barn plan to run Orion on Pecorva's cloud.",
   "planError.budgetExceededBody":
     "Your farm has reached its included Orion allowance for the current billing period. Connect your own AI key in Providers or manage your plan in Settings.",
+  "planError.modelRequiredTitle": "Set up an AI model for Orion",
+  "planError.modelRequiredBody":
+    "Orion needs an AI model to answer. Sign in with a model account or add an API key in Settings, then send your message again.",
+  "planError.setUpModel": "Set up a model",
   "planError.useOwnKey": "Use your own key",
   "planError.seePlans": "See plans",
   "voice.talkToOrion": "Talk to Orion",

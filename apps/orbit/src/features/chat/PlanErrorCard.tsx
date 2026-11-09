@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { Button } from "../../design";
 import { useT } from "../../i18n";
 
-export type PlanErrorCode = "plan_required" | "budget_exceeded";
+export type PlanErrorCode = "plan_required" | "budget_exceeded" | "model_required";
 
 export function classifyPlanError(
   code?: string | null,
@@ -11,6 +11,7 @@ export function classifyPlanError(
 ): PlanErrorCode | null {
   if (code === "plan_required") return "plan_required";
   if (code === "budget_exceeded") return "budget_exceeded";
+  if (code === "model_required") return "model_required";
   const text = `${code ?? ""} ${message ?? ""}`.toLowerCase();
   if (
     text.includes("plan_required") ||
@@ -22,6 +23,8 @@ export function classifyPlanError(
   if (text.includes("budget_exceeded") || text.includes("allowance is used up")) {
     return "budget_exceeded";
   }
+  // Orion's not_ready refusal when no provider/model is chosen (SessionHub.ensureAgent).
+  if (text.includes("no ai model is set up")) return "model_required";
   return null;
 }
 
@@ -38,11 +41,15 @@ export function PlanErrorCard({ code, onDismiss }: PlanErrorCardProps) {
   const title =
     code === "plan_required"
       ? t("chat.planError.planRequiredTitle")
-      : t("chat.planError.budgetExceededTitle");
+      : code === "model_required"
+        ? t("chat.planError.modelRequiredTitle")
+        : t("chat.planError.budgetExceededTitle");
   const defaultBody =
     code === "plan_required"
       ? t("chat.planError.planRequiredBody")
-      : t("chat.planError.budgetExceededBody");
+      : code === "model_required"
+        ? t("chat.planError.modelRequiredBody")
+        : t("chat.planError.budgetExceededBody");
 
   return (
     <section
@@ -78,7 +85,9 @@ export function PlanErrorCard({ code, onDismiss }: PlanErrorCardProps) {
           onClick={() => void navigate("/settings#providers")}
           data-testid="chat-plan-error-use-key"
         >
-          {t("chat.planError.useOwnKey")}
+          {code === "model_required"
+            ? t("chat.planError.setUpModel")
+            : t("chat.planError.useOwnKey")}
         </Button>
         <Button
           type="button"

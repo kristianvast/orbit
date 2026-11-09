@@ -38,7 +38,7 @@ const baseSession: SessionSummary = {
 
 function createMockClient(
   extraSessions: SessionSummary[] = [],
-  options: { promptNeverResolves?: boolean } = {},
+  options: { promptNeverResolves?: boolean; abortAccepted?: boolean } = {},
 ) {
   const currentState: ConnectionState = "open";
   const listeners = new Map<string, Set<(ev: ServerEvent) => void>>();
@@ -166,9 +166,10 @@ function createMockClient(
         case "chat.prompt":
           if (options.promptNeverResolves) return new Promise<RequestResult<T>>(() => {});
           return { accepted: true } as RequestResult<T>;
+        case "chat.abort":
+          return { accepted: options.abortAccepted ?? true } as RequestResult<T>;
         case "chat.steer":
         case "chat.followUp":
-        case "chat.abort":
           return { accepted: true } as RequestResult<T>;
         case "settings.get":
           return settings as RequestResult<T>;
@@ -576,6 +577,40 @@ describe("ChatPage and SettingsPage integration", () => {
     expect(screen.getByTestId("session-item-sess-1")).toHaveAttribute("data-active", "false");
     expect(screen.getAllByTestId(/^session-item-/)).toHaveLength(1);
     expect(requestMock).not.toHaveBeenCalledWith("sessions.create", expect.anything());
+  });
+
+  it("Stop ends the run locally when Orion has nothing running to abort", async () => {
+    const { client, requestMock, emit } = createMockClient([], {
+      promptNeverResolves: true,
+      abortAccepted: false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/chat?s=sess-1"]}>
+        <AppProviders initialClient={client}>
+          <ChatPage />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toHaveAttribute("data-active", "true");
+    });
+    act(() =>
+      emit({
+        type: "session.updated",
+        sessionId: "sess-1",
+        session: { ...baseSession, streaming: true },
+      }),
+    );
+    fireEvent.click(await screen.findByTestId("chat-composer-stop-button"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("chat-composer-stop-button")).not.toBeInTheDocument();
+    });
+    expect(requestMock).toHaveBeenCalledWith("chat.abort", { sessionId: "sess-1" });
+    expect(screen.queryByTestId("chat-streaming-indicator")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-send-button")).toBeInTheDocument();
   });
 
   it("queues Enter as a follow-up and Ctrl+Enter as a steer while the prompt request is still pending", async () => {

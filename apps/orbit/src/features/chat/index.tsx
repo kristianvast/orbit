@@ -288,12 +288,13 @@ export default function ChatPage() {
       setSendingPrompt(true);
     }
     let sessionId = chatState.sessionId;
+    const optimisticId = `optimistic-${crypto.randomUUID()}`;
     try {
       if (!sessionId) {
         sessionId = await ensureSession();
       }
       if (mode === "prompt") {
-        dispatch({ type: "optimistic.user_message", text });
+        dispatch({ type: "optimistic.user_message", text, id: optimisticId });
         setComposerText("");
         setAtBottom(true);
         await client.request("chat.prompt", { sessionId, text });
@@ -315,10 +316,12 @@ export default function ChatPage() {
       const code = err instanceof OrionRequestError ? err.code : undefined;
       const msg = errorText(err);
       const planCode = classifyPlanError(code, msg);
+      // Orion refused the prompt, so no run started: undo the optimistic turn and hand the text back.
+      if (mode === "prompt") dispatch({ type: "optimistic.rollback", id: optimisticId });
+      setComposerText((current) => current || text);
       if (planCode) {
         dispatch({ type: "error.set", code: planCode, message: msg });
       } else {
-        setComposerText((current) => current || text);
         pushToast({
           title: t("chat.toast.sendFailed"),
           description: msg,
@@ -331,10 +334,23 @@ export default function ChatPage() {
   };
 
   const stopRun = async () => {
-    if (!client || !chatState.sessionId) return;
+    const sessionId = chatState.sessionId;
+    // Nothing running on Orion's side means nothing will settle the run; settle it here.
+    if (!sessionId) return;
+    const settleLocally = () =>
+      dispatch({
+        type: "server.event",
+        event: { type: "agent.settled", sessionId, reason: "aborted" },
+      });
+    if (!client) {
+      settleLocally();
+      return;
+    }
     try {
-      await client.request("chat.abort", { sessionId: chatState.sessionId });
+      const res = await client.request("chat.abort", { sessionId });
+      if (!res.accepted) settleLocally();
     } catch (err) {
+      settleLocally();
       pushToast({
         title: t("chat.toast.stopFailed"),
         description: errorText(err),

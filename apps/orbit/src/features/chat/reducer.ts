@@ -38,6 +38,10 @@ export type ChatAction =
       ts?: string;
     }
   | {
+      type: "optimistic.rollback";
+      id: string;
+    }
+  | {
       type: "server.event";
       event: ServerEvent;
     }
@@ -382,6 +386,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         awaitingPromptStart: true,
       };
     }
+    case "optimistic.rollback":
+      return {
+        ...state,
+        items: state.items.filter((it) => it.id !== action.id),
+        streaming: false,
+        runStartedAt: null,
+        awaitingPromptStart: false,
+      };
     case "queue.add":
       return { ...state, queued: [...state.queued, action.message] };
     case "queue.remove":
