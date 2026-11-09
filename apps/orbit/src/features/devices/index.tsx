@@ -90,20 +90,10 @@ function rich(template: string, parts: Readonly<Record<string, ReactNode>>): Rea
 
 export function formatVendorLabel(t: TranslateFn, vendor: string): string {
   switch (vendor) {
-    case "lely":
-      return "Lely";
-    case "delaval":
-      return "DeLaval";
     case "gea":
       return "GEA";
     case "boumatic":
       return "BouMatic";
-    case "allflex":
-      return "Allflex";
-    case "smaxtec":
-      return "smaXtec";
-    case "cowmanager":
-      return "CowManager";
     case "generic_csv":
       return t("devices.vendor.generic_csv");
     case "custom":
@@ -396,8 +386,8 @@ function AddDeviceDialog({ open, onClose, onSaved }: AddDeviceDialogProps) {
   const { pushToast } = useToast();
 
   const [kind, setKind] = useState<DeviceKind>("collar");
-  const [vendor, setVendor] = useState("Nedap");
-  const [model, setModel] = useState("SmartTag Neck");
+  const [vendor, setVendor] = useState("");
+  const [model, setModel] = useState("");
   const [serial, setSerial] = useState("");
   const [status, setStatus] = useState<DeviceStatus>("online");
   const [batteryPct, setBatteryPct] = useState("100");

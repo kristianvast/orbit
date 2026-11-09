@@ -203,28 +203,28 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
     deviceRows.push(row);
     return row;
   };
-  const robot = mkDevice("milking_robot", "Lely", "Astronaut A5", "LA5-0001", null);
+  const robot = mkDevice("milking_robot", "Demo", "Milking robot", "LA5-0001", null);
   // Wearables: collars on milking cows 0-9, boluses on cows 10-15, ear tag sensors on beef 0-5.
   const collars = dairy
     .slice(0, 10)
     .map((_, i) =>
-      mkDevice("collar", "Nedap", "SmartTag Neck", `COL-${100 + i}`, 60 + Math.round(rand() * 40)),
+      mkDevice("collar", "Demo", "Neck collar", `COL-${100 + i}`, 60 + Math.round(rand() * 40)),
     );
   const boluses = dairy
     .slice(10)
-    .map((_, i) => mkDevice("bolus", "smaXtec", "Climate Bolus", `BOL-${200 + i}`, null));
+    .map((_, i) => mkDevice("bolus", "Demo", "Rumen bolus", `BOL-${200 + i}`, null));
   const tags = beef
     .slice(0, 6)
     .map((_, i) =>
       mkDevice(
         "ear_tag_sensor",
-        "CowManager",
-        "SensOor",
+        "Demo",
+        "Ear tag sensor",
         `EAR-${300 + i}`,
         70 + Math.round(rand() * 30),
       ),
     );
-  const spareCollar = mkDevice("collar", "Nedap", "SmartTag Neck", "COL-199", 100);
+  const spareCollar = mkDevice("collar", "Demo", "Neck collar", "COL-199", 100);
   spareCollar.status = "offline";
   const scale = mkDevice("scale", "Tru-Test", "S3", "SCL-01", null);
 
