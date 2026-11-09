@@ -40,6 +40,7 @@ import {
   type SnapshotChange,
   snapshots,
   sqliteSyncedTables,
+  syncState,
   type WearableKind,
 } from "@orbit/schema";
 import type { LocalDb } from "@orbit/schema/local";
@@ -691,6 +692,68 @@ export class Repository {
       ...origin,
     });
     return { ids: [id], snapshotId: r.snapshotId };
+  }
+
+  /**
+   * Creates or patches animals a connector reported, in one transaction and without an undo
+   * snapshot (like other connector imports). An animal is matched by national id, then ear tag.
+   */
+  importConnectorAnimals(rows: Array<Omit<AnimalInput, "id">>): {
+    created: number;
+    updated: number;
+  } {
+    let created = 0;
+    let updated = 0;
+    this.transact(null, (w) => {
+      for (const row of rows) {
+        const existing = this.matchAnimal(row.nationalId, row.earTagNumber);
+        w("animals", existing?.id ?? crypto.randomUUID(), stripUndefined(row));
+        if (existing) updated++;
+        else created++;
+      }
+    });
+    return { created, updated };
+  }
+
+  /** The live animal with this national id, else with this ear tag number. */
+  matchAnimal(nationalId?: string | null, earTagNumber?: string | null): Animal | null {
+    const live = isNull(animals.deletedAt);
+    if (nationalId) {
+      const byNational = this.db
+        .select()
+        .from(animals)
+        .where(and(live, eq(animals.nationalId, nationalId)))
+        .get();
+      if (byNational) return byNational;
+    }
+    if (!earTagNumber) return null;
+    return (
+      this.db
+        .select()
+        .from(animals)
+        .where(and(live, eq(animals.earTagNumber, earTagNumber)))
+        .get() ?? null
+    );
+  }
+
+  /** State a custom connector returned from its last successful run (local only, not synced). */
+  getConnectorState(id: string): unknown {
+    return (
+      this.db
+        .select()
+        .from(syncState)
+        .where(eq(syncState.key, `connector-state:${id}`))
+        .get()?.value ?? null
+    );
+  }
+
+  setConnectorState(id: string, value: unknown) {
+    const row = { key: `connector-state:${id}`, value, updatedAt: this.iso() };
+    this.db
+      .insert(syncState)
+      .values(row)
+      .onConflictDoUpdate({ target: syncState.key, set: { value, updatedAt: row.updatedAt } })
+      .run();
   }
 
   /** Connector sync bookkeeping; not undoable (no snapshot). */

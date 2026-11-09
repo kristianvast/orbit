@@ -40,6 +40,7 @@ export class Workspace {
   async init(): Promise<void> {
     mkdirSync(join(this.dir, "connectors"), { recursive: true });
     mkdirSync(join(this.dir, "pages"), { recursive: true });
+    mkdirSync(join(this.dir, "skills"), { recursive: true });
     const agents = join(this.dir, "AGENTS.md");
     if (!existsSync(agents)) {
       writeFileSync(

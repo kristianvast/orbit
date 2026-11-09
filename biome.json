@@ -15,6 +15,7 @@
       "!.handoff",
       "!.omo",
       "!**/*.gen.ts",
+      "!skills/index.json",
       "!**/drizzle",
       "!**/vendor"
     ]

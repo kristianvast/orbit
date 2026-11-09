@@ -12,11 +12,12 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun run --filter '*' test",
+    "test": "bun run --filter '*' test && bun test ./skills",
     "build": "bun run --filter '*' build",
     "e2e:web": "bun run --filter '@orbit/e2e' test:web",
     "e2e:desktop": "bun run --filter '@orbit/e2e' test:desktop",
-    "check:workflows": "bun run --filter '@orbit/e2e' check:workflows"
+    "check:workflows": "bun run --filter '@orbit/e2e' check:workflows",
+    "skills:index": "bun scripts/build-skills-index.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.0",

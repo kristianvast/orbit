@@ -23,6 +23,13 @@ export const MOCK_TRIGGERS: MockTrigger[] = [
   { match: /list cows/i, tool: "herd_query", args: { species: "cattle" } },
   { match: /find cameras/i, tool: "camera_discover", args: { timeoutMs: 1500 } },
   { match: /build my orbit/i, tool: "local_ui_build", args: {} },
+  { match: /find a skill for delaval/i, tool: "skill_search", args: { query: "delaval" } },
+  { match: /install the delaval skill/i, tool: "skill_install", args: { name: "delaval-delpro" } },
+  {
+    match: /set up the delaval connector/i,
+    tool: "connector_scaffold",
+    args: { name: "delpro", fromSkill: "delaval-delpro" },
+  },
   {
     match: /write a note/i,
     tool: "write",

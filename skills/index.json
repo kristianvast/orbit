@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "name": "delaval-delpro",
+      "version": "1.0.0",
+      "description": "Import animals, milkings and daily weights from a DeLaval DelPro herd management server (SQL Server on the farm network). Use when the farmer has DeLaval milking equipment or DelPro and wants its data in Orbit.",
+      "keywords": [
+        "delaval",
+        "delpro",
+        "milking",
+        "robot",
+        "vms",
+        "sql server"
+      ],
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "f1baf85eec12559ead04b60201e0fbed0992ad890f594fa717a2fb601a8b557b"
+        },
+        {
+          "path": "connector/README.md",
+          "sha256": "29a18783e7b94e1a3d7b736f3f1c4147503a697b63565b45eab671a2e6ed50f6"
+        },
+        {
+          "path": "connector/connector.ts",
+          "sha256": "3304a2f379c32867ed1658e9196fed1ba02cb1a8969306849856403433f5b55d"
+        },
+        {
+          "path": "connector/mapping.ts",
+          "sha256": "8341996380cbdf2ef62c4af2eb4deadfcf4cebb9c7bd9ca27ccc3b1d5e796475"
+        },
+        {
+          "path": "connector/package.json",
+          "sha256": "48f9ce685d7eb3cf4117a99b97a8f2eec26a12a2b4ee49123e4e617b5dc2afbd"
+        },
+        {
+          "path": "connector/source.ts",
+          "sha256": "bf2e17e1ab330dd1f7b82ba30700c47f92df634142ac6d33cc40ffb8df4bb5fe"
+        },
+        {
+          "path": "skill.json",
+          "sha256": "8621afd2256d87e72e1f90affe03503b703f735ed945530c7f804a936059fc82"
+        }
+      ]
+    }
+  ]
+}

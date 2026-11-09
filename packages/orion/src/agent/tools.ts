@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { ExtensionToolContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AnimalListItem } from "@orbit/protocol";
@@ -10,8 +11,10 @@ import {
 } from "@orbit/schema/enums";
 import { type Static, type TSchema, Type } from "typebox";
 import { RepoError, type WearableViolation } from "../db/repo";
+import type { ConnectorSource } from "../services/connectors";
 import type { FarmService } from "../services/farm";
 import type { LocalUiService } from "../services/local-ui";
+import type { SkillService } from "../services/skills";
 import { forgetFacts, MEMORY_SCOPES, rememberFact } from "./memory";
 
 const Opt = <T extends TSchema>(schema: T) => Type.Optional(schema);
@@ -87,9 +90,17 @@ const AnimalParams = Type.Object({
   notes: OptStr("Free-text notes"),
 });
 
-export function createFarmTools(farm: FarmService, localUi: LocalUiService): ToolDefinition[] {
+const SECRET_KEY = /pass|secret|token|key|credential/i;
+
+export function createFarmTools(
+  farm: FarmService,
+  localUi: LocalUiService,
+  skills: SkillService | null = null,
+): ToolDefinition[] {
   const repo = farm.repo;
+  const skillTools = skills ? createSkillTools(farm, skills) : [];
   return [
+    ...skillTools,
     tool({
       name: "herd_query",
       label: "Look up the herd",
@@ -252,15 +263,72 @@ export function createFarmTools(farm: FarmService, localUi: LocalUiService): Too
       name: "connector_scaffold",
       label: "Create a connector",
       description:
-        "Create a new connector folder in the farm workspace (connectors/<name>) from the Orbit template and register it switched off. Then edit its code with the file tools.",
-      parameters: Type.Object({ name: Type.String({ description: "lowercase-with-dashes" }) }),
+        "Create a new connector folder in the farm workspace (connectors/<name>) and register it switched off. By default it starts from the Orbit template; pass fromSkill to copy the ready-made connector of an installed skill (its dependencies are installed too). Then edit or configure it.",
+      parameters: Type.Object({
+        name: Type.String({ description: "lowercase-with-dashes" }),
+        fromSkill: OptStr("Name of an installed skill whose connector to copy"),
+      }),
+      async run(p, origin) {
+        farm.guard?.("connectors.upsert");
+        let source: ConnectorSource | null = null;
+        if (p.fromSkill) {
+          if (!skills) return text("Not done: skills are not available in this Orbit.", {}, true);
+          const manifest = await skills.manifest(p.fromSkill);
+          if (!manifest?.connector) {
+            return text(`Not done: skill ${p.fromSkill} has no connector.`, {}, true);
+          }
+          const { dir, ...rest } = manifest.connector;
+          source = { dir: join(skills.installDir, p.fromSkill, dir), ...rest };
+        }
+        const r = farm.connectors.scaffold(p.name, origin, source);
+        const install = source ? await farm.connectors.installDependencies(r.path) : null;
+        const from = source
+          ? `from the ${p.fromSkill} skill`
+          : r.usedTemplate
+            ? "from the Orbit template"
+            : "from the built-in starter";
+        const deps = !install
+          ? ""
+          : install.ok
+            ? " Its dependencies are installed."
+            : ` Installing its dependencies failed:\n${install.output}`;
+        return text(
+          `Created ${r.path} (${from}). It is switched off until the farmer turns it on. Connector id ${r.id}.${deps}`,
+          { ...r, install },
+          install ? !install.ok : false,
+        );
+      },
+    }),
+    tool({
+      name: "connector_configure",
+      label: "Configure a connector",
+      description:
+        "Save non-secret settings of a connector (host, port, user name, time zone...); they are merged into its config. Never pass passwords or keys: the farmer enters those in Sensors & Robots > Connections > Password, which stores them in the OS keychain.",
+      parameters: Type.Object({
+        id: Type.String(),
+        config: Type.Record(Type.String(), Type.Unknown(), {
+          description: "Settings to set, e.g. { host, port, user, timezone }",
+        }),
+      }),
       run(p, origin) {
         farm.guard?.("connectors.upsert");
-        const r = farm.connectors.scaffold(p.name, origin);
-        return text(
-          `Created ${r.path} (${r.usedTemplate ? "from the Orbit template" : "from the built-in starter"}). It is switched off until the farmer turns it on. Connector id ${r.id}.`,
-          r,
+        const secretKeys = Object.keys(p.config).filter((k) => SECRET_KEY.test(k));
+        if (secretKeys.length > 0) {
+          return text(
+            `Not done: ${secretKeys.join(", ")} look like secrets. Ask the farmer to enter the password in Sensors & Robots > Connections instead.`,
+            { secretKeys },
+            true,
+          );
+        }
+        const current = repo.getConnector(p.id);
+        repo.upsertConnector(
+          { id: p.id, vendor: current.vendor, kind: current.kind, config: p.config as never },
+          { description: `Configured connector ${current.name ?? current.vendor}`, ...origin },
         );
+        return text(`Saved ${Object.keys(p.config).join(", ")} for ${current.name ?? p.id}.`, {
+          id: p.id,
+          keys: Object.keys(p.config),
+        });
       },
     }),
     tool({
@@ -271,8 +339,12 @@ export function createFarmTools(farm: FarmService, localUi: LocalUiService): Too
       async run(p) {
         farm.guard?.("connectors.syncNow");
         const r = await farm.connectors.run(p.id);
+        const herd =
+          r.animalsCreated || r.animalsUpdated
+            ? ` Animals: ${r.animalsCreated} added, ${r.animalsUpdated} updated.`
+            : "";
         return text(
-          `Imported ${r.imported} observation${r.imported === 1 ? "" : "s"}${r.skipped ? `, skipped ${r.skipped} invalid` : ""}.${r.logs.length ? `\nLog:\n${r.logs.slice(-20).join("\n")}` : ""}`,
+          `Imported ${r.imported} observation${r.imported === 1 ? "" : "s"}${r.skipped ? `, skipped ${r.skipped} invalid` : ""}.${herd}${r.logs.length ? `\nLog:\n${r.logs.slice(-20).join("\n")}` : ""}`,
           r,
         );
       },
@@ -392,14 +464,61 @@ export function createFarmTools(farm: FarmService, localUi: LocalUiService): Too
   ];
 }
 
+function createSkillTools(farm: FarmService, skills: SkillService): ToolDefinition[] {
+  return [
+    tool({
+      name: "skill_search",
+      label: "Find a skill",
+      description:
+        "Search Orbit's online skill catalog for add-ons that are not built in, such as a connector for a specific vendor's milking robot, herd software or sensor system. Search before saying Orbit cannot connect to something.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Vendor or system name, e.g. delaval; empty lists all" }),
+      }),
+      async run(p) {
+        const found = await skills.search(p.query);
+        const installed = new Set(skills.installed());
+        if (found.length === 0) {
+          return text(`No skill in the catalog matches "${p.query}".`, { skills: [] });
+        }
+        const lines = found.map(
+          (s) =>
+            `- ${s.name} ${s.version}${installed.has(s.name) ? " (installed)" : ""}: ${s.description}`,
+        );
+        return text(
+          [`${found.length} skill${found.length === 1 ? "" : "s"} found:`, ...lines].join("\n"),
+          { skills: found.map(({ files, ...s }) => ({ ...s, installed: installed.has(s.name) })) },
+        );
+      },
+    }),
+    tool({
+      name: "skill_install",
+      label: "Install a skill",
+      description:
+        "Download a skill from the catalog into the farm workspace (skills/<name>/) and return its instructions; follow them. Every file is checked against the catalog before it is written. Installing again updates it.",
+      parameters: Type.Object({ name: Type.String() }),
+      async run(p) {
+        farm.guard?.("connectors.upsert");
+        const s = await skills.install(p.name);
+        return text(
+          `Installed ${s.name} ${s.version} into skills/${s.name}/ (${s.files.length} files). Its instructions:\n\n${s.instructions}`,
+          { name: s.name, version: s.version, files: s.files },
+        );
+      },
+    }),
+  ];
+}
+
 export const FARM_TOOL_NAMES = [
   "herd_query",
   "herd_upsert_animal",
   "devices_list",
   "device_bind",
   "observations_query",
+  "skill_search",
+  "skill_install",
   "connectors_list",
   "connector_scaffold",
+  "connector_configure",
   "connector_run",
   "camera_discover",
   "camera_add",

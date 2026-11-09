@@ -41,6 +41,7 @@ import { FarmService } from "./services/farm";
 import { LOCAL_UI_PREFIX, LocalUiService } from "./services/local-ui";
 import { listPages, PAGE_SDK, PAGES_DIR, resolvePageFile } from "./services/pages";
 import { Go2rtcRelay } from "./services/relay";
+import { DEFAULT_SKILLS_URL, SkillService } from "./services/skills";
 import { maskKey, SettingsStore } from "./settings";
 import { VoiceSessions } from "./voice/session";
 
@@ -113,6 +114,10 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
 
   const resources = materializeResources(config.dataDir);
   const farm = new FarmService(repo, secrets, workspace.dir, resources.connectorTemplateDir);
+  const skills = new SkillService(
+    config.skillsUrl ?? (config.appSource ? join(config.appSource, "skills") : DEFAULT_SKILLS_URL),
+    workspace.dir,
+  );
   const relay = new Go2rtcRelay(repo, secrets, config.dataDir);
   const localUi = new LocalUiService(
     config.dataDir,
@@ -126,7 +131,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     resourcesDir: resources.dir,
     repo,
     settings,
-    tools: [...createFarmTools(farm, localUi), createComputerTool()],
+    tools: [...createFarmTools(farm, localUi, skills), createComputerTool()],
     emit,
     mockModel: config.mockModel,
     gatewayUrl: config.gatewayUrl,

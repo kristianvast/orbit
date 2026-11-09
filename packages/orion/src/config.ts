@@ -16,6 +16,8 @@ export interface OrionConfig {
   coreUrl?: string | null;
   /** Orbit source checkout Orion may edit (--app-source or ORBIT_APP_SOURCE); null in installed builds. */
   appSource: string | null;
+  /** Skill catalog: http(s) base URL or local folder (--skills-url or ORION_SKILLS_URL). */
+  skillsUrl?: string | null;
 }
 
 /** OS application-data directory for Orbit (Windows %APPDATA%, macOS Application Support, XDG on Linux). */
@@ -52,7 +54,7 @@ export function parseConfig(
     }
     const name = arg.slice(2);
     const next = argv[i + 1];
-    if (["port", "token", "data-dir", "app-source", "core-url"].includes(name)) {
+    if (["port", "token", "data-dir", "app-source", "core-url", "skills-url"].includes(name)) {
       if (next === undefined) throw new ConfigError(`--${name} needs a value`);
       values.set(name, next);
       i++;
@@ -66,6 +68,7 @@ export function parseConfig(
     "data-dir",
     "app-source",
     "core-url",
+    "skills-url",
     "mock-model",
     "seed",
     "dev",
@@ -101,5 +104,6 @@ export function parseConfig(
     gatewayUrl: env.ORBIT_GATEWAY_URL?.trim() || null,
     coreUrl: (str("core-url") ?? env.ORBIT_CORE_URL)?.trim().replace(/\/+$/, "") || null,
     appSource,
+    skillsUrl: (str("skills-url") ?? env.ORION_SKILLS_URL)?.trim() || null,
   };
 }

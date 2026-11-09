@@ -382,7 +382,11 @@ export class SessionHub {
       agentDir: this.agentDir,
       systemPrompt:
         ORION_SYSTEM_PROMPT + (this.opts.appSource ? appSourcePrompt(this.opts.appSource) : ""),
-      additionalSkillPaths: [join(this.opts.resourcesDir, "skills")],
+      // Bundled skills, then the ones this farm installed from the catalog (skill_install).
+      additionalSkillPaths: [
+        join(this.opts.resourcesDir, "skills"),
+        join(this.opts.workspace.dir, "skills"),
+      ],
       agentsFilesOverride: () => ({
         agentsFiles: [
           agentsFile,

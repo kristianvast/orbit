@@ -1,0 +1,15 @@
+{
+  "name": "delaval-delpro",
+  "version": "1.0.0",
+  "keywords": ["delaval", "delpro", "milking", "robot", "vms", "sql server"],
+  "connector": {
+    "dir": "connector",
+    "vendor": "delaval",
+    "kind": "local_db",
+    "config": {
+      "port": 1433,
+      "database": "DDM",
+      "timezone": "UTC"
+    }
+  }
+}
