@@ -61,7 +61,12 @@ so workspace packages need no build step between them.
    the server replies with an `unauthorized` error and closes the socket with code 4401. The
    client does not reconnect after 4401. After any other close it reconnects with backoff and
    sends `hello` again.
-5. When the shell quits, it terminates the sidecar.
+5. When the shell quits, it terminates the sidecar. Orion runs with `--parent-watch` and exits when
+   its stdin pipe closes, so a force-killed shell never leaves an orphaned Orion holding the database.
+6. If Orion exits on its own, the shell restarts it with backoff (up to 5 tries). A restarted Orion has
+   a new port and token; while its client is reconnecting, the UI re-reads `orion_endpoint` and switches.
+   After the last try, `orion_endpoint` answers `stopped: <reason + last stderr lines>`, the UI shows
+   "Orion has stopped" with that reason, and its Restart button calls `orion_restart`.
 
 Browser dev mode: start Orion yourself (`orion --dev --seed`). It listens on
 `ws://127.0.0.1:7717/ws` with token `dev` (`DEV_SERVER_URL`, `DEV_TOKEN`). The UI runs under
@@ -76,7 +81,7 @@ The transport is one JSON object per WebSocket text frame. There are three frame
 - Event (server to client, no id): `{ type, ...body }`. Every chat event carries `sessionId`.
 
 Requests: `hello`, `sessions.list|create|open|fork|rename|delete`,
-`chat.prompt|steer|followUp|abort`, `pages.list`, `localUi.status|launched|booted|disable`, `settings.get|update`, `db.query`,
+`chat.prompt|steer|followUp|abort`, `modules.list|enable|disable`, `pages.list`, `localUi.status|launched|booted|disable`, `settings.get|update`, `db.query`,
 `db.mutate`, `snapshots.list|undo`.
 
 - `sessions.open` returns the transcript as UI-ready `TranscriptItem`s:
@@ -88,7 +93,7 @@ Requests: `hello`, `sessions.list|create|open|fork|rename|delete`,
 
 Events: `session.updated`, `message.start`, `message.delta {text|thinking}`,
 `message.end {item}` (authoritative; replaces any accumulated deltas), `tool.start`,
-`tool.update {partial}`, `tool.end`, `agent.settled`,
+`tool.update {partial}`, `tool.end`, `agent.settled`, `modules.updated`,
 `db.changed {table, ids}`, `sync.status`, `error`.
 
 Validation uses typebox `Value.Check`, which avoids `eval` and so works under a strict webview CSP.
@@ -224,6 +229,15 @@ mapped resource against them.
 - **No approval gate:** Orion trusts the model, like the Pi agent itself. Tool calls run
   directly; the system prompt and `resources/AGENTS.md` tell Orion to explain risky or hard-to-undo
   steps and wait for the farmer's yes in the chat. Undo snapshots are the safety net.
+### Minimal-first modules
+
+Orbit starts minimal. **Home**, **Chat** (Ask Orion), **Settings**, and **Your pages** (custom pages) are always present and are not modules. Built-in domain screens are optional modules that start disabled on a fresh install:
+
+- **Protocol contract (`@orbit/protocol`):** `MODULE_IDS = ["herd", "devices", "cameras"] as const` (`ModuleId` is the union of those three literals). Each `OrbitModule` has `{ id: ModuleId, enabled: boolean, enabledAt: string | null, enabledBy: "orion" | "user" | "auto" | null }` (`enabledAt` is an ISO timestamp). `ModulesState` is `{ modules: OrbitModule[] }`, always containing all three IDs in `MODULE_IDS` order.
+- **Wire messages:** `modules.list` (empty params) returns `ModulesState`; `modules.enable` and `modules.disable` take `{ id: ModuleId }` and return `ModulesState`. Orion emits `modules.updated` with body `ModulesState` on every change from any cause.
+- **Agent tool:** `orbit_modules` with `{ action: "list" | "enable" | "disable", id?: ModuleId }`.
+- **Persistence and auto-enable:** Orion persists state in `<data-dir>/modules.json`. A module is enabled by Orion (`enabledBy: "orion"`), by the farmer in Settings (`"user"`), or automatically (`"auto"`) when live data for that area first appears (any non-deleted row in `animals` enables `herd`, `devices` enables `devices`, and `cameras` enables `cameras`). Existing farms that already have data auto-enable their matching modules on first load.
+
 - **Custom pages (runtime UI):** Orion adds screens by writing `pages/<id>/index.html` (plus an
   optional `page.json` with `title`/`description`) in the workspace. `pages.list` returns them and the
   app shows them under "Your pages" in a sandboxed iframe (`allow-scripts allow-forms`). Orion serves
@@ -300,8 +314,9 @@ mutations enforce the user's farm role, the one-wearable rule, and undo snapshot
 Disconnecting, signing out, stopping voice or shutting down Orion closes the upstream
 session. Billing requests are relayed to Core; Core owns subscription state and metering.
 
-## Compute rule
+## Building the desktop app
 
-The developer Mac runs only light checks: install, Biome, tsc, bun test, vitest, Vite and
-Playwright. Rust, Tauri bundles and `bun build --compile` sidecars are built in GitHub Actions
-only.
+`scripts/build-desktop.sh` builds the native app for the current machine (Orion sidecar via
+`bun build --compile`, pinned go2rtc, debug `tauri build`); it needs Rust and the Tauri
+prerequisites. CI builds and smoke-tests the same app on Windows, macOS and Linux, and the release
+workflow produces the signed installers.

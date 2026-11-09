@@ -99,8 +99,8 @@ export const config: WebdriverIO.Config = {
       stdio: ["ignore", logFd, logFd],
       env: {
         ...process.env,
+        // No ORION_SEED: a fresh install must open minimal (seeded data would auto-enable modules).
         ORION_MOCK_MODEL: "1",
-        ORION_SEED: "1",
         ORION_SECRETS: "file",
       },
     });

@@ -123,8 +123,7 @@ receives HTTP 402 before upgrade. Upstream disconnection ends the client connect
 
 The remaining local-stack instructions below apply to a server or CI machine.
 
-Docker is for a server or CI, not the developer Mac (compute rule). The tests need no Docker,
-because they run Postgres in-process through PGlite:
+The tests need no Docker, because they run Postgres in-process through PGlite:
 
 ```sh
 bun run --filter '@core/api' test

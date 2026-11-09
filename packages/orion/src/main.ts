@@ -16,6 +16,11 @@ try {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+  if (config.parentWatch) {
+    process.stdin.on("end", shutdown);
+    process.stdin.on("close", shutdown);
+    process.stdin.resume();
+  }
 } catch (error) {
   process.stderr.write(`orion: ${error instanceof ConfigError ? error.message : String(error)}\n`);
   process.exit(error instanceof ConfigError ? 2 : 1);

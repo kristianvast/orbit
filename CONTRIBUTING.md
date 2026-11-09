@@ -8,20 +8,17 @@ Thanks for helping build Orbit. Whether you are adding a device connector, fixin
 - **Node.js** 22.19+
 - **Git** (used by both developers and Orion's local workspace snapshot system)
 
-You do **not** need Rust, Cargo, or Docker installed on your machine to develop and test changes locally.
+Rust is only needed to build the native desktop app, and Docker is never needed for development or tests.
 
-## The compute rule (strict)
+## Native desktop builds
 
-Local development machines run **only light checks**:
+To build and run the real desktop app on your machine, install Rust (`rustup`, stable) and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS, then run:
 
-- Dependency installation ([`scripts/locked-install.sh`](scripts/locked-install.sh) or `bun install`)
-- Biome formatting and linting (`bun run lint`)
-- TypeScript typechecking (`bun run typecheck`)
-- Fast unit and integration tests (`bun run test`, using `bun test`, `vitest`, and in-process PGlite)
-- Vite web builds (`bun run --filter '@orbit/app' build`)
-- Playwright end-to-end tests against the web build and a short-lived local Orion dev server
+```bash
+scripts/build-desktop.sh
+```
 
-**Never run heavy builds locally.** Do not run `cargo`, `rustc`, `tauri dev`, `tauri build`, `bun build --compile`, `docker`, or any video/image rendering on your local machine. Rust compilation, native desktop installers (`.dmg`, `.msi`, `.deb`, `.AppImage`), compiled sidecar binaries, and Docker images are built exclusively in GitHub Actions CI. When editing Rust files under [`apps/orbit/src-tauri`](apps/orbit/src-tauri), read the types carefully and let CI compile them.
+It compiles the Orion sidecar for your platform, fetches the pinned go2rtc binary, and runs a debug `tauri build`. The first Rust build takes several minutes and a few GB of disk under `apps/orbit/src-tauri/target`. CI builds the same app on Windows, macOS and Linux on every push, and the release workflow builds the signed installers.
 
 ## Local development setup
 

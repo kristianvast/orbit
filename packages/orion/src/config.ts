@@ -18,6 +18,8 @@ export interface OrionConfig {
   appSource: string | null;
   /** Skill catalog: http(s) base URL or local folder (--skills-url or ORION_SKILLS_URL). */
   skillsUrl?: string | null;
+  /** Exit when stdin closes (--parent-watch): the desktop shell holds the pipe, so a killed shell never leaves Orion orphaned. */
+  parentWatch?: boolean;
 }
 
 /** OS application-data directory for Orbit (Windows %APPDATA%, macOS Application Support, XDG on Linux). */
@@ -72,6 +74,7 @@ export function parseConfig(
     "mock-model",
     "seed",
     "dev",
+    "parent-watch",
   ]);
   for (const key of values.keys()) {
     if (!known.has(key)) throw new ConfigError(`unknown option: --${key}`);
@@ -105,5 +108,6 @@ export function parseConfig(
     coreUrl: (str("core-url") ?? env.ORBIT_CORE_URL)?.trim().replace(/\/+$/, "") || null,
     appSource,
     skillsUrl: (str("skills-url") ?? env.ORION_SKILLS_URL)?.trim() || null,
+    parentWatch: values.get("parent-watch") === true,
   };
 }

@@ -5,18 +5,16 @@ Actions, so you do not need to own a Windows PC. Your own machine runs only the 
 
 ## Suites at a glance
 
-| Suite                                      | Where it lives                                        | Runs locally        | Runs in CI                            |
-| ------------------------------------------ | ----------------------------------------------------- | ------------------- | ------------------------------------- |
-| Lint and format (Biome)                    | repo root                                             | `bun run lint`      | `checks`, all 3 OSes                  |
-| Typecheck                                  | every package                                         | `bun run typecheck` | `checks`, all 3 OSes                  |
-| Unit tests (bun test, vitest)              | `packages/*/test`, `apps/orbit/test`, `core/api/test` | `bun run test`      | `checks`, all 3 OSes                  |
-| Web e2e (Playwright)                       | `packages/e2e/web`                                    | `bun run e2e:web`   | `checks`, all 3 OSes                  |
-| Desktop smoke (WebdriverIO + tauri-driver) | `packages/e2e/desktop`                                | **no**              | `desktop`, Windows and Linux          |
-| Desktop build and installers               | `apps/orbit/src-tauri`                                | **no**              | `desktop` (debug), `release` (signed) |
+| Suite                                      | Where it lives                                        | Runs locally               | Runs in CI                            |
+| ------------------------------------------ | ----------------------------------------------------- | -------------------------- | ------------------------------------- |
+| Lint and format (Biome)                    | repo root                                             | `bun run lint`             | `checks`, all 3 OSes                  |
+| Typecheck                                  | every package                                         | `bun run typecheck`        | `checks`, all 3 OSes                  |
+| Unit tests (bun test, vitest)              | `packages/*/test`, `apps/orbit/test`, `core/api/test` | `bun run test`             | `checks`, all 3 OSes                  |
+| Web e2e (Playwright)                       | `packages/e2e/web`                                    | `bun run e2e:web`          | `checks`, all 3 OSes                  |
+| Desktop smoke (WebdriverIO + tauri-driver) | `packages/e2e/desktop`                                | **no**                     | `desktop`, Windows and Linux          |
+| Desktop build and installers               | `apps/orbit/src-tauri`                                | `scripts/build-desktop.sh` | `desktop` (debug), `release` (signed) |
 
-**Compute rule:** on a developer Mac, run only Biome, tsc, bun test, vitest, Vite and Playwright
-against the web build. Never run `cargo`, `tauri build`/`dev`, `bun build --compile` or Docker
-locally; CI does that.
+The desktop build needs Rust and the Tauri prerequisites; everything else needs only Bun.
 
 ## Web e2e (Playwright)
 
