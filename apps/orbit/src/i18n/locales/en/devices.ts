@@ -105,13 +105,6 @@ export const devices = {
   "add.toast.title": "Device added",
   "add.toast.description": "{kind} {serial} added to farm equipment.",
 
-  "catalog.delaval.summary":
-    "Import milking sessions, conductivity, and activity from a local DelPro server.",
-  "catalog.allflex.summary": "Sync ear tag & neck collar rumination and heat alerts.",
-  "catalog.ready": "Ready to set up",
-  "catalog.setup": "Set up with Orion",
-  "catalog.prompt": "Help me connect {name} to my farm",
-
   "page.title": "Sensors & Robots",
   "page.summary": "{devices} devices · {connections} connections",
   "page.intro":

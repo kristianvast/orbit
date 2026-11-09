@@ -106,13 +106,6 @@ export const devices: Catalog<typeof en> = {
   "add.toast.title": "Enheten er lagt til",
   "add.toast.description": "{kind} {serial} er lagt til i utstyret på gården.",
 
-  "catalog.delaval.summary":
-    "Hent melkinger, ledningsevne og aktivitet fra en lokal DelPro-server.",
-  "catalog.allflex.summary": "Synkroniser drøvtygging og brunstvarsler fra øremerker og halsbånd.",
-  "catalog.ready": "Klar til oppsett",
-  "catalog.setup": "Sett opp med Orion",
-  "catalog.prompt": "Hjelp meg å koble {name} til gården min",
-
   "page.title": "Sensorer og roboter",
   "page.summary": "{devices} enheter · {connections} tilkoblinger",
   "page.intro":

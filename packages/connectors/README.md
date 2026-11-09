@@ -52,16 +52,11 @@ Use `createMemoryWriter()` in tests and `runSync` / `runTest` to run a connector
 
 ## Built-in adapters
 
-| id            | vendor      | status                                                       |
-| ------------- | ----------- | ------------------------------------------------------------ |
-| `generic_csv` | generic_csv | working                                                      |
-| `lely_t4c`    | lely        | file export, unconfirmed default mapping                     |
-| `delpro`      | delaval     | file export (CSV and XML), unconfirmed default mapping       |
-| `smaxtec`     | smaxtec     | file export (bolus), unconfirmed default mapping             |
-| `cowmanager`  | cowmanager  | file export (ear tag), unconfirmed default mapping           |
-| `allflex`     | allflex     | file export (collar or ear tag), unconfirmed default mapping |
+| id            | vendor      | status  |
+| ------------- | ----------- | ------- |
+| `generic_csv` | generic_csv | working |
 
-Vendors do not publish their export layouts. Each vendor adapter ships a best-guess default mapping marked `TODO(unconfirmed)` in `src/adapters/`; override single fields with `config.mapping` after looking at the real file. `mode: "api"` is reserved for every adapter and throws `NotImplementedError`; no vendor endpoints are assumed.
+Vendor-specific adapters are added only once they are built against a real provider connection or a verified export from that vendor; guessed layouts are not shipped. `mode: "api"` is reserved and throws `NotImplementedError`.
 
 ## Rules for connector code
 

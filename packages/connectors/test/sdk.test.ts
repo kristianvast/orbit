@@ -96,16 +96,9 @@ describe("memory writer", () => {
 });
 
 describe("builtin connectors", () => {
-  test("registry exposes all six adapters", () => {
-    expect(builtinConnectors.map((c) => c.id)).toEqual([
-      "generic_csv",
-      "lely_t4c",
-      "delpro",
-      "smaxtec",
-      "cowmanager",
-      "allflex",
-    ]);
-    expect(getConnector("delpro")?.vendor).toBe("delaval");
+  test("registry exposes only the generic CSV importer", () => {
+    expect(builtinConnectors.map((c) => c.id)).toEqual(["generic_csv"]);
+    expect(getConnector("generic_csv")?.vendor).toBe("generic_csv");
     expect(getConnector("unknown")).toBeUndefined();
   });
 
@@ -121,8 +114,11 @@ describe("builtin connectors", () => {
     const ac = new AbortController();
     ac.abort();
     await expect(
-      runSync(getConnector("lely_t4c") as never, {
-        rawConfig: { path: new URL("./fixtures/lely.csv", import.meta.url).pathname },
+      runSync(getConnector("generic_csv") as never, {
+        rawConfig: {
+          path: new URL("./fixtures/generic.csv", import.meta.url).pathname,
+          mapping: { animalId: "Cow" },
+        },
         writer: createMemoryWriter(),
         signal: ac.signal,
       }),

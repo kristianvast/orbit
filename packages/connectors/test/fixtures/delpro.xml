@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Milkings>
-  <Milking Animal="1001" Name="Bella &amp; Co" Date="2026-10-01" Time="05:12" Station="1">
-    <MilkYield>14.2</MilkYield>
-  </Milking>
-  <Milking Animal="1002" Name="Dagny" Date="2026-10-01" Time="05:30" Station="2" MilkYield="16.0"/>
-</Milkings>

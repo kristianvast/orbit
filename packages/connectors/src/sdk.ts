@@ -120,7 +120,7 @@ export interface TestResult {
 }
 
 export interface ConnectorDefinition<S extends TSchema> {
-  /** Stable id, e.g. "lely_t4c". */
+  /** Stable id, e.g. "generic_csv". */
   id: string;
   vendor: ConnectorVendor;
   kind: ConnectorCategory;

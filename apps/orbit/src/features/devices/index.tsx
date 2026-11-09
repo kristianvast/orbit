@@ -1,16 +1,7 @@
 import type { AnimalListItem, DeviceInput, DeviceListItem } from "@orbit/protocol";
 import type { Connector, DeviceKind, DeviceStatus } from "@orbit/schema";
 import { isWearableKind } from "@orbit/schema";
-import {
-  AlertTriangle,
-  Battery,
-  Link2,
-  MessageSquare,
-  Plus,
-  RefreshCw,
-  Sparkles,
-  Unlink,
-} from "lucide-react";
+import { AlertTriangle, Battery, Link2, Plus, RefreshCw, Sparkles, Unlink } from "lucide-react";
 import { createElement, type FormEvent, Fragment, type ReactNode, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -545,21 +536,6 @@ function AddDeviceDialog({ open, onClose, onSaved }: AddDeviceDialogProps) {
     </Dialog>
   );
 }
-
-const CATALOG_VENDORS = [
-  {
-    vendor: "delaval",
-    name: "DeLaval DelPro",
-    kind: "local_api",
-    summaryKey: "devices.catalog.delaval.summary",
-  },
-  {
-    vendor: "allflex",
-    name: "Allflex SenseHub",
-    kind: "cloud_api",
-    summaryKey: "devices.catalog.allflex.summary",
-  },
-] as const;
 
 export interface DevicesPageProps {
   initialTab?: "devices" | "connections";
@@ -1172,7 +1148,7 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                 <Skeleton height="4rem" />
               </div>
             </Card>
-          ) : (
+          ) : connectors.length > 0 ? (
             <Card title={t("devices.connectors.title")} subtitle={t("devices.connectors.subtitle")}>
               <div
                 style={{
@@ -1294,72 +1270,9 @@ export function DevicesPage({ initialTab = "devices" }: DevicesPageProps = {}) {
                     </div>
                   );
                 })}
-
-                {CATALOG_VENDORS.map((cat) => (
-                  <div
-                    key={cat.vendor}
-                    data-testid={`connector-catalog-${cat.vendor}`}
-                    style={{
-                      padding: "var(--space-4)",
-                      borderRadius: "var(--radius-md)",
-                      backgroundColor: "var(--bg-surface)",
-                      border: "1px solid var(--border-subtle)",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                      gap: "var(--space-4)",
-                    }}
-                  >
-                    <div
-                      style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: "var(--space-2)",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontFamily: "var(--font-display)",
-                            fontSize: "var(--text-lg)",
-                            fontWeight: 700,
-                          }}
-                        >
-                          {cat.name}
-                        </span>
-                        <Badge variant="neutral">{t("devices.catalog.ready")}</Badge>
-                      </div>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: "var(--text-xs)",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        {t(cat.summaryKey)}
-                      </p>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={<MessageSquare size={14} />}
-                      data-testid={`connector-setup-${cat.vendor}`}
-                      onClick={() =>
-                        navigate(
-                          `/chat?prompt=${encodeURIComponent(t("devices.catalog.prompt", { name: cat.name }))}`,
-                        )
-                      }
-                    >
-                      {t("devices.catalog.setup")}
-                    </Button>
-                  </div>
-                ))}
               </div>
             </Card>
-          )}
+          ) : null}
 
           <Card
             variant="elevated"

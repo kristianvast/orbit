@@ -1,4 +1,0 @@
-Animal ID,Ear tag,Name,Sensor,Timestamp,Temperature (C),Activity,Rumination (min)
-1001,A-1001,Bella,BOL-1,2026-10-01 06:00,38.6,41,28
-1001,A-1001,Bella,BOL-1,2026-10-01 07:00,38.7,39,31
-1002,A-1002,Dagny,BOL-2,2026-10-01 06:00,38.5,52,25
