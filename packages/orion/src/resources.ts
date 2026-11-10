@@ -3,10 +3,30 @@
 // read from real directories.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import azeretMono from "../../../apps/orbit/public/fonts/azeret-mono-latin-wght-normal.woff2" with {
+  type: "file",
+};
+import switzer400 from "../../../apps/orbit/public/fonts/switzer-400-normal.woff2" with {
+  type: "file",
+};
+import switzer500 from "../../../apps/orbit/public/fonts/switzer-500-normal.woff2" with {
+  type: "file",
+};
+import switzer600 from "../../../apps/orbit/public/fonts/switzer-600-normal.woff2" with {
+  type: "file",
+};
+import switzer700 from "../../../apps/orbit/public/fonts/switzer-700-normal.woff2" with {
+  type: "file",
+};
+import tanker400 from "../../../apps/orbit/public/fonts/tanker-400-normal.woff2" with {
+  type: "file",
+};
+import appTokensCss from "../../../apps/orbit/src/design/tokens.css" with { type: "text" };
 import templateFixture from "../../connectors/template/fixture.csv" with { type: "text" };
 import templateIndex from "../../connectors/template/index.ts" with { type: "text" };
 import templateReadme from "../../connectors/template/README.md" with { type: "text" };
 import agentsMd from "../resources/AGENTS.md" with { type: "text" };
+import pageKitCss from "../resources/pages/kit.css" with { type: "text" };
 import buildingFeaturesSkill from "../resources/skills/building-features/SKILL.md" with {
   type: "text",
 };
@@ -31,6 +51,22 @@ export const EMBEDDED_RESOURCES: Readonly<Record<string, string>> = {
   "connector-template/README.md": asText(templateReadme),
   "connector-template/fixture.csv": asText(templateFixture),
   "connector-template/index.ts": asText(templateIndex),
+};
+
+/**
+ * Stylesheet custom pages load as ../_orbit.css: the app's own design tokens and primitives, then
+ * the page kit, so a page looks like the rest of Orbit without copying any of it.
+ */
+export const PAGE_KIT_CSS = `${asText(appTokensCss)}\n${asText(pageKitCss)}`;
+
+/** The app's font files by name. The tokens load them from /fonts/<name>. */
+export const FONT_FILES: Readonly<Record<string, string>> = {
+  "azeret-mono-latin-wght-normal.woff2": azeretMono,
+  "switzer-400-normal.woff2": switzer400,
+  "switzer-500-normal.woff2": switzer500,
+  "switzer-600-normal.woff2": switzer600,
+  "switzer-700-normal.woff2": switzer700,
+  "tanker-400-normal.woff2": tanker400,
 };
 
 export interface MaterializedResources {

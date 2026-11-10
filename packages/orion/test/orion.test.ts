@@ -384,6 +384,72 @@ describe("custom pages", () => {
     const traversal = await fetch(`${origin}/pages/${TOKEN}/herd-count/..%2F..%2FAGENTS.md`);
     expect(traversal.status).toBe(404);
   });
+
+  test("a page lists its card only when the card file is inside its own folder", async () => {
+    const { client, dir } = await setup();
+    const page = (id: string, files: Record<string, string>) => {
+      const folder = join(dir, "workspace", "pages", id);
+      mkdirSync(folder, { recursive: true });
+      for (const [name, content] of Object.entries(files)) {
+        writeFileSync(join(folder, name), content);
+      }
+    };
+    page("board", {
+      "index.html": "<h1>Board</h1>",
+      "card.html": "<p>12 cows</p>",
+      "page.json": JSON.stringify({ title: "Board", card: "card.html" }),
+    });
+    page("borrowed", {
+      "index.html": "<h1>Borrowed</h1>",
+      "page.json": JSON.stringify({ title: "Borrowed", card: "../board/card.html" }),
+    });
+    page("cardless", {
+      "index.html": "<h1>Cardless</h1>",
+      "page.json": JSON.stringify({ title: "Cardless", card: "missing.html" }),
+    });
+
+    const { pages } = await client.request("pages.list", {});
+    expect(pages).toEqual([
+      {
+        id: "board",
+        title: "Board",
+        path: `/pages/${TOKEN}/board/index.html`,
+        card: { path: `/pages/${TOKEN}/board/card.html` },
+      },
+      { id: "borrowed", title: "Borrowed", path: `/pages/${TOKEN}/borrowed/index.html` },
+      { id: "cardless", title: "Cardless", path: `/pages/${TOKEN}/cardless/index.html` },
+    ]);
+  });
+
+  test("sandboxed pages can load their own files, the Orbit stylesheet and its fonts", async () => {
+    const { app, dir } = await setup();
+    const folder = join(dir, "workspace", "pages", "board");
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, "index.html"), "<h1>Board</h1>");
+    writeFileSync(join(folder, "config.json"), '{"filters":[]}');
+    const origin = `http://127.0.0.1:${app.port}`;
+
+    // A sandboxed iframe has an opaque origin, so these are cross-origin reads.
+    const config = await fetch(`${origin}/pages/${TOKEN}/board/config.json`);
+    expect(config.headers.get("access-control-allow-origin")).toBe("*");
+    expect(await config.json()).toEqual({ filters: [] });
+
+    const css = await fetch(`${origin}/pages/${TOKEN}/_orbit.css`);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    expect(css.headers.get("access-control-allow-origin")).toBe("*");
+    const sheet = await css.text();
+    const fonts = [...sheet.matchAll(/url\("(\/fonts\/[^"]+)"\)/g)].map((m) => m[1]);
+    expect(fonts.length).toBeGreaterThan(0);
+    for (const path of fonts) {
+      const font = await fetch(origin + path);
+      expect({ path, status: font.status }).toEqual({ path, status: 200 });
+      expect(font.headers.get("access-control-allow-origin")).toBe("*");
+    }
+
+    expect((await fetch(`${origin}/pages/wrong-token/_orbit.css`)).status).toBe(401);
+    expect((await fetch(`${origin}/fonts/..%2Fpackage.json`)).status).toBe(404);
+    expect((await fetch(`${origin}/fonts/constructor`)).status).toBe(404);
+  });
 });
 
 describe("app source editing", () => {

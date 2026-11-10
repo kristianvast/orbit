@@ -1,0 +1,68 @@
+.orbit-page-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.orbit-page-card {
+  position: relative;
+  overflow: hidden;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.orbit-page-card:hover {
+  border-color: var(--border-strong);
+}
+
+.orbit-page-card:focus-within {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.orbit-page-card__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-block-size: var(--control-height-md);
+  padding: var(--space-3) var(--space-5) 0;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.orbit-page-card__link:focus-visible {
+  outline: none;
+}
+
+/* The link covers the whole tile, so a click anywhere on the card opens the page. */
+.orbit-page-card__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.orbit-page-card__link svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.orbit-page-card__title {
+  font-size: var(--text-h3);
+  font-weight: 600;
+  line-height: var(--leading-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orbit-page-card__frame {
+  display: block;
+  inline-size: 100%;
+  block-size: 13rem;
+  border: 0;
+  pointer-events: none;
+  background-color: var(--bg-surface);
+}

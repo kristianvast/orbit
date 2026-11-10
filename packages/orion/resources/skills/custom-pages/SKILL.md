@@ -12,9 +12,12 @@ every folder with an `index.html` in its menu under "Your pages" and shows it in
 1. Agree on what the page shows or does in one sentence.
 2. Pick an id: lowercase letters, digits, `-` or `_` (for example `milk-board`).
 3. Write `pages/<id>/page.json`: `{ "title": "Milk board", "description": "Yield per cow this week" }`.
-4. Write `pages/<id>/index.html`. Keep it one self-contained file (inline CSS and JS); extra files
-   in the folder are served too, by relative path. No CDNs or external requests: the farm PC may be
-   offline.
+   Add `"card": "card.html"` when the page should also show as a card on Home: a small summary
+   (about 208 pixels tall, no controls, no scrolling) in `pages/<id>/card.html`. The card opens the page.
+4. Write `pages/<id>/index.html`. Keep it small; extra files in the folder are served too, by
+   relative path, so scripts can be modules (`<script type="module" src="./board.js">`) and settings
+   can live in a JSON file you `fetch("./config.json")`. No CDNs or external requests: the farm PC
+   may be offline.
 5. For farm data, load the Orbit helper and call it:
 
    ```html
@@ -29,8 +32,14 @@ every folder with an `index.html` in its menu under "Your pages" and shows it in
 
    Wrap top-level `await` in an `async` function or use `<script type="module">`. Use the same
    named queries and mutations as the farm tools; never open `orbit.sqlite`.
-6. Match Orbit's look: warm off-white background, dark ink text, terracotta accents, system fonts,
-   generous spacing, large touch targets. Support a dark scheme with `prefers-color-scheme`.
+6. Match Orbit's look by loading its stylesheet before the helper:
+   `<link rel="stylesheet" href="../_orbit.css">`. It brings Orbit's colours, fonts and parts, in
+   light and dark (the page follows the app's theme by itself): `orbit-btn orbit-btn--primary
+   orbit-btn--md`, `orbit-badge orbit-badge--ok|warn|danger|info`, `orbit-input`, and for layout
+   `kit-page`, `kit-page__title`, `kit-chips` + `kit-chip`, `kit-tiles` + `kit-tile`, `kit-list` +
+   `kit-row`, `kit-facts`, `kit-figure`, `kit-tag` (ear tags), `kit-sheet` (a `<dialog>`), and
+   `kit-cardview` on the `<body>` of a card. Use its colour variables (`var(--text-muted)`,
+   `var(--accent-primary)`, `var(--border-subtle)`) instead of your own colours. No emoji as icons.
 7. Tell the farmer where to find it ("Your pages" in the menu) and that they can undo it.
 
 Rules

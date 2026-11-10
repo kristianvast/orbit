@@ -1,10 +1,14 @@
-import { type CustomPage, DEV_SERVER_URL } from "@orbit/protocol";
+import type { CustomPage } from "@orbit/protocol";
 import { LayoutDashboard } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { EmptyState } from "../../design";
-import { useT } from "../../i18n";
-import { type OrionEndpoint, useOrion, useOrionEvent } from "../../lib/orion";
+import { useI18n } from "../../i18n";
+import { useOrion, useOrionEvent } from "../../lib/orion";
+import { customPageUrl, type PageTheme } from "./url";
+
+export { PageCards } from "./PageCards";
+export { customPageUrl, type PageTheme } from "./url";
 
 export function useCustomPages(): CustomPage[] {
   const { client, state } = useOrion();
@@ -29,16 +33,10 @@ export function useCustomPages(): CustomPage[] {
   return pages;
 }
 
-export function customPageUrl(endpoint: OrionEndpoint | null, page: CustomPage): string {
-  const origin = new URL(endpoint?.url ?? DEV_SERVER_URL);
-  origin.protocol = origin.protocol === "wss:" ? "https:" : "http:";
-  return new URL(page.path, origin.origin).toString();
-}
-
 export const CUSTOM_PAGE_ICON = LayoutDashboard;
 
-export default function CustomPageView() {
-  const t = useT();
+export default function CustomPageView({ theme }: { theme: PageTheme }) {
+  const { t, intlLocale } = useI18n();
   const { id } = useParams();
   const { endpoint } = useOrion();
   const pages = useCustomPages();
@@ -61,7 +59,7 @@ export default function CustomPageView() {
       <iframe
         key={page.id}
         title={page.title}
-        src={customPageUrl(endpoint, page)}
+        src={customPageUrl(endpoint, page.path, { theme, lang: intlLocale })}
         sandbox="allow-scripts allow-forms"
         className="orbit-custom-page__frame"
         data-testid="custom-page-frame"

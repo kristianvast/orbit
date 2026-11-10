@@ -12,8 +12,10 @@ import {
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Badge, Button, EmptyState, OrbitRings, type OrbitSatellite, Skeleton } from "../design";
+import { PageCards, useCustomPages } from "../features/pages";
 import { type MessageKey, type TranslateFn, useT } from "../i18n";
 import { useOrionQuery } from "../lib/orion";
+import { useTheme } from "./providers";
 import "./home.css";
 
 function formatAlertKind(
@@ -93,6 +95,8 @@ export function HomePage() {
   const navigate = useNavigate();
   const t = useT();
   const [question, setQuestion] = useState("");
+  const customPages = useCustomPages();
+  const { theme } = useTheme();
   const { data: summary, loading } = useOrionQuery("farm.summary", undefined, {
     refetchTables: [
       "farms",
@@ -409,6 +413,8 @@ export function HomePage() {
           </ul>
         </section>
       </div>
+
+      <PageCards pages={customPages} theme={theme} />
 
       <p className="orbit-home__note">
         <ShieldCheck size={16} aria-hidden="true" />

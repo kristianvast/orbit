@@ -155,6 +155,8 @@ export const CustomPage = Type.Object({
   description: Type.Optional(Type.String()),
   /** Server path of the entry file, relative to Orion's HTTP origin. Carries the session token. */
   path: Type.String(),
+  /** Present when page.json names a card file: a small summary Home shows, linking to the page. */
+  card: Type.Optional(Type.Object({ path: Type.String() })),
 });
 export type CustomPage = Static<typeof CustomPage>;
 

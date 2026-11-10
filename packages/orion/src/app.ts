@@ -27,7 +27,7 @@ import { Workspace } from "./agent/workspace";
 import type { OrionConfig } from "./config";
 import { openDatabase } from "./db/open";
 import { RepoError } from "./db/repo";
-import { materializeResources } from "./resources";
+import { FONT_FILES, materializeResources, PAGE_KIT_CSS } from "./resources";
 import { openSecretStore } from "./secrets";
 import { AccountError, AccountService } from "./services/account";
 import { BillingService } from "./services/billing";
@@ -200,20 +200,44 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     return new Response(Bun.file(target.path), { headers: noStore });
   };
 
+  // Pages run in a sandboxed iframe, which gives them an opaque origin: their own module scripts,
+  // fetch() of files in their folder and fonts are cross-origin requests and need this header.
+  // Access is still decided by the session token in the path.
+  const anyOrigin = { "Access-Control-Allow-Origin": "*" };
+
   const servePage = (pathname: string): Response => {
     const parsed = tokenPath(pathname);
     if (parsed instanceof Response) return parsed;
     const [id = "", ...rest] = parsed.segments;
     const rel = rest.join("/");
-    const headers = noStore;
+    const headers = { ...noStore, ...anyOrigin };
     if (id === "_orbit.js") {
       return new Response(PAGE_SDK, {
         headers: { ...headers, "Content-Type": "text/javascript; charset=utf-8" },
       });
     }
+    if (id === "_orbit.css") {
+      return new Response(PAGE_KIT_CSS, {
+        headers: { ...headers, "Content-Type": "text/css; charset=utf-8" },
+      });
+    }
     const file = resolvePageFile(workspace.dir, id, rel);
     if (!file) return notFound();
     return new Response(Bun.file(file), { headers });
+  };
+
+  /** The app's fonts, which the page stylesheet loads from /fonts/<name>. Public, like the app's own. */
+  const serveFont = (pathname: string): Response => {
+    const name = pathname.slice("/fonts/".length);
+    const file = Object.hasOwn(FONT_FILES, name) ? FONT_FILES[name] : undefined;
+    if (!file) return notFound();
+    return new Response(Bun.file(file), {
+      headers: {
+        ...anyOrigin,
+        "Content-Type": "font/woff2",
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
   };
 
   const settingsView = (): Settings => {
@@ -402,6 +426,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       }
       if (url.pathname === "/health") return Response.json({ ok: true, version: SERVER_VERSION });
       if (url.pathname.startsWith(`/${PAGES_DIR}/`)) return servePage(url.pathname);
+      if (url.pathname.startsWith("/fonts/")) return serveFont(url.pathname);
       if (url.pathname.startsWith(`/${LOCAL_UI_PREFIX}/`)) return serveLocalUi(url.pathname);
       if (url.pathname.startsWith("/camera/")) return serveCamera(req, srv, { tokenPath, relay });
       return new Response("not found", { status: 404 });

@@ -230,6 +230,16 @@ mapped resource against them.
   the files at `/pages/<token>/<id>/...` on its localhost port, so only token holders can load them,
   and `/pages/<token>/_orbit.js` gives pages `orbit.query`, `orbit.mutate`, `orbit.request` and
   `orbit.on` over the normal protocol. The `custom-pages` skill describes the contract.
+- **Page cards and the page kit:** a `page.json` with `"card": "card.html"` (a file directly in the
+  page folder) makes `pages.list` return `card.path`, and Home shows that file as a card: a
+  non-interactive sandboxed frame inside a tile that links to `/pages/<id>`. The app passes its
+  theme and language to every page and card frame as `?theme=&lang=`, and `_orbit.js` applies them.
+  `/pages/<token>/_orbit.css` is the app's own `design/tokens.css` followed by
+  `packages/orion/resources/pages/kit.css`, and `/fonts/<name>` serves the app's fonts, so pages
+  look like the app without copying it. A sandboxed frame has an opaque origin, so everything under
+  `/pages/<token>/` and `/fonts/` is sent with `Access-Control-Allow-Origin: *`; the token in the
+  path remains the access check. That is what lets a page use module scripts and
+  `fetch("./config.json")`.
 - **Source editing (dev):** with `--app-source <checkout>` (or `ORBIT_APP_SOURCE`) Orion's system
   prompt names the Orbit checkout and loads its `AGENTS.md`, so Orion can change the app and itself
   (`apps/orbit/src` hot-reloads, `packages/orion` restarts under `bun --watch`). The Orion dev script

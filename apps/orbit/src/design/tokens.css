@@ -420,6 +420,9 @@ a {
 
 .orbit-main-scroll {
   grid-area: main;
+  /* Contains absolutely positioned content (visually hidden text), which would otherwise escape
+     this scroller and make the document scroll behind the shell. */
+  position: relative;
   min-block-size: 0;
   min-inline-size: 0;
   overflow-y: auto;

@@ -6,9 +6,11 @@ import HerdPage from "../features/herd";
 import CustomPageView from "../features/pages";
 import SettingsPage from "../features/settings";
 import { HomePage } from "./HomePage";
+import { useTheme } from "./providers";
 import { AppShell } from "./shell";
 
 export function AppRoutes() {
+  const { theme } = useTheme();
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -18,7 +20,7 @@ export function AppRoutes() {
         <Route path="devices" element={<DevicesPage />} />
         <Route path="cameras" element={<CamerasPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="pages/:id" element={<CustomPageView />} />
+        <Route path="pages/:id" element={<CustomPageView theme={theme} />} />
       </Route>
     </Routes>
   );

@@ -8,10 +8,14 @@ import { type CustomPage, PROTOCOL_VERSION } from "@orbit/protocol";
 export const PAGES_DIR = "pages";
 const PAGE_ID = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 const ENTRY = "index.html";
+/** A card is one HTML file directly inside the page folder. */
+const CARD_ENTRY = /^[A-Za-z0-9_][A-Za-z0-9._-]*\.html$/;
 
 interface PageManifest {
   title?: unknown;
   description?: unknown;
+  /** File name of the page's Home card, e.g. "card.html". */
+  card?: unknown;
 }
 
 function readManifest(dir: string): PageManifest {
@@ -42,13 +46,21 @@ export function listPages(workspaceDir: string, token: string): CustomPage[] {
       typeof manifest.title === "string" && manifest.title.trim()
         ? manifest.title.trim()
         : titleFromId(entry.name);
+    const base = `/${PAGES_DIR}/${encodeURIComponent(token)}/${entry.name}`;
+    const card =
+      typeof manifest.card === "string" &&
+      CARD_ENTRY.test(manifest.card) &&
+      resolvePageFile(workspaceDir, entry.name, manifest.card)
+        ? manifest.card
+        : null;
     pages.push({
       id: entry.name,
       title,
       ...(typeof manifest.description === "string" && manifest.description.trim()
         ? { description: manifest.description.trim() }
         : {}),
-      path: `/${PAGES_DIR}/${encodeURIComponent(token)}/${entry.name}/${ENTRY}`,
+      path: `${base}/${ENTRY}`,
+      ...(card ? { card: { path: `${base}/${card}` } } : {}),
     });
   }
   return pages.sort((a, b) => a.title.localeCompare(b.title));
@@ -68,11 +80,16 @@ export function resolvePageFile(workspaceDir: string, id: string, rel: string): 
 
 /**
  * Browser helper served at /pages/<token>/_orbit.js. Pages load it with
- * <script src="../_orbit.js"></script> and get window.orbit: query, mutate, request and on(event).
+ * <script src="../_orbit.js"></script> and get window.orbit: query, mutate, request, on(event) and
+ * cameraFrame(id). It also applies the app's theme and language, which the app passes as ?theme= and ?lang=.
  */
 export const PAGE_SDK = `(() => {
   const match = location.pathname.match(/^\\/${PAGES_DIR}\\/([^/]+)\\//);
   const token = match ? decodeURIComponent(match[1]) : "";
+  const query = new URLSearchParams(location.search);
+  const theme = query.get("theme") ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
+  if (query.get("lang")) document.documentElement.lang = query.get("lang");
   const pending = new Map();
   const listeners = new Set();
   let ws = null;
@@ -120,6 +137,9 @@ export const PAGE_SDK = `(() => {
     request,
     query: (query, params = {}) => request("db.query", { query, params }),
     mutate: (mutation, params = {}) => request("db.mutate", { mutation, params }),
+    /** URL of a camera's latest still picture; add a changing query string to refresh it. */
+    cameraFrame: (cameraId) =>
+      "/camera/" + encodeURIComponent(token) + "/" + encodeURIComponent(cameraId) + "/frame.jpeg",
     on(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);
