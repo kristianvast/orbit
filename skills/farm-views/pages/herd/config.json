@@ -1,0 +1,15 @@
+{
+  "species": "all",
+  "card": { "breakdown": "group" },
+  "filters": ["attention", "group"],
+  "sorts": ["attention", "name", "tag"],
+  "animalCard": {
+    "facts": ["group", "age"],
+    "badges": ["alert", "heat", "due-soon", "fresh", "dry"]
+  },
+  "animalPanel": {
+    "facts": ["tag", "nationalId", "breed", "sex", "age", "group", "sensor"],
+    "sections": ["attention", "reproduction", "milk", "readings", "events", "notes"]
+  },
+  "repro": {}
+}

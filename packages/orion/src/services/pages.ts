@@ -1,9 +1,10 @@
 // Custom pages: small web pages Orion builds in <workspace>/pages/<id>/ and the app shows in its nav.
 // Orion serves them over its localhost HTTP server under /pages/<token>/, so relative asset links
 // work and only someone holding the session token can load them.
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join, sep } from "node:path";
 import { type CustomPage, PROTOCOL_VERSION } from "@orbit/protocol";
+import { RepoError } from "../db/repo";
 
 export const PAGES_DIR = "pages";
 const PAGE_ID = /^[a-z0-9][a-z0-9_-]{0,47}$/;
@@ -64,6 +65,33 @@ export function listPages(workspaceDir: string, token: string): CustomPage[] {
     });
   }
   return pages.sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/** Copies a ready-made page folder into pages/<id>/. Never overwrites a page the farm already has. */
+export function scaffoldPage(
+  workspaceDir: string,
+  sourceDir: string,
+  id: string,
+): { id: string; path: string; files: string[] } {
+  if (!PAGE_ID.test(id)) {
+    throw new RepoError(
+      "bad_request",
+      "page id must be lowercase letters, digits, - or _ (max 48 characters)",
+    );
+  }
+  if (!existsSync(join(sourceDir, ENTRY))) {
+    throw new RepoError("not_found", `the page folder ${sourceDir} has no ${ENTRY}`);
+  }
+  const path = `${PAGES_DIR}/${id}`;
+  const dest = join(workspaceDir, path);
+  if (existsSync(dest)) {
+    throw new RepoError(
+      "conflict",
+      `a page ${path} already exists; change that one or pick another id`,
+    );
+  }
+  cpSync(sourceDir, dest, { recursive: true });
+  return { id, path, files: readdirSync(dest).sort() };
 }
 
 /** Resolves a request path inside pages/<id>/ to a real file, or null if it is missing or escapes. */

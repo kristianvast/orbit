@@ -1,0 +1,7 @@
+{
+  "card": { "camera": null, "refreshSeconds": 15 },
+  "panel": { "refreshSeconds": 5, "zoomRefreshSeconds": 2 },
+  "locations": [],
+  "order": "location",
+  "hide": []
+}

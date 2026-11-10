@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Camera wall card</title>
+  <link rel="stylesheet" href="../_orbit.css">
+  <script src="../_orbit.js"></script>
+  <style>
+    body.kit-cardview {
+      padding: 0;
+      gap: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background-color: var(--bg-surface);
+      block-size: 100vh;
+      max-block-size: 100vh;
+      overflow: hidden;
+    }
+
+    .card-picture-view {
+      display: flex;
+      flex-direction: column;
+      inline-size: 100%;
+      block-size: 100%;
+      min-block-size: 0;
+    }
+
+    .card-picture-view[hidden] {
+      display: none;
+    }
+
+    .card-picture-view__frame {
+      flex: 1;
+      inline-size: 100%;
+      min-block-size: 0;
+      object-fit: cover;
+      display: block;
+      background-color: var(--bg-elevated);
+    }
+
+    .card-caption-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-4);
+      background-color: var(--bg-surface);
+      border-block-start: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+      min-inline-size: 0;
+    }
+
+    .card-caption-strip__camera {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-inline-size: 0;
+      flex: 1;
+    }
+
+    .card-caption-strip__name {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-fallback-view {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      inline-size: 100%;
+      block-size: 100%;
+      padding: var(--space-3) var(--space-4);
+      gap: var(--space-2);
+      min-block-size: 0;
+    }
+
+    .card-fallback-view[hidden] {
+      display: none;
+    }
+
+    .card-camera-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      min-block-size: 0;
+      overflow: hidden;
+    }
+
+    .card-camera-list > li + li {
+      border-block-start: 1px solid var(--border-subtle);
+    }
+
+    .card-camera-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding-block: var(--space-1);
+      min-inline-size: 0;
+    }
+
+    .card-camera-row__lead {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-inline-size: 0;
+      flex: 1;
+    }
+
+    .card-camera-row__name {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-camera-row__status {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .card-fallback-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding-block-start: var(--space-2);
+      border-block-start: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+    }
+
+    .card-summary-text {
+      margin: 0;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .card-more-text {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .card-empty-view {
+      display: flex;
+      align-items: center;
+      inline-size: 100%;
+      block-size: 100%;
+      padding: var(--space-4) var(--space-5);
+    }
+
+    .card-empty-view[hidden] {
+      display: none;
+    }
+  </style>
+</head>
+<body class="kit-cardview">
+  <div class="card-picture-view" id="picture-view" hidden>
+    <img class="card-picture-view__frame" id="card-frame" data-testid="cameras-card-frame" alt="">
+    <div class="card-caption-strip">
+      <div class="card-caption-strip__camera">
+        <span class="kit-dot" id="picture-dot" aria-hidden="true"></span>
+        <span class="card-caption-strip__name" id="picture-name"></span>
+      </div>
+      <span class="card-summary-text" id="picture-summary"></span>
+    </div>
+  </div>
+
+  <div class="card-fallback-view" id="fallback-view" hidden>
+    <ul class="card-camera-list" id="fallback-list"></ul>
+    <div class="card-fallback-foot">
+      <span class="card-summary-text" id="fallback-summary" data-testid="cameras-card-summary">Loading...</span>
+      <span class="card-more-text" id="fallback-more" hidden></span>
+    </div>
+  </div>
+
+  <div class="card-empty-view" id="empty-view" hidden>
+    <p class="kit-caption" id="empty-summary">No cameras added yet.</p>
+  </div>
+
+  <script type="module">
+    import {
+      buildCardFallbackList,
+      createFrameState,
+      DEFAULT_CONFIG,
+      formatSummary,
+      getCameraLocation,
+      getCameraStatus,
+      getNextRefreshSeconds,
+      pickCardCamera,
+      reduceFrameState,
+      resolveConfig,
+      selectPanelCameras,
+      shouldRequestFrame,
+    } from "./cameras.js";
+
+    const pictureView = document.getElementById("picture-view");
+    const cardFrameImg = document.getElementById("card-frame");
+    const pictureDot = document.getElementById("picture-dot");
+    const pictureName = document.getElementById("picture-name");
+    const pictureSummary = document.getElementById("picture-summary");
+
+    const fallbackView = document.getElementById("fallback-view");
+    const fallbackList = document.getElementById("fallback-list");
+    const fallbackSummary = document.getElementById("fallback-summary");
+    const fallbackMore = document.getElementById("fallback-more");
+
+    const emptyView = document.getElementById("empty-view");
+    const emptySummary = document.getElementById("empty-summary");
+
+    let config = DEFAULT_CONFIG;
+    let allCameras = [];
+    let chosenCamera = null;
+    let frameState = createFrameState("offline");
+    let refreshTimer = null;
+    let seq = 0;
+
+    function setSummaryTestIdOwner(activeEl) {
+      for (const el of [pictureSummary, fallbackSummary, emptySummary]) {
+        if (el === activeEl) {
+          el.setAttribute("data-testid", "cameras-card-summary");
+        } else {
+          el.removeAttribute("data-testid");
+        }
+      }
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch(`./config.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return DEFAULT_CONFIG;
+        return resolveConfig(await res.json());
+      } catch {
+        return DEFAULT_CONFIG;
+      }
+    }
+
+    function stopTimer() {
+      if (refreshTimer !== null) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }
+    }
+
+    function preloadImage(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(url);
+        img.onerror = () => reject(new Error("Card frame failed"));
+        img.src = url;
+      });
+    }
+
+    function renderView() {
+      const panelCameras = selectPanelCameras(allCameras, config);
+      const summaryText = formatSummary(panelCameras);
+
+      if (panelCameras.length === 0) {
+        pictureView.hidden = true;
+        fallbackView.hidden = true;
+        emptyView.hidden = false;
+        emptySummary.textContent = "No cameras added yet.";
+        setSummaryTestIdOwner(emptySummary);
+        return;
+      }
+
+      if (chosenCamera && frameState.frame === "showing" && frameState.pictureUrl) {
+        const statusInfo = getCameraStatus(chosenCamera.status);
+        emptyView.hidden = true;
+        fallbackView.hidden = true;
+        pictureView.hidden = false;
+
+        cardFrameImg.src = frameState.pictureUrl;
+        cardFrameImg.alt = `${chosenCamera.name} (${getCameraLocation(chosenCamera)})`;
+        pictureDot.dataset.tone = statusInfo.dotTone;
+        pictureName.textContent = chosenCamera.name;
+        pictureSummary.textContent = summaryText;
+        setSummaryTestIdOwner(pictureSummary);
+        return;
+      }
+
+      emptyView.hidden = true;
+      pictureView.hidden = true;
+      fallbackView.hidden = false;
+
+      const fallback = buildCardFallbackList(panelCameras, 4);
+      fallbackList.replaceChildren();
+      for (const item of fallback.items) {
+        const li = document.createElement("li");
+        li.className = "card-camera-row";
+
+        const lead = document.createElement("div");
+        lead.className = "card-camera-row__lead";
+
+        const dot = document.createElement("span");
+        dot.className = "kit-dot";
+        dot.dataset.tone = item.dotTone;
+        dot.setAttribute("aria-hidden", "true");
+
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "card-camera-row__name";
+        nameSpan.textContent = item.name;
+
+        lead.append(dot, nameSpan);
+
+        const statusSpan = document.createElement("span");
+        statusSpan.className = "card-camera-row__status";
+        statusSpan.textContent = item.statusLabel;
+
+        li.append(lead, statusSpan);
+        fallbackList.appendChild(li);
+      }
+
+      fallbackSummary.textContent = summaryText;
+      setSummaryTestIdOwner(fallbackSummary);
+
+      if (fallback.moreLabel) {
+        fallbackMore.hidden = false;
+        fallbackMore.textContent = fallback.moreLabel;
+      } else {
+        fallbackMore.hidden = true;
+        fallbackMore.textContent = "";
+      }
+    }
+
+    function scheduleNextRefresh() {
+      stopTimer();
+      if (document.hidden || !chosenCamera || !shouldRequestFrame(chosenCamera)) return;
+      const delaySec = getNextRefreshSeconds(frameState, config.card.refreshSeconds);
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        void refreshCardPicture();
+      }, delaySec * 1000);
+    }
+
+    async function refreshCardPicture() {
+      if (document.hidden || !chosenCamera || !shouldRequestFrame(chosenCamera)) return;
+      const targetId = chosenCamera.id;
+      const url = `${window.orbit.cameraFrame(targetId)}?t=${Date.now()}-${++seq}`;
+      try {
+        await preloadImage(url);
+        if (!chosenCamera || chosenCamera.id !== targetId) return;
+        frameState = reduceFrameState(frameState, {
+          type: "load",
+          url,
+          timestamp: Date.now(),
+        });
+        renderView();
+      } catch {
+        if (!chosenCamera || chosenCamera.id !== targetId) return;
+        frameState = reduceFrameState(frameState, { type: "error" });
+        renderView();
+      } finally {
+        if (chosenCamera && chosenCamera.id === targetId) {
+          scheduleNextRefresh();
+        }
+      }
+    }
+
+    async function loadData() {
+      stopTimer();
+      try {
+        const [loadedConfig, camerasRes] = await Promise.all([
+          loadConfig(),
+          window.orbit.query("cameras.list", {}),
+        ]);
+        config = loadedConfig;
+        allCameras = Array.isArray(camerasRes?.rows) ? camerasRes.rows : [];
+        const nextChosen = pickCardCamera(allCameras, config);
+        if (!nextChosen || nextChosen.id !== chosenCamera?.id) {
+          chosenCamera = nextChosen;
+          frameState = createFrameState(chosenCamera ?? "offline");
+        } else {
+          chosenCamera = nextChosen;
+          if (chosenCamera.status === "offline") {
+            frameState = createFrameState(chosenCamera);
+          }
+        }
+        renderView();
+        if (chosenCamera && shouldRequestFrame(chosenCamera) && !document.hidden) {
+          void refreshCardPicture();
+        }
+      } catch {
+        allCameras = [];
+        chosenCamera = null;
+        renderView();
+      }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        stopTimer();
+      } else if (chosenCamera && shouldRequestFrame(chosenCamera)) {
+        void refreshCardPicture();
+      }
+    });
+
+    let debounceTimer = null;
+    window.orbit.on((event) => {
+      if (
+        event.type === "db.changed" &&
+        (event.table === "cameras" || event.table === "workspace")
+      ) {
+        if (debounceTimer !== null) clearTimeout(debounceTimer);
+        debounceTimer = window.setTimeout(() => {
+          debounceTimer = null;
+          void loadData();
+        }, 300);
+      }
+    });
+
+    void loadData();
+  </script>
+</body>
+</html>

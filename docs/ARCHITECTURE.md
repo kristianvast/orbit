@@ -240,6 +240,12 @@ mapped resource against them.
   `/pages/<token>/` and `/fonts/` is sent with `Access-Control-Allow-Origin: *`; the token in the
   path remains the access check. That is what lets a page use module scripts and
   `fetch("./config.json")`.
+- **Ready-made views (`skills/farm-views`):** a catalog skill whose `skill.json` lists `pages`
+  (`[{ id, dir }]`). The `page_scaffold { fromSkill, page, id? }` tool copies one into
+  `pages/<id>/` and never replaces an existing page. Each view keeps what the farmer sees in its
+  `config.json` and its rules in one tested module (`herd.js`, `calendar.js`, `cameras.js`;
+  `repro.js` is shared by copy and pinned identical by `skills/farm-views/views.test.ts`).
+  `orion --seed` installs all of them into the demo farm when the catalog is a local folder.
 - **Source editing (dev):** with `--app-source <checkout>` (or `ORBIT_APP_SOURCE`) Orion's system
   prompt names the Orbit checkout and loads its `AGENTS.md`, so Orion can change the app and itself
   (`apps/orbit/src` hot-reloads, `packages/orion` restarts under `bun --watch`). The Orion dev script

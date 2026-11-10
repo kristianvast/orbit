@@ -43,6 +43,104 @@
           "sha256": "8621afd2256d87e72e1f90affe03503b703f735ed945530c7f804a936059fc82"
         }
       ]
+    },
+    {
+      "name": "farm-views",
+      "version": "1.0.0",
+      "description": "Ready-made, tested screens to start from when the farmer wants to see their animals, a calendar or their cameras - a herd view (Home card, herd list with the farmer's own filters, a card and a detail panel per animal), a calendar (calvings and foalings due, dry-offs, pregnancy checks, recorded events) and a camera wall. Copy one in and tune it instead of building a page from scratch.",
+      "keywords": [
+        "herd",
+        "animals",
+        "cows",
+        "cattle",
+        "horses",
+        "calendar",
+        "calving",
+        "cameras",
+        "dashboard",
+        "card",
+        "panel",
+        "screen",
+        "view"
+      ],
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "a817773474ff893ed5fda255aafa52cea0b13c0b01e4c9911ad854180fbcb126"
+        },
+        {
+          "path": "pages/calendar/calendar.js",
+          "sha256": "e744f0da72a97eac607c3b6723b7f4a0a5d51a8e265cd01773b34e500eeb10ee"
+        },
+        {
+          "path": "pages/calendar/card.html",
+          "sha256": "4e6bf3975c6b434fb200e6bfbb4ae33a64823db2dee0bb66f05e16050fe3ba47"
+        },
+        {
+          "path": "pages/calendar/config.json",
+          "sha256": "849e11d1dde8eeb07a9191c9f12082a0a205b10c6c87b6d3afb89d3e18f52d3b"
+        },
+        {
+          "path": "pages/calendar/index.html",
+          "sha256": "58f6d589cba460c453d593c4df7db46941e96b17de94902a20ae90360e7b5f79"
+        },
+        {
+          "path": "pages/calendar/page.json",
+          "sha256": "c851e052b6eb98ed63709cb8a676e68e2851f4c993f711e3f428f924fe6a4969"
+        },
+        {
+          "path": "pages/calendar/repro.js",
+          "sha256": "711a9f7265e34d1a37b7c791762a364696ff330b1489a7cefdad01219ecc4af2"
+        },
+        {
+          "path": "pages/cameras/cameras.js",
+          "sha256": "8d2c15ab529f850bee37898fb39f73737bdae7cffcb3c746260e5d779ba5c4e7"
+        },
+        {
+          "path": "pages/cameras/card.html",
+          "sha256": "0996810e58d927ffd36f9d3e3bab2d41e7d3834f626d929543fdb80f26a842f4"
+        },
+        {
+          "path": "pages/cameras/config.json",
+          "sha256": "d60d073f74d8dc6289c99851802cdb98a930ba1cf051a25a70a773303600f7fd"
+        },
+        {
+          "path": "pages/cameras/index.html",
+          "sha256": "d0b9ca95ab199d6f44bec821f77bf9db50ef673346c569f5ba0166fbdb43d173"
+        },
+        {
+          "path": "pages/cameras/page.json",
+          "sha256": "fe8eb4b66520c6d97834d236076d235fefa4c477e608108173bbf2c0b14ab77e"
+        },
+        {
+          "path": "pages/herd/card.html",
+          "sha256": "35484c57cb2c36a6054e970f086d9a47d8665681f3efe7cab8f6d84452926c6c"
+        },
+        {
+          "path": "pages/herd/config.json",
+          "sha256": "a4c2e55f61fb7b913f413237bbb975d71f9359d256b97261ac9815e036683298"
+        },
+        {
+          "path": "pages/herd/herd.js",
+          "sha256": "2fbab4da552dafea498e2580886f8ec5e7bad927c083ee7bfdbc663adfb2a2a5"
+        },
+        {
+          "path": "pages/herd/index.html",
+          "sha256": "98e40231eeec06574de2abb537a189141d4222b7bc73017ba98354a5cd9a5d8f"
+        },
+        {
+          "path": "pages/herd/page.json",
+          "sha256": "21c3c241800660d772103265ea8c9970631a4ff6d03886b047d8bacb94758ba4"
+        },
+        {
+          "path": "pages/herd/repro.js",
+          "sha256": "711a9f7265e34d1a37b7c791762a364696ff330b1489a7cefdad01219ecc4af2"
+        },
+        {
+          "path": "skill.json",
+          "sha256": "2df4efc7f0b6eb1c4047f0a6e5b43a2b325c51b2065f9b4786dd3b2e5b832adb"
+        }
+      ]
     }
   ]
 }

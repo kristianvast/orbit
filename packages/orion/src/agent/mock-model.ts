@@ -30,6 +30,13 @@ export const MOCK_TRIGGERS: MockTrigger[] = [
     tool: "connector_scaffold",
     args: { name: "delpro", fromSkill: "delaval-delpro" },
   },
+  { match: /find a skill for my herd/i, tool: "skill_search", args: { query: "herd" } },
+  { match: /install the farm views skill/i, tool: "skill_install", args: { name: "farm-views" } },
+  {
+    match: /add the herd view/i,
+    tool: "page_scaffold",
+    args: { fromSkill: "farm-views", page: "herd" },
+  },
   {
     match: /write a note/i,
     tool: "write",

@@ -1,0 +1,24 @@
+{
+  "name": "farm-views",
+  "version": "1.0.0",
+  "keywords": [
+    "herd",
+    "animals",
+    "cows",
+    "cattle",
+    "horses",
+    "calendar",
+    "calving",
+    "cameras",
+    "dashboard",
+    "card",
+    "panel",
+    "screen",
+    "view"
+  ],
+  "pages": [
+    { "id": "herd", "dir": "pages/herd" },
+    { "id": "calendar", "dir": "pages/calendar" },
+    { "id": "cameras", "dir": "pages/cameras" }
+  ]
+}

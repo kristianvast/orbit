@@ -1,0 +1,19 @@
+{
+  "weekStart": 1,
+  "show": [
+    "expected-calving",
+    "dry-off-due",
+    "pregnancy-check-due",
+    "calving",
+    "insemination",
+    "pregnancy-check",
+    "dry-off",
+    "treatment",
+    "alert"
+  ],
+  "card": {
+    "upcomingDays": 14
+  },
+  "upcomingDays": 60,
+  "repro": {}
+}

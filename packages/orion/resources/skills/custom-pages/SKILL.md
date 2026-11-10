@@ -9,6 +9,10 @@ description: Add a new screen to the Orbit app (a dashboard, checklist, report, 
 A custom page is a folder `pages/<id>/` in the farm workspace (your working directory). Orbit lists
 every folder with an `index.html` in its menu under "Your pages" and shows it inside the app.
 
+For a herd list, a calendar or a camera wall, do not start from an empty file. `skill_search` the
+catalog (for example `herd`), `skill_install` the `farm-views` skill and follow it: `page_scaffold`
+copies a tested page that you then tune to the farmer. Build from scratch only what the catalog lacks.
+
 1. Agree on what the page shows or does in one sentence.
 2. Pick an id: lowercase letters, digits, `-` or `_` (for example `milk-board`).
 3. Write `pages/<id>/page.json`: `{ "title": "Milk board", "description": "Yield per cow this week" }`.

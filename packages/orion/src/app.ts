@@ -47,6 +47,26 @@ import { VoiceSessions } from "./voice/session";
 
 export const SERVER_VERSION = "0.1.0";
 
+const EXAMPLE_VIEWS_SKILL = "farm-views";
+
+/**
+ * The demo farm also gets the catalog's ready-made views, so a seeded Orbit shows Home cards and
+ * their panels. Only from a catalog on this computer: a demo start never waits on the network.
+ */
+async function addExampleViews(skills: SkillService, workspace: Workspace): Promise<void> {
+  try {
+    await skills.install(EXAMPLE_VIEWS_SKILL);
+    for (const page of await skills.pages(EXAMPLE_VIEWS_SKILL)) {
+      await skills.scaffoldPage(EXAMPLE_VIEWS_SKILL, page);
+    }
+    await workspace.snapshot("Example views added to the demo farm");
+  } catch (error) {
+    process.stderr.write(
+      `orion: the demo farm has no example views (${error instanceof Error ? error.message : String(error)})\n`,
+    );
+  }
+}
+
 export interface OrionApp {
   port: number;
   hub: SessionHub;
@@ -118,6 +138,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     config.skillsUrl ?? (config.appSource ? join(config.appSource, "skills") : DEFAULT_SKILLS_URL),
     workspace.dir,
   );
+  if (db.seeded && skills.local) await addExampleViews(skills, workspace);
   const relay = new Go2rtcRelay(repo, secrets, config.dataDir);
   const localUi = new LocalUiService(
     config.dataDir,

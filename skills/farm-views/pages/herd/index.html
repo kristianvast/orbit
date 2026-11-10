@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Herd</title>
+    <link rel="stylesheet" href="../_orbit.css" />
+    <script src="../_orbit.js"></script>
+    <style>
+      .herd-sort-wrap {
+        flex: 0 0 auto;
+        min-inline-size: 11rem;
+      }
+
+      .herd-sort-select {
+        appearance: none;
+        block-size: var(--control-height-md);
+        padding-inline-end: var(--space-8);
+        background-image: linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%),
+          linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
+        background-position:
+          calc(100% - 1.125rem) 50%,
+          calc(100% - 0.8125rem) 50%;
+        background-size:
+          5px 5px,
+          5px 5px;
+        background-repeat: no-repeat;
+      }
+
+      .herd-sort-wrap[hidden],
+      .kit-toolbar[hidden],
+      .kit-chips[hidden],
+      .herd-panel__badges[hidden] {
+        display: none;
+      }
+
+      [data-theme="light"] .kit-chip[aria-pressed="true"] {
+        color: var(--accent-primary-hover);
+      }
+
+      .herd-tile__head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-3);
+        min-inline-size: 0;
+      }
+
+      .herd-tile__name {
+        margin: 0;
+        font-family: var(--font-sans);
+        font-size: var(--text-lg);
+        font-weight: 600;
+        text-transform: none;
+        line-height: var(--leading-snug);
+        color: var(--text-primary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .herd-tile__tag {
+        color: var(--text-muted);
+        flex-shrink: 0;
+      }
+
+      .herd-tile__facts {
+        margin: 0;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .herd-tile__badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+
+      .herd-empty {
+        padding: var(--space-8) var(--space-6);
+        background-color: var(--bg-elevated);
+        border-radius: var(--radius-lg);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-3);
+      }
+
+      .herd-empty__title {
+        margin: 0;
+        font-family: var(--font-sans);
+        font-size: var(--text-h3);
+        font-weight: 600;
+        text-transform: none;
+        color: var(--text-primary);
+      }
+
+      .herd-empty__body {
+        margin: 0;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        max-inline-size: 56ch;
+      }
+
+      .herd-panel__title-block {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        min-inline-size: 0;
+      }
+
+      .herd-panel__title {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: var(--text-h2);
+        font-weight: var(--display-weight);
+        line-height: var(--leading-heading);
+        letter-spacing: var(--tracking-display);
+        text-transform: uppercase;
+      }
+
+      .herd-panel__tag {
+        color: var(--text-muted);
+      }
+
+      .herd-panel__badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+
+      .herd-panel__vet {
+        margin: 0;
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+      }
+
+      .herd-milk-summary {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-2) var(--space-4);
+      }
+
+      .herd-milk-avg {
+        font-size: var(--text-lg);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .herd-milk-bars {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: var(--space-2);
+        align-items: end;
+        block-size: 5.5rem;
+        padding-block-start: var(--space-2);
+      }
+
+      .herd-milk-bar {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--space-1);
+        block-size: 100%;
+        min-inline-size: 0;
+      }
+
+      .herd-milk-bar__track {
+        inline-size: 100%;
+        flex: 1;
+        display: flex;
+        align-items: flex-end;
+        background-color: var(--bg-subtle);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+      }
+
+      .herd-milk-bar__fill {
+        inline-size: 100%;
+        background-color: var(--accent-secondary);
+        border-radius: var(--radius-sm);
+        min-block-size: 2px;
+      }
+
+      .herd-milk-bar__val {
+        font-size: var(--text-xs);
+        font-variant-numeric: tabular-nums;
+        color: var(--text-secondary);
+      }
+
+      .herd-milk-bar__day {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+      }
+
+      .herd-notes {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+
+      .herd-notes__textarea {
+        min-block-size: 5.5rem;
+        resize: vertical;
+      }
+
+      .herd-notes__footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+      }
+
+      .herd-notes__status {
+        margin: 0;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+      }
+
+      .herd-notes__status[data-tone="danger"] {
+        color: var(--status-danger);
+      }
+
+      .herd-notes__status[data-tone="ok"] {
+        color: var(--status-ok);
+      }
+
+      .herd-row-value {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--text-primary);
+        text-align: end;
+      }
+
+      @media (max-width: 640px) {
+        .herd-sort-wrap {
+          flex: 1 1 100%;
+        }
+
+        .kit-tiles {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body data-detect-ignore="cream-palette">
+    <main class="kit-page">
+      <header class="kit-page__head">
+        <h1 class="kit-page__title" data-testid="herd-title">Herd</h1>
+        <p class="kit-page__meta tabular-nums" id="herd-count" data-testid="herd-count">
+          Loading…
+        </p>
+      </header>
+
+      <div class="kit-toolbar" id="herd-toolbar">
+        <div class="kit-toolbar__grow">
+          <label for="herd-search-input" class="orbit-visually-hidden">
+            Search by name, ear tag, or national ID
+          </label>
+          <input
+            id="herd-search-input"
+            type="search"
+            class="orbit-input"
+            placeholder="Search name, ear tag, or national ID…"
+            autocomplete="off"
+            data-testid="herd-search"
+          />
+        </div>
+        <div class="herd-sort-wrap" id="herd-sort-wrap" hidden>
+          <label for="herd-sort-select" class="orbit-visually-hidden">Sort animals</label>
+          <select
+            id="herd-sort-select"
+            class="orbit-select herd-sort-select"
+            data-testid="herd-sort"
+          ></select>
+        </div>
+      </div>
+
+      <ul class="kit-chips" id="herd-chips" aria-label="Filter animals"></ul>
+
+      <section id="herd-body" aria-live="polite">
+        <p class="kit-note">Loading herd…</p>
+      </section>
+    </main>
+
+    <dialog
+      class="kit-sheet"
+      id="animal-panel"
+      data-testid="animal-panel"
+      aria-labelledby="animal-panel-name"
+    >
+      <div class="kit-sheet__head">
+        <div class="herd-panel__title-block">
+          <h2 class="herd-panel__title" id="animal-panel-name" data-testid="animal-panel-name">
+            Animal
+          </h2>
+          <div class="kit-tag herd-panel__tag" id="animal-panel-tag" data-testid="animal-panel-tag"></div>
+        </div>
+        <button
+          type="button"
+          class="orbit-btn orbit-btn--secondary orbit-btn--sm"
+          id="animal-panel-close"
+          data-testid="animal-panel-close"
+        >
+          Close
+        </button>
+      </div>
+      <div class="herd-panel__badges" id="animal-panel-badges" hidden></div>
+      <dl class="kit-facts" id="animal-panel-facts"></dl>
+      <div id="animal-panel-sections" class="kit-section"></div>
+    </dialog>
+
+    <script type="module">
+      import {
+        buildAnimalPanelDetails,
+        buildFilterChips,
+        computeMilkSummary,
+        configNeedsHerdMilk,
+        configNeedsHerdReproEvents,
+        DAY_MS,
+        deriveAnimalContext,
+        filterByConfiguredSpecies,
+        formatDateShort,
+        formatNumber,
+        formatRelativeTime,
+        matchesSearch,
+        REPRO_EVENT_KINDS,
+        resolveConfig,
+        SORT_OPTIONS,
+        selectCardBadges,
+        selectCardFacts,
+        sortContexts,
+      } from "./herd.js";
+
+      const countEl = document.getElementById("herd-count");
+      const toolbarEl = document.getElementById("herd-toolbar");
+      const searchInput = document.getElementById("herd-search-input");
+      const sortWrap = document.getElementById("herd-sort-wrap");
+      const sortSelect = document.getElementById("herd-sort-select");
+      const chipsEl = document.getElementById("herd-chips");
+      const bodyEl = document.getElementById("herd-body");
+
+      const dialogEl = document.getElementById("animal-panel");
+      const panelNameEl = document.getElementById("animal-panel-name");
+      const panelTagEl = document.getElementById("animal-panel-tag");
+      const panelCloseBtn = document.getElementById("animal-panel-close");
+      const panelBadgesEl = document.getElementById("animal-panel-badges");
+      const panelFactsEl = document.getElementById("animal-panel-facts");
+      const panelSectionsEl = document.getElementById("animal-panel-sections");
+
+      let currentConfig = resolveConfig({});
+      let allContexts = [];
+      let activeFilterId = "all";
+      let activeSortId = "attention";
+      let searchQuery = "";
+      let openAnimalId = null;
+      let lastTriggerAnimalId = null;
+      let deepLinkHandled = false;
+
+      async function loadConfig() {
+        try {
+          const res = await fetch("./config.json", { cache: "no-store" });
+          if (!res.ok) return resolveConfig({});
+          return resolveConfig(await res.json());
+        } catch {
+          return resolveConfig({});
+        }
+      }
+
+      async function mapPool(items, concurrency, fn) {
+        const results = new Array(items.length);
+        let idx = 0;
+        async function worker() {
+          while (idx < items.length) {
+            const i = idx++;
+            results[i] = await fn(items[i], i);
+          }
+        }
+        await Promise.all(
+          Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+        );
+        return results;
+      }
+
+      function syncSortControl() {
+        const sorts = currentConfig.sorts;
+        if (!sorts.includes(activeSortId)) {
+          activeSortId = sorts[0] ?? "attention";
+        }
+        if (sorts.length <= 1) {
+          sortWrap.hidden = true;
+          return;
+        }
+        sortWrap.hidden = false;
+        sortSelect.replaceChildren();
+        for (const id of sorts) {
+          const optDef = SORT_OPTIONS[id];
+          if (!optDef) continue;
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = `Sort: ${optDef.label}`;
+          if (id === activeSortId) opt.selected = true;
+          sortSelect.append(opt);
+        }
+      }
+
+      function renderView() {
+        const lang = document.documentElement.lang || "en";
+        const now = Date.now();
+        const total = allContexts.length;
+
+        if (total === 0) {
+          countEl.textContent = "0 animals";
+          toolbarEl.hidden = true;
+          chipsEl.hidden = true;
+          bodyEl.replaceChildren();
+
+          const empty = document.createElement("div");
+          empty.className = "herd-empty";
+          const title = document.createElement("h2");
+          title.className = "herd-empty__title";
+          title.textContent = "No animals yet";
+          const desc = document.createElement("p");
+          desc.className = "herd-empty__body";
+          desc.textContent =
+            "There are no animals in your herd register yet. Ask Orion to add your animals or connect a herd system.";
+          empty.append(title, desc);
+          bodyEl.append(empty);
+          return;
+        }
+
+        toolbarEl.hidden = false;
+        chipsEl.hidden = false;
+        syncSortControl();
+
+        const chips = buildFilterChips(allContexts, currentConfig, now);
+        if (!chips.some((c) => c.id === activeFilterId)) {
+          activeFilterId = "all";
+        }
+        const activeChip = chips.find((c) => c.id === activeFilterId) ?? chips[0];
+
+        chipsEl.replaceChildren();
+        for (const chip of chips) {
+          const li = document.createElement("li");
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "kit-chip";
+          btn.dataset.testid = chip.testId;
+          btn.setAttribute("aria-pressed", chip.id === activeFilterId ? "true" : "false");
+
+          const lbl = document.createElement("span");
+          lbl.textContent = chip.label;
+
+          const cnt = document.createElement("span");
+          cnt.className = "kit-chip__count";
+          cnt.textContent = formatNumber(chip.count, lang, 0);
+
+          btn.append(lbl, cnt);
+          btn.addEventListener("click", () => {
+            activeFilterId = chip.id;
+            renderView();
+          });
+          li.append(btn);
+          chipsEl.append(li);
+        }
+
+        const filtered = allContexts.filter(
+          (ctx) => activeChip.match(ctx) && matchesSearch(ctx.animal, searchQuery),
+        );
+        const sorted = sortContexts(filtered, activeSortId);
+
+        const isFiltered = activeFilterId !== "all" || searchQuery.trim().length > 0;
+        if (isFiltered) {
+          countEl.textContent = `${formatNumber(sorted.length, lang, 0)} of ${formatNumber(total, lang, 0)}`;
+        } else {
+          countEl.textContent = `${formatNumber(total, lang, 0)} ${total === 1 ? "animal" : "animals"}`;
+        }
+
+        bodyEl.replaceChildren();
+        if (sorted.length === 0) {
+          const noRes = document.createElement("div");
+          noRes.className = "herd-empty";
+          const title = document.createElement("h2");
+          title.className = "herd-empty__title";
+          title.textContent = "No matching animals";
+          const desc = document.createElement("p");
+          desc.className = "herd-empty__body";
+          desc.textContent = "No animals match the current filter or search.";
+          const showAllBtn = document.createElement("button");
+          showAllBtn.type = "button";
+          showAllBtn.className = "orbit-btn orbit-btn--secondary orbit-btn--sm";
+          showAllBtn.textContent = "Show all";
+          showAllBtn.addEventListener("click", () => {
+            activeFilterId = "all";
+            searchQuery = "";
+            searchInput.value = "";
+            renderView();
+          });
+          noRes.append(title, desc, showAllBtn);
+          bodyEl.append(noRes);
+          return;
+        }
+
+        const grid = document.createElement("div");
+        grid.className = "kit-tiles";
+
+        for (const ctx of sorted) {
+          const animal = ctx.animal;
+          const displayName = animal.name || animal.earTagNumber || animal.nationalId || "Unnamed";
+          const cardBtn = document.createElement("button");
+          cardBtn.type = "button";
+          cardBtn.className = "kit-tile";
+          cardBtn.dataset.testid = "animal-card";
+          cardBtn.dataset.animalId = animal.id;
+          cardBtn.dataset.animalName = displayName;
+
+          const head = document.createElement("div");
+          head.className = "herd-tile__head";
+
+          const nameEl = document.createElement("h2");
+          nameEl.className = "herd-tile__name";
+          nameEl.textContent = displayName;
+          head.append(nameEl);
+
+          const tagValue = animal.earTagNumber || animal.nationalId || "";
+          if (tagValue) {
+            const tagEl = document.createElement("span");
+            tagEl.className = "kit-tag herd-tile__tag";
+            tagEl.textContent = tagValue;
+            head.append(tagEl);
+          }
+          cardBtn.append(head);
+
+          const facts = selectCardFacts(ctx, currentConfig, { now, lang });
+          if (facts.length > 0) {
+            const factsLine = document.createElement("p");
+            factsLine.className = "herd-tile__facts";
+            factsLine.textContent = facts.map((f) => f.value).join(" · ");
+            cardBtn.append(factsLine);
+          }
+
+          const badges = selectCardBadges(ctx, currentConfig, now, lang);
+          if (badges.length > 0) {
+            const badgeRow = document.createElement("div");
+            badgeRow.className = "herd-tile__badges";
+            for (const b of badges) {
+              const span = document.createElement("span");
+              span.className = `orbit-badge orbit-badge--${b.tone}`;
+              span.textContent = b.label;
+              badgeRow.append(span);
+            }
+            cardBtn.append(badgeRow);
+          }
+
+          cardBtn.addEventListener("click", () => {
+            lastTriggerAnimalId = animal.id;
+            openAnimalPanel(animal.id);
+          });
+
+          grid.append(cardBtn);
+        }
+
+        bodyEl.append(grid);
+      }
+
+      function createSectionWrap(id, titleText) {
+        const sec = document.createElement("section");
+        sec.className = "kit-section";
+        sec.dataset.testid = `animal-section-${id}`;
+        const h3 = document.createElement("h3");
+        h3.className = "kit-section__title";
+        h3.textContent = titleText;
+        sec.append(h3);
+        return sec;
+      }
+
+      function renderAnimalPanelContent(animal, observations) {
+        const lang = document.documentElement.lang || "en";
+        const now = Date.now();
+        const details = buildAnimalPanelDetails(animal, observations, currentConfig, now, lang);
+        const displayName = animal.name || animal.earTagNumber || animal.nationalId || "Unnamed";
+
+        panelNameEl.textContent = displayName;
+        const tagText = animal.earTagNumber || animal.nationalId || "";
+        panelTagEl.textContent = tagText;
+        panelTagEl.hidden = !tagText;
+
+        panelBadgesEl.replaceChildren();
+        if (details.badges.length > 0) {
+          panelBadgesEl.hidden = false;
+          for (const b of details.badges) {
+            const span = document.createElement("span");
+            span.className = `orbit-badge orbit-badge--${b.tone}`;
+            span.textContent = b.label;
+            panelBadgesEl.append(span);
+          }
+        } else {
+          panelBadgesEl.hidden = true;
+        }
+
+        panelFactsEl.replaceChildren();
+        for (const f of details.facts) {
+          const div = document.createElement("div");
+          const dt = document.createElement("dt");
+          dt.textContent = f.label;
+          const dd = document.createElement("dd");
+          if (f.mono) dd.className = "kit-tag";
+          dd.textContent = f.value;
+          div.append(dt, dd);
+          panelFactsEl.append(div);
+        }
+
+        panelSectionsEl.replaceChildren();
+
+        for (const sectionId of currentConfig.animalPanel.sections) {
+          if (sectionId === "attention") {
+            if (details.attention.alerts.length === 0) continue;
+            const sec = createSectionWrap("attention", "Attention");
+            const list = document.createElement("ul");
+            list.className = "kit-list";
+            for (const alert of details.attention.alerts) {
+              const li = document.createElement("li");
+              li.className = "kit-row";
+              const dot = document.createElement("span");
+              dot.className = "kit-dot";
+              dot.dataset.tone = alert.kind === "heat_alert" ? "warn" : "danger";
+              const main = document.createElement("div");
+              main.className = "kit-row__main";
+              const title = document.createElement("p");
+              title.className = "kit-row__title";
+              title.textContent = `${alert.what} · ${alert.when}`;
+              const meta = document.createElement("p");
+              meta.className = "kit-row__meta";
+              meta.textContent = alert.message;
+              main.append(title, meta);
+              li.append(dot, main);
+              list.append(li);
+            }
+            const vet = document.createElement("p");
+            vet.className = "herd-panel__vet";
+            vet.textContent = details.attention.vetLine;
+            sec.append(list, vet);
+            panelSectionsEl.append(sec);
+          } else if (sectionId === "reproduction") {
+            if (details.reproduction.length === 0) continue;
+            const sec = createSectionWrap("reproduction", "Reproduction");
+            const list = document.createElement("ul");
+            list.className = "kit-list";
+            for (const row of details.reproduction) {
+              const li = document.createElement("li");
+              li.className = "kit-row";
+              if (row.testId) li.dataset.testid = row.testId;
+              const main = document.createElement("div");
+              main.className = "kit-row__main";
+              const lbl = document.createElement("p");
+              lbl.className = "kit-row__title";
+              lbl.textContent = row.label;
+              main.append(lbl);
+              const val = document.createElement("span");
+              val.className = "herd-row-value";
+              val.textContent = row.value;
+              li.append(main, val);
+              list.append(li);
+            }
+            sec.append(list);
+            panelSectionsEl.append(sec);
+          } else if (sectionId === "milk") {
+            const milk = details.milk;
+            if (!milk || (milk.averageKg === null && !milk.lastMilking)) continue;
+            const sec = createSectionWrap("milk", "Milk");
+
+            const summaryRow = document.createElement("div");
+            summaryRow.className = "herd-milk-summary";
+
+            const avgEl = document.createElement("div");
+            avgEl.className = "herd-milk-avg";
+            avgEl.dataset.testid = "animal-panel-milk";
+            avgEl.textContent =
+              milk.averageKg !== null
+                ? `${formatNumber(milk.averageKg, lang, 1)} kg/day (7-day avg)`
+                : "No milkings in last 7 days";
+            summaryRow.append(avgEl);
+
+            if (milk.lastMilking) {
+              const lastEl = document.createElement("p");
+              lastEl.className = "kit-caption";
+              lastEl.textContent = `Last milking: ${formatNumber(milk.lastMilking.kg, lang, 1)} kg · ${formatRelativeTime(milk.lastMilking.ts, now, lang)}`;
+              summaryRow.append(lastEl);
+            }
+            sec.append(summaryRow);
+
+            if (milk.dailyTotals.length > 0) {
+              const maxKg = Math.max(1, ...milk.dailyTotals.map((d) => d.kg));
+              const chart = document.createElement("div");
+              chart.className = "herd-milk-bars";
+              for (const day of milk.dailyTotals) {
+                const col = document.createElement("div");
+                col.className = "herd-milk-bar";
+
+                const val = document.createElement("span");
+                val.className = "herd-milk-bar__val";
+                val.textContent = formatNumber(day.kg, lang, 0);
+
+                const track = document.createElement("div");
+                track.className = "herd-milk-bar__track";
+                const fill = document.createElement("div");
+                fill.className = "herd-milk-bar__fill";
+                fill.style.height = `${Math.max(4, Math.round((day.kg / maxKg) * 100))}%`;
+                track.append(fill);
+
+                const dayLbl = document.createElement("span");
+                dayLbl.className = "herd-milk-bar__day";
+                dayLbl.textContent = day.dayAgo === 0 ? "Today" : `${day.dayAgo}d`;
+
+                col.append(val, track, dayLbl);
+                chart.append(col);
+              }
+              sec.append(chart);
+            }
+            panelSectionsEl.append(sec);
+          } else if (sectionId === "readings") {
+            if (details.readings.length === 0) continue;
+            const sec = createSectionWrap("readings", "Readings");
+            const list = document.createElement("ul");
+            list.className = "kit-list";
+            for (const r of details.readings) {
+              const li = document.createElement("li");
+              li.className = "kit-row";
+              const main = document.createElement("div");
+              main.className = "kit-row__main";
+              const title = document.createElement("p");
+              title.className = "kit-row__title";
+              title.textContent = r.label;
+              const meta = document.createElement("p");
+              meta.className = "kit-row__meta";
+              meta.textContent = r.when;
+              main.append(title, meta);
+
+              const val = document.createElement("span");
+              val.className = "herd-row-value";
+              val.textContent = r.value;
+              li.append(main, val);
+              list.append(li);
+            }
+            sec.append(list);
+            panelSectionsEl.append(sec);
+          } else if (sectionId === "events") {
+            if (details.events.length === 0) continue;
+            const sec = createSectionWrap("events", "Events");
+            const list = document.createElement("ul");
+            list.className = "kit-list";
+            for (const ev of details.events) {
+              const li = document.createElement("li");
+              li.className = "kit-row";
+              const main = document.createElement("div");
+              main.className = "kit-row__main";
+              const title = document.createElement("p");
+              title.className = "kit-row__title";
+              title.textContent = ev.title;
+              if (ev.detail) {
+                const meta = document.createElement("p");
+                meta.className = "kit-row__meta";
+                meta.textContent = ev.detail;
+                main.append(title, meta);
+              } else {
+                main.append(title);
+              }
+              const dateEl = document.createElement("span");
+              dateEl.className = "kit-caption tabular-nums";
+              dateEl.textContent = ev.date;
+              li.append(main, dateEl);
+              list.append(li);
+            }
+            sec.append(list);
+            panelSectionsEl.append(sec);
+          } else if (sectionId === "notes") {
+            const sec = createSectionWrap("notes", "Notes");
+            const wrap = document.createElement("div");
+            wrap.className = "herd-notes";
+
+            const label = document.createElement("label");
+            label.htmlFor = "animal-notes-textarea";
+            label.className = "orbit-visually-hidden";
+            label.textContent = "Notes";
+
+            const textarea = document.createElement("textarea");
+            textarea.id = "animal-notes-textarea";
+            textarea.className = "orbit-input herd-notes__textarea";
+            textarea.dataset.testid = "animal-notes-input";
+            textarea.placeholder = "Add a note about this animal…";
+            const initialNotes = animal.notes ?? "";
+            textarea.value = initialNotes;
+
+            const footer = document.createElement("div");
+            footer.className = "herd-notes__footer";
+
+            const statusMsg = document.createElement("p");
+            statusMsg.className = "herd-notes__status";
+            statusMsg.setAttribute("aria-live", "polite");
+
+            const saveBtn = document.createElement("button");
+            saveBtn.type = "button";
+            saveBtn.className = "orbit-btn orbit-btn--primary orbit-btn--sm";
+            saveBtn.dataset.testid = "animal-notes-save";
+            saveBtn.textContent = "Save";
+            saveBtn.disabled = true;
+
+            let savedBaseline = initialNotes;
+
+            textarea.addEventListener("input", () => {
+              saveBtn.disabled = textarea.value === savedBaseline;
+              statusMsg.textContent = "";
+              delete statusMsg.dataset.tone;
+            });
+
+            saveBtn.addEventListener("click", async () => {
+              if (textarea.value === savedBaseline) return;
+              saveBtn.disabled = true;
+              statusMsg.textContent = "Saving…";
+              delete statusMsg.dataset.tone;
+              try {
+                const nextNotes = textarea.value.trim() ? textarea.value : null;
+                await window.orbit.mutate("animals.upsert", {
+                  animal: {
+                    id: animal.id,
+                    species: animal.species,
+                    notes: nextNotes,
+                  },
+                });
+                savedBaseline = textarea.value;
+                animal.notes = nextNotes;
+                statusMsg.textContent = "Saved";
+                statusMsg.dataset.tone = "ok";
+                saveBtn.disabled = textarea.value === savedBaseline;
+              } catch (err) {
+                statusMsg.textContent = err?.message || "Failed to save note";
+                statusMsg.dataset.tone = "danger";
+                saveBtn.disabled = false;
+              }
+            });
+
+            footer.append(statusMsg, saveBtn);
+            wrap.append(label, textarea, footer);
+            sec.append(wrap);
+            panelSectionsEl.append(sec);
+          }
+        }
+      }
+
+      async function openAnimalPanel(animalId) {
+        const existingCtx = allContexts.find((c) => c.animal.id === animalId);
+        if (!existingCtx) return;
+        openAnimalId = animalId;
+
+        renderAnimalPanelContent(existingCtx.animal, existingCtx.observations);
+        if (!dialogEl.open) {
+          dialogEl.showModal();
+        }
+
+        try {
+          const since7d = new Date(Date.now() - 7 * DAY_MS).toISOString();
+          const [detailRes, milkRes] = await Promise.all([
+            window.orbit.query("animals.get", { id: animalId }),
+            window.orbit.query("observations.recent", {
+              animalId,
+              kind: "milking",
+              since: since7d,
+              limit: 200,
+            }),
+          ]);
+          if (openAnimalId !== animalId) return;
+          const animal = {
+            ...existingCtx.animal,
+            ...(detailRes?.animal ?? {}),
+            wearable: detailRes?.wearable ?? existingCtx.animal.wearable ?? null,
+          };
+          const obsById = new Map();
+          for (const o of existingCtx.observations ?? []) obsById.set(o.id, o);
+          for (const o of detailRes?.recentObservations ?? []) obsById.set(o.id, o);
+          for (const o of milkRes?.rows ?? []) obsById.set(o.id, o);
+          renderAnimalPanelContent(animal, [...obsById.values()]);
+        } catch {
+          // Keep initial rendered details if detail fetch fails
+        }
+      }
+
+      function closeAnimalPanel() {
+        if (dialogEl.open) {
+          dialogEl.close();
+        }
+      }
+
+      panelCloseBtn.addEventListener("click", closeAnimalPanel);
+
+      dialogEl.addEventListener("click", (e) => {
+        if (e.target === dialogEl) {
+          closeAnimalPanel();
+        }
+      });
+
+      dialogEl.addEventListener("close", () => {
+        const triggerId = lastTriggerAnimalId || openAnimalId;
+        openAnimalId = null;
+        if (location.hash.startsWith("#animal=")) {
+          history.replaceState(null, "", location.pathname + location.search);
+        }
+        if (triggerId) {
+          const btn = bodyEl.querySelector(
+            `[data-testid="animal-card"][data-animal-id="${CSS.escape(triggerId)}"]`,
+          );
+          if (btn instanceof HTMLElement) {
+            btn.focus();
+          }
+        }
+      });
+
+      searchInput.addEventListener("input", () => {
+        searchQuery = searchInput.value;
+        renderView();
+      });
+
+      sortSelect.addEventListener("change", () => {
+        activeSortId = sortSelect.value;
+        renderView();
+      });
+
+      function checkHashDeepLink() {
+        const hash = location.hash.slice(1);
+        if (!hash) return;
+        const params = new URLSearchParams(hash);
+        const animalId = params.get("animal");
+        if (animalId && allContexts.some((c) => c.animal.id === animalId)) {
+          lastTriggerAnimalId = animalId;
+          openAnimalPanel(animalId);
+        }
+      }
+
+      window.addEventListener("hashchange", checkHashDeepLink);
+
+      async function loadData() {
+        const now = Date.now();
+        try {
+          currentConfig = await loadConfig();
+          const since7d = new Date(now - 7 * DAY_MS).toISOString();
+          const [animalsRes, alertsRes] = await Promise.all([
+            window.orbit.query("animals.list", { status: "active", limit: 1000 }),
+            window.orbit.query("observations.recent", {
+              alertsOnly: true,
+              since: since7d,
+              limit: 1000,
+            }),
+          ]);
+
+          const scopedAnimals = filterByConfiguredSpecies(animalsRes?.rows ?? [], currentConfig);
+          const obsByAnimal = new Map();
+          const pushObs = (row) => {
+            if (!row?.animalId) return;
+            let list = obsByAnimal.get(row.animalId);
+            if (!list) {
+              list = new Map();
+              obsByAnimal.set(row.animalId, list);
+            }
+            list.set(row.id, row);
+          };
+
+          for (const a of alertsRes?.rows ?? []) pushObs(a);
+
+          if (scopedAnimals.length > 0 && configNeedsHerdReproEvents(currentConfig)) {
+            const reproRows = await Promise.all(
+              REPRO_EVENT_KINDS.map((kind) =>
+                window.orbit.query("observations.recent", { kind, limit: 1000 }),
+              ),
+            );
+            for (const res of reproRows) {
+              for (const row of res?.rows ?? []) pushObs(row);
+            }
+          }
+
+          const milkAvgByAnimal = new Map();
+          if (scopedAnimals.length > 0 && configNeedsHerdMilk(currentConfig)) {
+            await mapPool(scopedAnimals, 4, async (animal) => {
+              const res = await window.orbit.query("observations.recent", {
+                animalId: animal.id,
+                kind: "milking",
+                since: since7d,
+                limit: 100,
+              });
+              const rows = res?.rows ?? [];
+              for (const r of rows) pushObs(r);
+              const summary = computeMilkSummary(rows, now);
+              milkAvgByAnimal.set(animal.id, summary.averageKg);
+            });
+          }
+
+          allContexts = scopedAnimals.map((animal) => {
+            const obsMap = obsByAnimal.get(animal.id);
+            const obs = obsMap ? [...obsMap.values()] : [];
+            const milkOverride = milkAvgByAnimal.has(animal.id)
+              ? milkAvgByAnimal.get(animal.id)
+              : undefined;
+            return deriveAnimalContext(animal, obs, currentConfig.repro, now, milkOverride);
+          });
+
+          renderView();
+
+          if (!deepLinkHandled) {
+            deepLinkHandled = true;
+            checkHashDeepLink();
+          } else if (openAnimalId && dialogEl.open) {
+            openAnimalPanel(openAnimalId);
+          }
+        } catch (err) {
+          bodyEl.replaceChildren();
+          const errBox = document.createElement("div");
+          errBox.className = "herd-empty";
+          const title = document.createElement("h2");
+          title.className = "herd-empty__title";
+          title.textContent = "Could not load herd";
+          const desc = document.createElement("p");
+          desc.className = "herd-empty__body";
+          desc.textContent = err?.message || "Connection to Orion failed.";
+          errBox.append(title, desc);
+          bodyEl.append(errBox);
+        }
+      }
+
+      let refreshTimer = null;
+      window.orbit.on((event) => {
+        if (
+          event.type === "db.changed" &&
+          ["animals", "observations", "devices", "device_bindings"].includes(event.table)
+        ) {
+          clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(loadData, 300);
+        }
+      });
+
+      loadData();
+    </script>
+  </body>
+</html>

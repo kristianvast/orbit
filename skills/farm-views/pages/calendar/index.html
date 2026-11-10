@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calendar</title>
+  <link rel="stylesheet" href="../_orbit.css">
+  <script src="../_orbit.js"></script>
+  <style>
+    .calendar-head-main {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-3) var(--space-4);
+    }
+
+    .calendar-month-label {
+      margin: 0;
+      font-family: var(--font-sans);
+      font-size: var(--text-h3);
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: none;
+    }
+
+    .calendar-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .calendar-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(19rem, 1fr);
+      gap: var(--space-6);
+      align-items: start;
+    }
+
+    .calendar-grid-panel {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      min-inline-size: 0;
+    }
+
+    .calendar-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: var(--space-1);
+    }
+
+    .calendar-weekday {
+      text-align: center;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      letter-spacing: var(--tracking-caps);
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding-block: var(--space-1);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .calendar-weeks {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: var(--space-1);
+    }
+
+    .calendar-day {
+      appearance: none;
+      min-block-size: 4.5rem;
+      min-inline-size: 0;
+      padding: var(--space-2);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-1);
+      cursor: pointer;
+      text-align: start;
+      transition:
+        background-color var(--duration-fast) var(--ease-out),
+        border-color var(--duration-fast) var(--ease-out),
+        color var(--duration-fast) var(--ease-out);
+    }
+
+    .calendar-day:hover {
+      background-color: var(--bg-subtle);
+      border-color: var(--border-strong);
+    }
+
+    .calendar-day[data-outside="true"] {
+      background-color: var(--bg-canvas);
+      color: var(--text-muted);
+    }
+
+    .calendar-day[data-today="true"] {
+      background-color: var(--bg-elevated);
+      border-color: var(--border-strong);
+    }
+
+    .calendar-day[aria-pressed="true"] {
+      background-color: var(--accent-primary-subtle);
+      border-color: var(--accent-primary-border);
+      color: var(--text-primary);
+    }
+
+    .calendar-day__top {
+      inline-size: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-1);
+    }
+
+    .calendar-day__num {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      line-height: var(--leading-tight);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .calendar-day[data-today="true"] .calendar-day__num {
+      color: var(--accent-primary);
+      font-weight: 700;
+    }
+
+    .calendar-day__today-tag {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--accent-primary);
+      line-height: var(--leading-tight);
+    }
+
+    .calendar-day__marks {
+      inline-size: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-1);
+      min-block-size: 0.75rem;
+    }
+
+    .calendar-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      max-inline-size: 100%;
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      line-height: var(--leading-tight);
+    }
+
+    .calendar-mark__label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .calendar-day__more {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      line-height: var(--leading-tight);
+    }
+
+    .calendar-side {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-6);
+      min-inline-size: 0;
+    }
+
+    .calendar-panel {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      min-inline-size: 0;
+    }
+
+    .calendar-panel__head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+
+    .calendar-event-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .calendar-upcoming-groups {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    .calendar-upcoming-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+    }
+
+    .calendar-upcoming-group + .calendar-upcoming-group {
+      padding-block-start: var(--space-3);
+      border-block-start: 1px solid var(--border-subtle);
+    }
+
+    .calendar-upcoming-day-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+
+    .calendar-upcoming-relative {
+      margin: 0;
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .calendar-upcoming-relative[data-overdue="true"] {
+      color: var(--status-danger);
+    }
+
+    .calendar-upcoming-date {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .calendar-vet-note {
+      margin: 0;
+      padding-block-start: var(--space-2);
+      border-block-start: 1px solid var(--border-subtle);
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+    }
+
+    .calendar-empty-day {
+      margin: 0;
+      padding-block: var(--space-3);
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 900px) {
+      .calendar-body {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 560px) {
+      .calendar-grid-panel {
+        padding: var(--space-2);
+      }
+
+      .calendar-day {
+        min-block-size: 2.85rem;
+        padding: var(--space-1);
+      }
+
+      .calendar-day__today-tag,
+      .calendar-mark__label {
+        display: none;
+      }
+
+      .calendar-panel {
+        padding: var(--space-4);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="kit-page" id="calendar-app">
+    <header class="kit-page__head">
+      <div class="calendar-head-main">
+        <h1 class="kit-page__title" data-testid="calendar-title">Calendar</h1>
+        <p class="calendar-month-label" id="calendar-month-label" data-testid="calendar-month-label"></p>
+      </div>
+      <nav class="calendar-nav" aria-label="Month navigation">
+        <button type="button" class="orbit-btn orbit-btn--secondary orbit-btn--sm" id="calendar-prev" data-testid="calendar-prev" aria-label="Previous month">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+          <span>Previous</span>
+        </button>
+        <button type="button" class="orbit-btn orbit-btn--subtle orbit-btn--sm" id="calendar-today" data-testid="calendar-today">
+          <span>Today</span>
+        </button>
+        <button type="button" class="orbit-btn orbit-btn--secondary orbit-btn--sm" id="calendar-next" data-testid="calendar-next" aria-label="Next month">
+          <span>Next</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </nav>
+    </header>
+
+    <ul class="kit-chips" id="calendar-chips" aria-label="Filter event types" hidden></ul>
+
+    <div id="calendar-status" class="kit-note" role="status">Loading calendar...</div>
+
+    <div class="calendar-body" id="calendar-content" hidden>
+      <section class="calendar-grid-panel" aria-labelledby="calendar-month-label">
+        <div class="calendar-weekdays" id="calendar-weekdays" aria-hidden="true"></div>
+        <div class="calendar-weeks" id="calendar-weeks"></div>
+      </section>
+
+      <div class="calendar-side">
+        <section class="calendar-panel" aria-labelledby="selected-day-heading">
+          <div class="calendar-panel__head">
+            <h2 class="kit-section__title" id="selected-day-heading">Selected day</h2>
+            <span class="kit-caption tabular-nums" id="selected-day-count"></span>
+          </div>
+          <div id="calendar-day-events" data-testid="calendar-day-events"></div>
+        </section>
+
+        <section class="calendar-panel" aria-labelledby="upcoming-heading">
+          <div class="calendar-panel__head">
+            <h2 class="kit-section__title" id="upcoming-heading">Coming up</h2>
+            <span class="kit-caption" id="upcoming-window-caption"></span>
+          </div>
+          <div id="calendar-upcoming" data-testid="calendar-upcoming"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import {
+      buildEvents,
+      buildMonthGrid,
+      buildUpcomingList,
+      EVENT_TYPES,
+      eventsForDay,
+      parseLocalDay,
+      resolveConfig,
+      toLocalDay,
+    } from "./calendar.js";
+    import { DAY_MS } from "./repro.js";
+
+    const RECORDED_KINDS = ["calving", "insemination", "pregnancy_check", "dry_off", "treatment", "abortion"];
+
+    let config = resolveConfig({});
+    let allEvents = [];
+    let animalCount = 0;
+    let activeTypeSet = new Set(config.show);
+    let nowDate = new Date();
+    let todayStr = toLocalDay(nowDate);
+    let selectedDay = todayStr;
+    let viewYear = nowDate.getFullYear();
+    let viewMonth = nowDate.getMonth();
+
+    const monthLabelEl = document.getElementById("calendar-month-label");
+    const prevBtn = document.getElementById("calendar-prev");
+    const todayBtn = document.getElementById("calendar-today");
+    const nextBtn = document.getElementById("calendar-next");
+    const chipsEl = document.getElementById("calendar-chips");
+    const statusEl = document.getElementById("calendar-status");
+    const contentEl = document.getElementById("calendar-content");
+    const weekdaysEl = document.getElementById("calendar-weekdays");
+    const weeksEl = document.getElementById("calendar-weeks");
+    const selectedDayHeadingEl = document.getElementById("selected-day-heading");
+    const selectedDayCountEl = document.getElementById("selected-day-count");
+    const dayEventsEl = document.getElementById("calendar-day-events");
+    const upcomingCaptionEl = document.getElementById("upcoming-window-caption");
+    const upcomingEl = document.getElementById("calendar-upcoming");
+
+    function getLang() {
+      return document.documentElement.lang || "en";
+    }
+
+    function formatMonthLabel(year, monthIndex) {
+      const dt = new Date(year, monthIndex, 15, 12, 0, 0);
+      return new Intl.DateTimeFormat(getLang(), { month: "long", year: "numeric" }).format(dt);
+    }
+
+    function formatFullDayLabel(dayStr) {
+      const dt = parseLocalDay(dayStr);
+      return new Intl.DateTimeFormat(getLang(), {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      }).format(dt);
+    }
+
+    function formatShortDayLabel(dayStr) {
+      const dt = parseLocalDay(dayStr);
+      return new Intl.DateTimeFormat(getLang(), {
+        month: "short",
+        day: "numeric",
+      }).format(dt);
+    }
+
+    function getWeekdayLabels(weekStart) {
+      const fmt = new Intl.DateTimeFormat(getLang(), { weekday: "short" });
+      // 2026-11-01 is a Sunday (day 0)
+      return Array.from({ length: 7 }, (_, i) => {
+        const dayOfWeek = (weekStart + i) % 7;
+        const dt = new Date(2026, 10, 1 + dayOfWeek, 12, 0, 0);
+        return fmt.format(dt);
+      });
+    }
+
+    function renderEventRow(ev) {
+      const li = document.createElement("li");
+      li.className = "kit-row";
+      li.dataset.testid = "calendar-event";
+      li.dataset.type = ev.type;
+      li.dataset.animalName = ev.animalName || "";
+      li.dataset.planned = String(Boolean(ev.planned));
+
+      const dot = document.createElement("span");
+      dot.className = "kit-dot";
+      if (ev.tone && ev.tone !== "neutral") {
+        dot.dataset.tone = ev.tone;
+      }
+      dot.setAttribute("aria-hidden", "true");
+      li.append(dot);
+
+      const main = document.createElement("div");
+      main.className = "kit-row__main";
+
+      const head = document.createElement("div");
+      head.className = "calendar-event-head";
+
+      const title = document.createElement("p");
+      title.className = "kit-row__title";
+      title.textContent = ev.animalName ? `${ev.title} · ${ev.animalName}` : ev.title;
+      head.append(title);
+
+      if (ev.earTag) {
+        const tag = document.createElement("span");
+        tag.className = "kit-tag";
+        tag.textContent = ev.earTag;
+        head.append(tag);
+      }
+
+      main.append(head);
+
+      if (ev.detail && ev.detail !== "Overdue") {
+        const meta = document.createElement("p");
+        meta.className = "kit-row__meta";
+        meta.textContent = ev.detail.replace(/^Overdue · /, "");
+        main.append(meta);
+      }
+
+      li.append(main);
+
+      if (ev.overdue) {
+        const badge = document.createElement("span");
+        badge.className = "orbit-badge orbit-badge--danger";
+        badge.textContent = "Overdue";
+        li.append(badge);
+      } else if (ev.planned) {
+        const badge = document.createElement("span");
+        badge.className = `orbit-badge orbit-badge--${ev.tone === "warn" ? "warn" : "info"}`;
+        badge.textContent = "Planned";
+        li.append(badge);
+      }
+
+      return li;
+    }
+
+    function renderChips() {
+      const countsByType = new Map();
+      for (const ev of allEvents) {
+        countsByType.set(ev.type, (countsByType.get(ev.type) ?? 0) + 1);
+      }
+
+      const availableTypes = config.show.filter((typeId) => (countsByType.get(typeId) ?? 0) > 0);
+      chipsEl.replaceChildren();
+
+      if (availableTypes.length === 0) {
+        chipsEl.hidden = true;
+        return;
+      }
+
+      chipsEl.hidden = false;
+      for (const typeId of availableTypes) {
+        const def = EVENT_TYPES[typeId];
+        if (!def) continue;
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "kit-chip";
+        btn.dataset.testid = `calendar-filter-${typeId}`;
+        btn.setAttribute("aria-pressed", String(activeTypeSet.has(typeId)));
+
+        const labelSpan = document.createElement("span");
+        labelSpan.textContent = def.label;
+        btn.append(labelSpan);
+
+        const countSpan = document.createElement("span");
+        countSpan.className = "kit-chip__count";
+        countSpan.textContent = String(countsByType.get(typeId) ?? 0);
+        btn.append(countSpan);
+
+        btn.addEventListener("click", () => {
+          if (activeTypeSet.has(typeId)) {
+            activeTypeSet.delete(typeId);
+          } else {
+            activeTypeSet.add(typeId);
+          }
+          render();
+        });
+
+        li.append(btn);
+        chipsEl.append(li);
+      }
+    }
+
+    function selectDay(dayStr) {
+      selectedDay = dayStr;
+      const dt = parseLocalDay(dayStr);
+      viewYear = dt.getFullYear();
+      viewMonth = dt.getMonth();
+      render();
+    }
+
+    function renderGrid() {
+      monthLabelEl.textContent = formatMonthLabel(viewYear, viewMonth);
+
+      weekdaysEl.replaceChildren();
+      for (const label of getWeekdayLabels(config.weekStart)) {
+        const div = document.createElement("div");
+        div.className = "calendar-weekday";
+        div.textContent = label;
+        weekdaysEl.append(div);
+      }
+
+      const weeks = buildMonthGrid(viewYear, viewMonth, allEvents, config, nowDate, activeTypeSet);
+      weeksEl.replaceChildren();
+
+      const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+      for (const week of weeks) {
+        for (const cell of week) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "calendar-day";
+          btn.dataset.testid = "calendar-day";
+          btn.dataset.day = cell.day;
+          if (!cell.inMonth) btn.dataset.outside = "true";
+          if (cell.isToday) btn.dataset.today = "true";
+          const isSelected = cell.day === selectedDay;
+          btn.setAttribute("aria-pressed", String(isSelected));
+          const dtCell = parseLocalDay(cell.day);
+          const shortAria = `${dayLabels[dtCell.getDay()]} ${cell.dayNumber}`;
+          let evAria = "";
+          if (cell.events.length === 1) {
+            const ev0 = cell.events[0];
+            evAria = `, ${ev0.animalName || ev0.title}`;
+          } else if (cell.events.length > 1) {
+            evAria = `, ${cell.events.length} events`;
+          }
+          btn.setAttribute("aria-label", `${shortAria}${evAria}`);
+
+          const top = document.createElement("div");
+          top.className = "calendar-day__top";
+
+          const num = document.createElement("span");
+          num.className = "calendar-day__num";
+          num.textContent = String(cell.dayNumber);
+          top.append(num);
+
+          if (cell.isToday) {
+            const todayTag = document.createElement("span");
+            todayTag.className = "calendar-day__today-tag";
+            todayTag.textContent = "Today";
+            top.append(todayTag);
+          }
+
+          btn.append(top);
+
+          const marks = document.createElement("div");
+          marks.className = "calendar-day__marks";
+
+          const shown = cell.events.slice(0, 3);
+          for (const ev of shown) {
+            const mark = document.createElement("span");
+            mark.className = "calendar-mark";
+            const dot = document.createElement("span");
+            dot.className = "kit-dot";
+            if (ev.tone && ev.tone !== "neutral") {
+              dot.dataset.tone = ev.tone;
+            }
+            dot.setAttribute("aria-hidden", "true");
+            mark.append(dot);
+
+            if (shown.length === 1) {
+              const lbl = document.createElement("span");
+              lbl.className = "calendar-mark__label";
+              lbl.textContent = ev.animalName || ev.title;
+              mark.append(lbl);
+            }
+            marks.append(mark);
+          }
+
+          if (cell.events.length > 3) {
+            const more = document.createElement("span");
+            more.className = "calendar-day__more";
+            more.textContent = `+${cell.events.length - 3}`;
+            marks.append(more);
+          }
+
+          btn.append(marks);
+          btn.addEventListener("click", () => selectDay(cell.day));
+          weeksEl.append(btn);
+        }
+      }
+    }
+
+    function renderSelectedDay() {
+      selectedDayHeadingEl.textContent =
+        selectedDay === todayStr ? `Today, ${formatShortDayLabel(selectedDay)}` : formatFullDayLabel(selectedDay);
+
+      const dayEvs = eventsForDay(allEvents, selectedDay, activeTypeSet);
+      selectedDayCountEl.textContent =
+        dayEvs.length === 0 ? "" : dayEvs.length === 1 ? "1 event" : `${dayEvs.length} events`;
+
+      dayEventsEl.replaceChildren();
+      if (dayEvs.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "calendar-empty-day";
+        empty.textContent = "No planned or recorded events on this day.";
+        dayEventsEl.append(empty);
+        return;
+      }
+
+      const ul = document.createElement("ul");
+      ul.className = "kit-list";
+      for (const ev of dayEvs) {
+        ul.append(renderEventRow(ev));
+      }
+      dayEventsEl.append(ul);
+
+      if (dayEvs.some((e) => e.type === "alert")) {
+        const note = document.createElement("p");
+        note.className = "calendar-vet-note";
+        note.textContent = "Alerts are sensor signals, not diagnoses. Check the animal and call the vet for medical decisions.";
+        dayEventsEl.append(note);
+      }
+    }
+
+    function renderUpcoming() {
+      upcomingCaptionEl.textContent = `Next ${config.upcomingDays} days`;
+      const upcoming = buildUpcomingList(allEvents, config, nowDate, config.upcomingDays, activeTypeSet);
+
+      upcomingEl.replaceChildren();
+      if (upcoming.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "calendar-empty-day";
+        empty.textContent = `Nothing due in the next ${config.upcomingDays} days.`;
+        upcomingEl.append(empty);
+        return;
+      }
+
+      const groups = new Map();
+      for (const ev of upcoming) {
+        let list = groups.get(ev.day);
+        if (!list) {
+          list = [];
+          groups.set(ev.day, list);
+        }
+        list.push(ev);
+      }
+
+      const container = document.createElement("div");
+      container.className = "calendar-upcoming-groups";
+
+      for (const [dayStr, groupEvents] of groups.entries()) {
+        const groupEl = document.createElement("div");
+        groupEl.className = "calendar-upcoming-group";
+
+        const head = document.createElement("div");
+        head.className = "calendar-upcoming-day-head";
+
+        const rel = document.createElement("p");
+        rel.className = "calendar-upcoming-relative";
+        if (groupEvents[0]?.overdue) rel.dataset.overdue = "true";
+        rel.textContent = groupEvents[0]?.relativeLabel ?? dayStr;
+        head.append(rel);
+
+        const dateSpan = document.createElement("span");
+        dateSpan.className = "calendar-upcoming-date";
+        dateSpan.textContent = formatShortDayLabel(dayStr);
+        head.append(dateSpan);
+
+        groupEl.append(head);
+
+        const ul = document.createElement("ul");
+        ul.className = "kit-list";
+        for (const ev of groupEvents) {
+          ul.append(renderEventRow(ev));
+        }
+        groupEl.append(ul);
+        container.append(groupEl);
+      }
+
+      upcomingEl.append(container);
+    }
+
+    function render() {
+      monthLabelEl.textContent = formatMonthLabel(viewYear, viewMonth);
+
+      if (animalCount === 0 || allEvents.length === 0) {
+        chipsEl.hidden = true;
+        contentEl.hidden = false;
+        statusEl.hidden = false;
+        statusEl.textContent =
+          animalCount === 0
+            ? "No animals registered yet. Recording inseminations, calvings, and dry-offs creates calendar dates—ask Orion to add your herd and record breeding events."
+            : "No calendar events yet. Recording inseminations, calvings, pregnancy checks, and dry-offs fills your calendar—ask Orion to record them for your animals.";
+        renderGrid();
+        renderSelectedDay();
+        renderUpcoming();
+        return;
+      }
+
+      statusEl.hidden = true;
+      contentEl.hidden = false;
+      renderChips();
+      renderGrid();
+      renderSelectedDay();
+      renderUpcoming();
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch("./config.json", { cache: "no-store" });
+        if (res.ok) {
+          return resolveConfig(await res.json());
+        }
+      } catch {
+        // Fall back to default config
+      }
+      return resolveConfig({});
+    }
+
+    async function fetchAllData() {
+      nowDate = new Date();
+      const prevToday = todayStr;
+      todayStr = toLocalDay(nowDate);
+      if (!selectedDay || selectedDay === prevToday) {
+        selectedDay = todayStr;
+      }
+
+      config = await loadConfig();
+      activeTypeSet = new Set(config.show);
+
+      const since400 = new Date(nowDate.getTime() - 400 * DAY_MS).toISOString();
+      const since60 = new Date(nowDate.getTime() - 60 * DAY_MS).toISOString();
+
+      const [animalsRes, alertsRes, ...kindResults] = await Promise.all([
+        window.orbit.query("animals.list", { limit: 1000 }),
+        window.orbit.query("observations.recent", { alertsOnly: true, since: since60, limit: 1000 }),
+        ...RECORDED_KINDS.map((kind) =>
+          window.orbit.query("observations.recent", { kind, since: since400, limit: 1000 }),
+        ),
+      ]);
+
+      const animals = animalsRes?.rows ?? [];
+      animalCount = animals.length;
+
+      const obsMap = new Map();
+      for (const row of alertsRes?.rows ?? []) {
+        if (row?.id) obsMap.set(row.id, row);
+      }
+      for (const res of kindResults) {
+        for (const row of res?.rows ?? []) {
+          if (row?.id) obsMap.set(row.id, row);
+        }
+      }
+
+      allEvents = buildEvents(animals, Array.from(obsMap.values()), config, nowDate);
+      render();
+    }
+
+    prevBtn.addEventListener("click", () => {
+      const dt = new Date(viewYear, viewMonth - 1, 1, 12, 0, 0);
+      viewYear = dt.getFullYear();
+      viewMonth = dt.getMonth();
+      render();
+    });
+
+    nextBtn.addEventListener("click", () => {
+      const dt = new Date(viewYear, viewMonth + 1, 1, 12, 0, 0);
+      viewYear = dt.getFullYear();
+      viewMonth = dt.getMonth();
+      render();
+    });
+
+    todayBtn.addEventListener("click", () => {
+      nowDate = new Date();
+      todayStr = toLocalDay(nowDate);
+      selectedDay = todayStr;
+      viewYear = nowDate.getFullYear();
+      viewMonth = nowDate.getMonth();
+      render();
+    });
+
+    let debounceTimer = null;
+    if (window.orbit?.on) {
+      window.orbit.on((event) => {
+        if (
+          event.type === "db.changed" &&
+          (!event.table || event.table === "animals" || event.table === "observations")
+        ) {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            fetchAllData().catch((err) => {
+              statusEl.hidden = false;
+              statusEl.textContent = `Could not refresh calendar: ${err?.message || "Unknown error"}`;
+            });
+          }, 300);
+        }
+      });
+    }
+
+    fetchAllData().catch((err) => {
+      statusEl.hidden = false;
+      contentEl.hidden = true;
+      statusEl.textContent = `Could not load calendar: ${err?.message || "Unknown error"}`;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Herd card</title>
+    <link rel="stylesheet" href="../_orbit.css" />
+    <script src="../_orbit.js"></script>
+    <style>
+      .herd-card {
+        justify-content: space-between;
+      }
+
+      .herd-card__meter-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        min-inline-size: 0;
+      }
+
+      .herd-card__legend {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1) var(--space-3);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+      }
+
+      .herd-card__legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        min-inline-size: 0;
+      }
+
+      .herd-card__swatch {
+        flex: none;
+        inline-size: var(--space-2);
+        block-size: var(--space-2);
+        border-radius: var(--radius-full);
+        background-color: var(--accent-secondary);
+      }
+
+      .herd-card__legend-item:nth-child(2) .herd-card__swatch {
+        background-color: var(--accent-primary);
+      }
+
+      .herd-card__legend-item:nth-child(3) .herd-card__swatch {
+        background-color: var(--status-info);
+      }
+
+      .herd-card__legend-item:nth-child(n + 4) .herd-card__swatch {
+        background-color: var(--status-warn);
+      }
+
+      .herd-card__legend-count {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--text-primary);
+      }
+
+      .herd-card__status {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin: 0;
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .herd-card__empty {
+        margin: auto 0;
+        font-size: var(--text-sm);
+        color: var(--text-muted);
+      }
+    </style>
+  </head>
+  <body class="kit-cardview herd-card" data-detect-ignore="cream-palette">
+    <div id="card-root" aria-live="polite">
+      <p class="herd-card__empty">Loading herd…</p>
+    </div>
+
+    <script type="module">
+      import { buildCardSummary, DAY_MS, formatNumber, resolveConfig } from "./herd.js";
+
+      const root = document.getElementById("card-root");
+
+      async function loadConfig() {
+        try {
+          const res = await fetch("./config.json", { cache: "no-store" });
+          if (!res.ok) return resolveConfig({});
+          return resolveConfig(await res.json());
+        } catch {
+          return resolveConfig({});
+        }
+      }
+
+      function renderEmpty(text) {
+        root.replaceChildren();
+        const p = document.createElement("p");
+        p.className = "herd-card__empty";
+        p.dataset.testid = "herd-card-total";
+        p.textContent = text;
+        root.append(p);
+      }
+
+      function renderSummary(summary, lang) {
+        root.replaceChildren();
+        root.style.display = "contents";
+
+        if (summary.total === 0) {
+          const empty = document.createElement("p");
+          empty.className = "herd-card__empty";
+          empty.dataset.testid = "herd-card-total";
+          empty.textContent = "No animals recorded yet.";
+          root.append(empty);
+          return;
+        }
+
+        // 1. Total figure + species caption
+        const fig = document.createElement("p");
+        fig.className = "kit-figure";
+
+        const val = document.createElement("span");
+        val.className = "kit-figure__value";
+        val.dataset.testid = "herd-card-total";
+        val.textContent = formatNumber(summary.total, lang, 0);
+        fig.append(val);
+
+        if (summary.speciesCaption) {
+          const cap = document.createElement("span");
+          cap.className = "kit-caption";
+          cap.textContent = summary.speciesCaption;
+          fig.append(cap);
+        }
+
+        // 2. Meter + compact legend (top 3 + other)
+        const meterGroup = document.createElement("div");
+        meterGroup.className = "herd-card__meter-group";
+
+        const meter = document.createElement("div");
+        meter.className = "kit-meter";
+        meter.setAttribute("aria-hidden", "true");
+        for (const seg of summary.segments) {
+          const span = document.createElement("span");
+          span.style.flexGrow = String(seg.count);
+          meter.append(span);
+        }
+        meterGroup.append(meter);
+
+        if (summary.segments.length > 0) {
+          const legend = document.createElement("ul");
+          legend.className = "herd-card__legend";
+          for (const seg of summary.segments) {
+            const li = document.createElement("li");
+            li.className = "herd-card__legend-item";
+
+            const swatch = document.createElement("span");
+            swatch.className = "herd-card__swatch";
+            swatch.setAttribute("aria-hidden", "true");
+
+            const label = document.createElement("span");
+            label.textContent = seg.label;
+
+            const count = document.createElement("span");
+            count.className = "herd-card__legend-count";
+            count.textContent = formatNumber(seg.count, lang, 0);
+
+            li.append(swatch, label, count);
+            legend.append(li);
+          }
+          meterGroup.append(legend);
+        }
+
+        // 3. Attention line with kit-dot
+        const statusLine = document.createElement("p");
+        statusLine.className = "herd-card__status";
+        statusLine.dataset.testid = "herd-card-attention";
+
+        const dot = document.createElement("span");
+        dot.className = "kit-dot";
+        dot.dataset.tone = summary.attentionTone;
+        dot.setAttribute("aria-hidden", "true");
+
+        const statusText = document.createElement("span");
+        statusText.textContent = summary.attentionText;
+
+        statusLine.append(dot, statusText);
+
+        root.append(fig, meterGroup, statusLine);
+      }
+
+      async function refresh() {
+        const lang = document.documentElement.lang || "en";
+        const now = Date.now();
+        try {
+          const config = await loadConfig();
+          const since7d = new Date(now - 7 * DAY_MS).toISOString();
+          const [animalsRes, alertsRes] = await Promise.all([
+            window.orbit.query("animals.list", { status: "active", limit: 1000 }),
+            window.orbit.query("observations.recent", {
+              alertsOnly: true,
+              since: since7d,
+              limit: 1000,
+            }),
+          ]);
+          const summary = buildCardSummary(
+            animalsRes?.rows ?? [],
+            alertsRes?.rows ?? [],
+            config,
+            now,
+            lang,
+          );
+          renderSummary(summary, lang);
+        } catch (err) {
+          renderEmpty(err?.message || "Could not load herd summary.");
+        }
+      }
+
+      let debounceTimer = null;
+      window.orbit.on((event) => {
+        if (
+          event.type === "db.changed" &&
+          ["animals", "observations", "devices", "device_bindings"].includes(event.table)
+        ) {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(refresh, 300);
+        }
+      });
+
+      refresh();
+    </script>
+  </body>
+</html>

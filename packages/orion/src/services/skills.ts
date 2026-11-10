@@ -9,6 +9,7 @@ import { CONNECTOR_KINDS, CONNECTOR_VENDORS } from "@orbit/schema/enums";
 import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 import { RepoError } from "../db/repo";
+import { scaffoldPage } from "./pages";
 
 export const DEFAULT_SKILLS_URL =
   "https://raw.githubusercontent.com/kristianvast/orbit/main/skills";
@@ -44,6 +45,10 @@ const SkillManifest = Type.Object({
       config: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
     }),
   ),
+  /** Ready-made pages (a panel, usually with a Home card) that page_scaffold copies into pages/. */
+  pages: Type.Optional(
+    Type.Array(Type.Object({ id: Type.String({ pattern: NAME }), dir: Type.String() })),
+  ),
 });
 export type SkillManifest = Static<typeof SkillManifest>;
 
@@ -77,6 +82,11 @@ export class SkillService {
 
   get installDir(): string {
     return join(this.workspace, "skills");
+  }
+
+  /** True when the catalog is a folder on this computer (a checkout), not a download. */
+  get local(): boolean {
+    return !/^https?:\/\//.test(this.source);
   }
 
   private async fetchBytes(rel: string): Promise<Uint8Array> {
@@ -177,9 +187,29 @@ export class SkillService {
     const file = join(dir, "skill.json");
     if (!existsSync(file)) return null;
     const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
-    if (!Value.Check(SkillManifest, parsed) || !isSafePath(parsed.connector?.dir ?? "x")) {
+    if (
+      !Value.Check(SkillManifest, parsed) ||
+      !isSafePath(parsed.connector?.dir ?? "x") ||
+      !(parsed.pages ?? []).every((page) => isSafePath(page.dir))
+    ) {
       throw new RepoError("bad_request", `skill ${name} has an invalid skill.json`);
     }
     return parsed;
+  }
+
+  /** Page ids an installed skill offers. */
+  async pages(name: string): Promise<string[]> {
+    return ((await this.manifest(name))?.pages ?? []).map((page) => page.id);
+  }
+
+  /** Copies one of an installed skill's pages into the workspace as pages/<id>/. */
+  async scaffoldPage(
+    name: string,
+    page: string,
+    id = page,
+  ): Promise<{ id: string; path: string; files: string[] }> {
+    const entry = (await this.manifest(name))?.pages?.find((p) => p.id === page);
+    if (!entry) throw new RepoError("not_found", `skill ${name} has no page "${page}"`);
+    return scaffoldPage(this.workspace, join(this.installDir, name, entry.dir), id);
   }
 }

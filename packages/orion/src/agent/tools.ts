@@ -530,9 +530,11 @@ function createSkillTools(farm: FarmService, skills: SkillService): ToolDefiniti
       name: "skill_search",
       label: "Find a skill",
       description:
-        "Search Orbit's online skill catalog for add-ons that are not built in, such as a connector for a specific vendor's milking robot, herd software or sensor system. Search before saying Orbit cannot connect to something.",
+        "Search Orbit's online skill catalog for add-ons that are not built in: a connector for a specific vendor's milking robot, herd software or sensor system, or ready-made, tested screens (herd, calendar, cameras) to start from. Search before saying Orbit cannot connect to something and before building a new screen from scratch.",
       parameters: Type.Object({
-        query: Type.String({ description: "Vendor or system name, e.g. delaval; empty lists all" }),
+        query: Type.String({
+          description: "Vendor, system or screen, e.g. delaval, herd, calendar; empty lists all",
+        }),
       }),
       async run(p) {
         const found = await skills.search(p.query);
@@ -565,6 +567,33 @@ function createSkillTools(farm: FarmService, skills: SkillService): ToolDefiniti
         );
       },
     }),
+    tool({
+      name: "page_scaffold",
+      label: "Add a ready-made page",
+      description:
+        "Copy a ready-made, tested page of an installed skill into the farm workspace (pages/<id>/): a full screen, usually with a card on Home. Then change its config.json to what this farmer uses, or build on its files. Refuses to replace a page that already exists, so the farmer's changes are never overwritten.",
+      parameters: Type.Object({
+        fromSkill: Type.String({ description: "Name of the installed skill" }),
+        page: Type.String({ description: "Which of the skill's pages to copy" }),
+        id: OptStr("Folder name under pages/ when it should differ from the page name"),
+      }),
+      async run(p) {
+        farm.guard?.("connectors.upsert");
+        const offered = await skills.pages(p.fromSkill);
+        if (!offered.includes(p.page)) {
+          return text(
+            `Not done: skill ${p.fromSkill} has no page "${p.page}".${offered.length ? ` It has: ${offered.join(", ")}.` : " It has no pages."}`,
+            { pages: offered },
+            true,
+          );
+        }
+        const r = await skills.scaffoldPage(p.fromSkill, p.page, p.id);
+        return text(
+          `Added ${r.path}/ from the ${p.fromSkill} skill (${r.files.join(", ")}). The farmer finds it under "Your pages"${r.files.includes("card.html") ? " and as a card on Home" : ""}. Now set ${r.path}/config.json to what this farmer uses.`,
+          r,
+        );
+      },
+    }),
   ];
 }
 
@@ -577,6 +606,7 @@ export const FARM_TOOL_NAMES = [
   "herd_record_event",
   "skill_search",
   "skill_install",
+  "page_scaffold",
   "connectors_list",
   "connector_scaffold",
   "connector_configure",

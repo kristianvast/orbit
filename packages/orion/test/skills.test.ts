@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { createFarmTools } from "../src/agent/tools";
@@ -8,6 +8,7 @@ import { RepoError } from "../src/db/repo";
 import { EncryptedFileStore } from "../src/secrets";
 import { FarmService } from "../src/services/farm";
 import { LocalUiService } from "../src/services/local-ui";
+import { listPages } from "../src/services/pages";
 import { SkillService } from "../src/services/skills";
 import { removeDir, TOKEN, tempDir } from "./helpers";
 
@@ -142,6 +143,75 @@ describe("skill catalog", () => {
     const [code, err] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
     expect(err).toBe("");
     expect(code).toBe(0);
+  });
+});
+
+describe("page from a skill", () => {
+  const viewSkill = (pagesDir: string): SkillSpec => ({
+    name: "demo",
+    files: {
+      "SKILL.md": SKILL_MD,
+      "skill.json": JSON.stringify({
+        name: "demo",
+        version: "1.0.0",
+        pages: [{ id: "herd", dir: pagesDir }],
+      }),
+      "pages/herd/index.html": "<h1>Herd</h1>",
+      "pages/herd/card.html": "<p>Herd card</p>",
+      "pages/herd/page.json": JSON.stringify({ title: "Herd", card: "card.html" }),
+      "pages/herd/config.json": '{"filters":["all"]}',
+    },
+  });
+
+  test("scaffold copies the skill's page with its card and never replaces the farm's copy", async () => {
+    const { catalog, workspace, skills, call } = setup();
+    writeCatalog(catalog, [viewSkill("pages/herd")]);
+    await skills.install("demo");
+
+    const added = await call("page_scaffold", { fromSkill: "demo", page: "herd" });
+    expect(added?.isError).toBeUndefined();
+    expect(listPages(workspace, TOKEN)).toEqual([
+      {
+        id: "herd",
+        title: "Herd",
+        path: `/pages/${TOKEN}/herd/index.html`,
+        card: { path: `/pages/${TOKEN}/herd/card.html` },
+      },
+    ]);
+
+    // The farmer's tuning lives in config.json; a second scaffold must leave it alone.
+    const config = join(workspace, "pages", "herd", "config.json");
+    writeFileSync(config, '{"filters":["dry"]}');
+    const again = await call("page_scaffold", { fromSkill: "demo", page: "herd" });
+    expect(again?.isError).toBe(true);
+    expect(textOf(again)).toContain("already exists");
+    expect(readFileSync(config, "utf8")).toBe('{"filters":["dry"]}');
+
+    const second = await call("page_scaffold", { fromSkill: "demo", page: "herd", id: "heifers" });
+    expect(second?.isError).toBeUndefined();
+    expect(readFileSync(join(workspace, "pages", "heifers", "config.json"), "utf8")).toBe(
+      '{"filters":["all"]}',
+    );
+  });
+
+  test("scaffold names the pages a skill has when asked for one it lacks", async () => {
+    const { catalog, workspace, skills, call } = setup();
+    writeCatalog(catalog, [viewSkill("pages/herd")]);
+    await skills.install("demo");
+    const result = await call("page_scaffold", { fromSkill: "demo", page: "calendar" });
+    expect(result?.isError).toBe(true);
+    expect(textOf(result)).toContain("It has: herd.");
+    expect(existsSync(join(workspace, "pages"))).toBe(false);
+  });
+
+  test("a skill whose page folder points outside the skill is refused", async () => {
+    const { catalog, workspace, skills, call } = setup();
+    writeCatalog(catalog, [viewSkill("../../pages/herd")]);
+    await skills.install("demo");
+    const result = await call("page_scaffold", { fromSkill: "demo", page: "herd" });
+    expect(result?.isError).toBe(true);
+    expect(textOf(result)).toContain("invalid skill.json");
+    expect(existsSync(join(workspace, "pages"))).toBe(false);
   });
 });
 

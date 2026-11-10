@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Camera wall</title>
+  <link rel="stylesheet" href="../_orbit.css">
+  <script src="../_orbit.js"></script>
+  <style>
+    #show-all-btn[hidden] {
+      display: none;
+    }
+
+    .camera-page {
+      max-inline-size: 76rem;
+      margin-inline: auto;
+      padding: var(--space-6);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+    }
+
+    .camera-relay-note {
+      margin: 0;
+      padding: var(--space-3) var(--space-4);
+      background-color: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+
+    .camera-relay-note[hidden] {
+      display: none;
+    }
+
+    .camera-relay-note__icon {
+      flex-shrink: 0;
+      color: var(--text-muted);
+    }
+
+    .camera-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .camera-chips[hidden] {
+      display: none;
+    }
+
+    .camera-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
+      gap: var(--space-4);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .camera-grid[hidden] {
+      display: none;
+    }
+
+    .camera-tile {
+      padding: 0;
+      gap: 0;
+      overflow: hidden;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      text-align: start;
+    }
+
+    .camera-tile__stage {
+      position: relative;
+      inline-size: 100%;
+      aspect-ratio: 16 / 9;
+      background-color: var(--bg-elevated);
+      border-block-end: 1px solid var(--border-subtle);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .camera-tile__img {
+      position: absolute;
+      inset: 0;
+      inline-size: 100%;
+      block-size: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .camera-tile__img[hidden] {
+      display: none;
+    }
+
+    .camera-placeholder {
+      position: relative;
+      inline-size: 100%;
+      block-size: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      padding: var(--space-4);
+      color: var(--text-secondary);
+      text-align: center;
+    }
+
+    .camera-placeholder[hidden] {
+      display: none;
+    }
+
+    .camera-placeholder__art {
+       position: absolute;
+      inset: 0;
+      inline-size: 100%;
+      block-size: 100%;
+      pointer-events: none;
+    }
+
+    .camera-placeholder__caption {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-1) var(--space-3);
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .camera-tile__body {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      min-inline-size: 0;
+    }
+
+    .camera-tile__identity {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      min-inline-size: 0;
+      flex: 1;
+    }
+
+    .camera-tile__name {
+      margin: 0;
+      font-size: var(--text-base);
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .camera-tile__location {
+      margin: 0;
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .camera-state-box {
+      padding: var(--space-6);
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-3);
+    }
+
+    .camera-state-box[hidden] {
+      display: none;
+    }
+
+    .camera-state-box__title {
+      margin: 0;
+      font-size: var(--text-base);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .camera-state-box__text {
+      margin: 0;
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      max-inline-size: 65ch;
+    }
+
+    .camera-dialog {
+      inline-size: min(48rem, 100%);
+    }
+
+    .camera-dialog__title-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      min-inline-size: 0;
+    }
+
+    .camera-dialog__title {
+      margin: 0;
+      font-size: var(--text-h2);
+      line-height: var(--leading-heading);
+      letter-spacing: var(--tracking-heading);
+    }
+
+    .camera-dialog__meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+    }
+
+    .camera-dialog__stage {
+      position: relative;
+      inline-size: 100%;
+      aspect-ratio: 16 / 9;
+      background-color: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .camera-dialog__foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding-block-start: var(--space-3);
+      border-block-start: 1px solid var(--border-subtle);
+    }
+
+    .camera-dialog__time {
+      margin: 0;
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 640px) {
+      .camera-page {
+        padding: var(--space-4);
+        gap: var(--space-4);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="camera-page">
+    <header class="kit-page__head">
+      <h1 class="kit-page__title" data-testid="cameras-title">Camera wall</h1>
+      <p class="kit-page__meta tabular-nums" data-testid="cameras-summary">Loading...</p>
+    </header>
+
+    <p class="camera-relay-note" data-testid="cameras-relay-note" hidden>
+      <svg class="camera-relay-note__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"></path>
+        <line x1="1" y1="1" x2="23" y2="23"></line>
+      </svg>
+      <span id="relay-note-text">Live pictures are not available on this computer right now. Each tile shows the camera's status.</span>
+    </p>
+
+    <nav class="camera-chips" id="location-chips" aria-label="Filter cameras by location" hidden></nav>
+
+    <section class="camera-state-box" id="state-box" hidden>
+      <p class="camera-state-box__title" id="state-box-title"></p>
+      <p class="camera-state-box__text" id="state-box-text"></p>
+      <button type="button" class="orbit-btn orbit-btn--secondary orbit-btn--sm" id="show-all-btn" hidden>Show all</button>
+    </section>
+
+    <div class="camera-grid" id="camera-grid" hidden></div>
+  </main>
+
+  <dialog class="kit-sheet camera-dialog" id="camera-dialog" data-testid="camera-view-dialog" aria-labelledby="dialog-camera-name">
+    <div class="kit-sheet__head">
+      <div class="camera-dialog__title-group">
+        <h2 class="camera-dialog__title" id="dialog-camera-name">Camera</h2>
+        <div class="camera-dialog__meta">
+          <span id="dialog-camera-location"></span>
+          <span class="orbit-badge orbit-badge--neutral" id="dialog-camera-status"></span>
+        </div>
+      </div>
+      <button type="button" class="orbit-btn orbit-btn--secondary orbit-btn--sm" id="dialog-close-btn" data-testid="camera-view-dialog-close">
+        Close
+      </button>
+    </div>
+
+    <div class="camera-dialog__stage">
+      <img class="camera-tile__img" id="dialog-frame-img" data-testid="camera-view-dialog-frame" alt="" hidden>
+      <div class="camera-placeholder" id="dialog-placeholder">
+        <svg class="camera-placeholder__art" viewBox="0 0 360 202" aria-hidden="true">
+          <rect width="360" height="202" fill="var(--bg-elevated)"></rect>
+          <line x1="0" y1="101" x2="360" y2="101" stroke="var(--border-subtle)" stroke-width="1" stroke-dasharray="4 6"></line>
+          <line x1="180" y1="0" x2="180" y2="202" stroke="var(--border-subtle)" stroke-width="1" stroke-dasharray="4 6"></line>
+          <circle cx="180" cy="101" r="48" fill="var(--orbit-core-bg)" stroke="var(--border-strong)" stroke-width="1.5"></circle>
+          <path d="M 24 40 L 24 24 L 40 24 M 336 40 L 336 24 L 320 24 M 24 162 L 24 178 L 40 178 M 336 162 L 336 178 L 320 178" fill="none" stroke="var(--border-strong)" stroke-width="2"></path>
+        </svg>
+        <span class="camera-placeholder__caption" id="dialog-placeholder-text">Loading picture...</span>
+      </div>
+    </div>
+
+    <div class="camera-dialog__foot">
+      <p class="camera-dialog__time" id="dialog-frame-time" data-testid="camera-view-dialog-time">Waiting for picture...</p>
+    </div>
+  </dialog>
+
+  <script type="module">
+    import {
+      buildLocationChips,
+      createFrameState,
+      DEFAULT_CONFIG,
+      filterByLocation,
+      formatPictureTime,
+      formatSummary,
+      getCameraLocation,
+      getCameraStatus,
+      getNextRefreshSeconds,
+      reduceFrameState,
+      resolveConfig,
+      selectPanelCameras,
+      shouldRequestFrame,
+      sortCameras,
+    } from "./cameras.js";
+
+    const summaryEl = document.querySelector('[data-testid="cameras-summary"]');
+    const relayNoteEl = document.querySelector('[data-testid="cameras-relay-note"]');
+    const relayNoteTextEl = document.getElementById("relay-note-text");
+    const chipsContainer = document.getElementById("location-chips");
+    const stateBox = document.getElementById("state-box");
+    const stateBoxTitle = document.getElementById("state-box-title");
+    const stateBoxText = document.getElementById("state-box-text");
+    const showAllBtn = document.getElementById("show-all-btn");
+    const gridEl = document.getElementById("camera-grid");
+
+    const dialogEl = document.getElementById("camera-dialog");
+    const dialogNameEl = document.getElementById("dialog-camera-name");
+    const dialogLocationEl = document.getElementById("dialog-camera-location");
+    const dialogStatusEl = document.getElementById("dialog-camera-status");
+    const dialogFrameImg = document.getElementById("dialog-frame-img");
+    const dialogPlaceholder = document.getElementById("dialog-placeholder");
+    const dialogPlaceholderText = document.getElementById("dialog-placeholder-text");
+    const dialogTimeEl = document.getElementById("dialog-frame-time");
+    const dialogCloseBtn = document.getElementById("dialog-close-btn");
+
+    let config = DEFAULT_CONFIG;
+    let allCameras = [];
+    let relayStatus = { available: true, reason: null };
+    let selectedLocation = "all";
+    let showHiddenOverride = false;
+
+    // Per-camera frame state & timer management
+    const frameStates = new Map();
+    const tileTimers = new Map();
+    const tileElements = new Map();
+    let frameSeq = 0;
+
+    // Dialog state
+    let activeDialogCameraId = null;
+    let dialogTimer = null;
+    let dialogRequestToken = 0;
+    let lastFocusedCameraId = null;
+
+    async function loadConfig() {
+      try {
+        const res = await fetch(`./config.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return DEFAULT_CONFIG;
+        const raw = await res.json();
+        return resolveConfig(raw);
+      } catch {
+        return DEFAULT_CONFIG;
+      }
+    }
+
+    function createPlaceholderArtSvg(isOnline) {
+      const svgNS = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNS, "svg");
+      svg.setAttribute("class", "camera-placeholder__art");
+      svg.setAttribute("viewBox", "0 0 360 202");
+      svg.setAttribute("aria-hidden", "true");
+
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("width", "360");
+      rect.setAttribute("height", "202");
+      rect.setAttribute("fill", "var(--bg-elevated)");
+      svg.appendChild(rect);
+
+      const hLine = document.createElementNS(svgNS, "line");
+      hLine.setAttribute("x1", "0");
+      hLine.setAttribute("y1", "101");
+      hLine.setAttribute("x2", "360");
+      hLine.setAttribute("y2", "101");
+      hLine.setAttribute("stroke", "var(--border-subtle)");
+      hLine.setAttribute("stroke-width", "1");
+      hLine.setAttribute("stroke-dasharray", "4 6");
+      svg.appendChild(hLine);
+
+      const vLine = document.createElementNS(svgNS, "line");
+      vLine.setAttribute("x1", "180");
+      vLine.setAttribute("y1", "0");
+      vLine.setAttribute("x2", "180");
+      vLine.setAttribute("y2", "202");
+      vLine.setAttribute("stroke", "var(--border-subtle)");
+      vLine.setAttribute("stroke-width", "1");
+      vLine.setAttribute("stroke-dasharray", "4 6");
+      svg.appendChild(vLine);
+
+      const outerCircle = document.createElementNS(svgNS, "circle");
+      outerCircle.setAttribute("cx", "180");
+      outerCircle.setAttribute("cy", "101");
+      outerCircle.setAttribute("r", "48");
+      outerCircle.setAttribute("fill", "var(--orbit-core-bg)");
+      outerCircle.setAttribute(
+        "stroke",
+        isOnline ? "var(--orbit-ring-strong)" : "var(--border-strong)",
+      );
+      outerCircle.setAttribute("stroke-width", "1.5");
+      svg.appendChild(outerCircle);
+
+      const dot = document.createElementNS(svgNS, "circle");
+      dot.setAttribute("cx", "180");
+      dot.setAttribute("cy", "101");
+      dot.setAttribute("r", "5");
+      dot.setAttribute("fill", isOnline ? "var(--status-ok)" : "var(--text-muted)");
+      svg.appendChild(dot);
+
+      const corners = document.createElementNS(svgNS, "path");
+      corners.setAttribute(
+        "d",
+        "M 24 40 L 24 24 L 40 24 M 336 40 L 336 24 L 320 24 M 24 162 L 24 178 L 40 178 M 336 162 L 336 178 L 320 178",
+      );
+      corners.setAttribute("fill", "none");
+      corners.setAttribute("stroke", "var(--border-strong)");
+      corners.setAttribute("stroke-width", "2");
+      svg.appendChild(corners);
+
+      return svg;
+    }
+
+    function placeholderLabelFor(camera, frameState) {
+      if (camera.status === "offline") return "Camera offline";
+      if (frameState.frame === "loading") return "Loading picture...";
+      return "Picture unavailable";
+    }
+
+    function stopAllTileTimers() {
+      for (const timer of tileTimers.values()) {
+        clearTimeout(timer);
+      }
+      tileTimers.clear();
+    }
+
+    function stopTileTimer(cameraId) {
+      const existing = tileTimers.get(cameraId);
+      if (existing !== undefined) {
+        clearTimeout(existing);
+        tileTimers.delete(cameraId);
+      }
+    }
+
+    function preloadImage(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(url);
+        img.onerror = () => reject(new Error("Frame load failed"));
+        img.src = url;
+      });
+    }
+
+    function syncTileDom(camera, frameState) {
+      const refs = tileElements.get(camera.id);
+      if (!refs) return;
+      refs.button.dataset.frame = frameState.frame;
+      refs.button.dataset.status = camera.status;
+
+      if (frameState.frame === "showing" && frameState.pictureUrl) {
+        refs.img.src = frameState.pictureUrl;
+        refs.img.hidden = false;
+        refs.placeholder.hidden = true;
+      } else {
+        refs.img.hidden = true;
+        refs.img.removeAttribute("src");
+        refs.placeholder.hidden = false;
+        refs.placeholderCaption.textContent = placeholderLabelFor(camera, frameState);
+      }
+    }
+
+    function syncDialogDom(camera, frameState) {
+      if (!activeDialogCameraId || activeDialogCameraId !== camera.id) return;
+      const statusInfo = getCameraStatus(camera.status);
+      dialogNameEl.textContent = camera.name;
+      dialogLocationEl.textContent = getCameraLocation(camera);
+      dialogStatusEl.className = `orbit-badge ${statusInfo.badgeClass}`;
+      dialogStatusEl.textContent = statusInfo.label;
+
+      if (frameState.frame === "showing" && frameState.pictureUrl) {
+        dialogFrameImg.src = frameState.pictureUrl;
+        dialogFrameImg.alt = `${camera.name} (${getCameraLocation(camera)})`;
+        dialogFrameImg.hidden = false;
+        dialogPlaceholder.hidden = true;
+      } else {
+        dialogFrameImg.hidden = true;
+        dialogFrameImg.removeAttribute("src");
+        dialogPlaceholder.hidden = false;
+        dialogPlaceholderText.textContent = placeholderLabelFor(camera, frameState);
+      }
+
+      if (frameState.lastUpdatedAt) {
+        dialogTimeEl.textContent = formatPictureTime(
+          frameState.lastUpdatedAt,
+          document.documentElement.lang || "en",
+        );
+      } else if (camera.status === "offline") {
+        dialogTimeEl.textContent = "Camera is offline";
+      } else if (frameState.frame === "unavailable") {
+        dialogTimeEl.textContent = "No picture available right now";
+      } else {
+        dialogTimeEl.textContent = "Loading picture...";
+      }
+    }
+
+    function scheduleTileRefresh(camera) {
+      stopTileTimer(camera.id);
+      if (document.hidden || !shouldRequestFrame(camera)) return;
+      if (!tileElements.has(camera.id)) return;
+
+      const state = frameStates.get(camera.id) ?? createFrameState(camera);
+      const delaySec = getNextRefreshSeconds(state, config.panel.refreshSeconds);
+      const timerId = window.setTimeout(() => {
+        tileTimers.delete(camera.id);
+        void refreshCameraFrame(camera);
+      }, delaySec * 1000);
+      tileTimers.set(camera.id, timerId);
+    }
+
+    async function refreshCameraFrame(camera) {
+      if (document.hidden || !shouldRequestFrame(camera)) return;
+      const current = frameStates.get(camera.id) ?? createFrameState(camera);
+      const url = `${window.orbit.cameraFrame(camera.id)}?t=${Date.now()}-${++frameSeq}`;
+
+      try {
+        await preloadImage(url);
+        const next = reduceFrameState(current, {
+          type: "load",
+          url,
+          timestamp: Date.now(),
+        });
+        frameStates.set(camera.id, next);
+        syncTileDom(camera, next);
+        syncDialogDom(camera, next);
+      } catch {
+        const next = reduceFrameState(current, { type: "error" });
+        frameStates.set(camera.id, next);
+        syncTileDom(camera, next);
+        syncDialogDom(camera, next);
+      } finally {
+        scheduleTileRefresh(camera);
+      }
+    }
+
+    function stopDialogTimer() {
+      if (dialogTimer !== null) {
+        clearTimeout(dialogTimer);
+        dialogTimer = null;
+      }
+      dialogRequestToken++;
+    }
+
+    function scheduleDialogRefresh(camera) {
+      if (dialogTimer !== null) {
+        clearTimeout(dialogTimer);
+        dialogTimer = null;
+      }
+      if (
+        !dialogEl.open ||
+        activeDialogCameraId !== camera.id ||
+        document.hidden ||
+        !shouldRequestFrame(camera)
+      ) {
+        return;
+      }
+      const state = frameStates.get(camera.id) ?? createFrameState(camera);
+      const delaySec = getNextRefreshSeconds(state, config.panel.zoomRefreshSeconds);
+      dialogTimer = window.setTimeout(() => {
+        dialogTimer = null;
+        void refreshDialogFrame(camera);
+      }, delaySec * 1000);
+    }
+
+    async function refreshDialogFrame(camera) {
+      if (
+        !dialogEl.open ||
+        activeDialogCameraId !== camera.id ||
+        document.hidden ||
+        !shouldRequestFrame(camera)
+      ) {
+        return;
+      }
+      const token = ++dialogRequestToken;
+      const current = frameStates.get(camera.id) ?? createFrameState(camera);
+      const url = `${window.orbit.cameraFrame(camera.id)}?t=${Date.now()}-${++frameSeq}`;
+
+      try {
+        await preloadImage(url);
+        if (token !== dialogRequestToken || activeDialogCameraId !== camera.id) return;
+        const next = reduceFrameState(current, {
+          type: "load",
+          url,
+          timestamp: Date.now(),
+        });
+        frameStates.set(camera.id, next);
+        syncTileDom(camera, next);
+        syncDialogDom(camera, next);
+      } catch {
+        if (token !== dialogRequestToken || activeDialogCameraId !== camera.id) return;
+        const next = reduceFrameState(current, { type: "error" });
+        frameStates.set(camera.id, next);
+        syncTileDom(camera, next);
+        syncDialogDom(camera, next);
+      } finally {
+        if (token === dialogRequestToken && activeDialogCameraId === camera.id) {
+          scheduleDialogRefresh(camera);
+        }
+      }
+    }
+
+    function openCameraDialog(camera) {
+      activeDialogCameraId = camera.id;
+      lastFocusedCameraId = camera.id;
+      const state = frameStates.get(camera.id) ?? createFrameState(camera);
+      frameStates.set(camera.id, state);
+      syncDialogDom(camera, state);
+
+      if (!dialogEl.open) {
+        dialogEl.showModal();
+      }
+      dialogCloseBtn.focus();
+
+      if (shouldRequestFrame(camera)) {
+        void refreshDialogFrame(camera);
+      }
+    }
+
+    dialogCloseBtn.addEventListener("click", () => {
+      dialogEl.close();
+    });
+
+    dialogEl.addEventListener("click", (event) => {
+      if (event.target === dialogEl) {
+        dialogEl.close();
+      }
+    });
+
+    dialogEl.addEventListener("close", () => {
+      stopDialogTimer();
+      const focusId = lastFocusedCameraId;
+      activeDialogCameraId = null;
+      if (focusId) {
+        const refs = tileElements.get(focusId);
+        refs?.button?.focus();
+      }
+    });
+
+    showAllBtn.addEventListener("click", () => {
+      selectedLocation = "all";
+      showHiddenOverride = true;
+      render();
+    });
+
+    function buildTileElement(camera) {
+      let state = frameStates.get(camera.id);
+      if (!state) {
+        state = createFrameState(camera);
+        frameStates.set(camera.id, state);
+      } else if (camera.status === "offline") {
+        state = createFrameState(camera);
+        frameStates.set(camera.id, state);
+      }
+
+      const statusInfo = getCameraStatus(camera.status);
+      const locationName = getCameraLocation(camera);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "kit-tile camera-tile";
+      btn.dataset.testid = "camera-view-tile";
+      btn.dataset.cameraId = camera.id;
+      btn.dataset.cameraName = camera.name;
+      btn.dataset.status = camera.status;
+      btn.dataset.frame = state.frame;
+      btn.setAttribute("aria-label", `${camera.name}, ${locationName}, ${statusInfo.label}`);
+
+      const stage = document.createElement("div");
+      stage.className = "camera-tile__stage";
+
+      const img = document.createElement("img");
+      img.className = "camera-tile__img";
+      img.dataset.testid = "camera-view-frame";
+      img.alt = `${camera.name} (${locationName})`;
+      if (state.frame === "showing" && state.pictureUrl) {
+        img.src = state.pictureUrl;
+        img.hidden = false;
+      } else {
+        img.hidden = true;
+      }
+
+      const placeholder = document.createElement("div");
+      placeholder.className = "camera-placeholder";
+      placeholder.hidden = state.frame === "showing" && Boolean(state.pictureUrl);
+      placeholder.appendChild(createPlaceholderArtSvg(camera.status === "online"));
+
+      const placeholderCaption = document.createElement("span");
+      placeholderCaption.className = "camera-placeholder__caption";
+      placeholderCaption.textContent = placeholderLabelFor(camera, state);
+      placeholder.appendChild(placeholderCaption);
+
+      stage.append(img, placeholder);
+
+      const body = document.createElement("div");
+      body.className = "camera-tile__body";
+
+      const identity = document.createElement("div");
+      identity.className = "camera-tile__identity";
+
+      const nameEl = document.createElement("p");
+      nameEl.className = "camera-tile__name";
+      nameEl.textContent = camera.name;
+
+      const locEl = document.createElement("p");
+      locEl.className = "camera-tile__location";
+      locEl.textContent = locationName;
+
+      identity.append(nameEl, locEl);
+
+      const badge = document.createElement("span");
+      badge.className = `orbit-badge ${statusInfo.badgeClass}`;
+      const dot = document.createElement("span");
+      dot.className = "kit-dot";
+      dot.dataset.tone = statusInfo.dotTone;
+      dot.setAttribute("aria-hidden", "true");
+      const badgeLabel = document.createElement("span");
+      badgeLabel.textContent = statusInfo.label;
+      badge.append(dot, badgeLabel);
+
+      body.append(identity, badge);
+      btn.append(stage, body);
+
+      btn.addEventListener("click", () => {
+        openCameraDialog(camera);
+      });
+
+      tileElements.set(camera.id, {
+        button: btn,
+        img,
+        placeholder,
+        placeholderCaption,
+      });
+
+      return btn;
+    }
+
+    function render() {
+      stopAllTileTimers();
+      tileElements.clear();
+
+      const effectiveConfig = showHiddenOverride ? { ...config, hide: [] } : config;
+      const panelCameras = selectPanelCameras(allCameras, effectiveConfig);
+
+      summaryEl.textContent = formatSummary(panelCameras);
+
+      if (!relayStatus?.available && allCameras.length > 0) {
+        relayNoteEl.hidden = false;
+        relayNoteTextEl.textContent =
+          "Live pictures are not available on this computer right now. Each tile shows the camera's status.";
+      } else {
+        relayNoteEl.hidden = true;
+      }
+
+      // 1. Empty farm
+      if (allCameras.length === 0) {
+        chipsContainer.hidden = true;
+        gridEl.hidden = true;
+        gridEl.replaceChildren();
+        stateBox.hidden = false;
+        stateBoxTitle.textContent = "No cameras yet";
+        stateBoxText.textContent =
+          "Orion can look for cameras on your farm network and add them for you.";
+        showAllBtn.hidden = true;
+        return;
+      }
+
+      // 2. Build location chips
+      const chipConfig = showHiddenOverride
+        ? { ...effectiveConfig, locations: [] }
+        : effectiveConfig;
+      const chips = buildLocationChips(panelCameras, chipConfig);
+
+      if (selectedLocation !== "all" && !chips.some((c) => c.id === selectedLocation)) {
+        // Keep selectedLocation if user explicitly filtered, or allow Show all
+      }
+
+      chipsContainer.replaceChildren();
+      if (panelCameras.length > 0) {
+        chipsContainer.hidden = false;
+        for (const chip of chips) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "kit-chip";
+          btn.dataset.testid = chip.testId;
+          btn.setAttribute("aria-pressed", String(chip.id === selectedLocation));
+          const labelSpan = document.createElement("span");
+          labelSpan.textContent = chip.label;
+          const countSpan = document.createElement("span");
+          countSpan.className = "kit-chip__count";
+          countSpan.textContent = String(chip.count);
+          btn.append(labelSpan, " ", countSpan);
+          btn.addEventListener("click", () => {
+            selectedLocation = chip.id;
+            render();
+          });
+          chipsContainer.appendChild(btn);
+        }
+      } else {
+        chipsContainer.hidden = true;
+      }
+
+      const filtered = filterByLocation(panelCameras, selectedLocation);
+
+      // 3. All hidden or filtered away
+      if (filtered.length === 0) {
+        gridEl.hidden = true;
+        gridEl.replaceChildren();
+        stateBox.hidden = false;
+        stateBoxTitle.textContent =
+          panelCameras.length === 0
+            ? "All cameras are hidden in this view"
+            : "No cameras in this location";
+        stateBoxText.textContent =
+          panelCameras.length === 0
+            ? "Your view configuration hides every camera on this farm."
+            : `No visible cameras are assigned to ${selectedLocation}.`;
+        showAllBtn.hidden = false;
+        return;
+      }
+
+      stateBox.hidden = true;
+      showAllBtn.hidden = true;
+      gridEl.hidden = false;
+      gridEl.replaceChildren();
+
+      for (const cam of filtered) {
+        const tileEl = buildTileElement(cam);
+        gridEl.appendChild(tileEl);
+        if (shouldRequestFrame(cam) && !document.hidden) {
+          const current = frameStates.get(cam.id);
+          if (!current || current.frame === "loading") {
+            void refreshCameraFrame(cam);
+          } else {
+            scheduleTileRefresh(cam);
+          }
+        }
+      }
+
+      if (activeDialogCameraId) {
+        const dialogCam = allCameras.find((c) => c.id === activeDialogCameraId);
+        if (dialogCam) {
+          const state = frameStates.get(dialogCam.id) ?? createFrameState(dialogCam);
+          syncDialogDom(dialogCam, state);
+        } else if (dialogEl.open) {
+          dialogEl.close();
+        }
+      }
+    }
+
+    async function loadData() {
+      try {
+        const [loadedConfig, camerasRes, relayRes] = await Promise.all([
+          loadConfig(),
+          window.orbit.query("cameras.list", {}),
+          window.orbit.query("cameras.relay", {}),
+        ]);
+        config = loadedConfig;
+        allCameras = Array.isArray(camerasRes?.rows) ? camerasRes.rows : [];
+        relayStatus = relayRes ?? { available: false, reason: null };
+        render();
+      } catch (err) {
+        summaryEl.textContent = "0 of 0 online";
+        chipsContainer.hidden = true;
+        gridEl.hidden = true;
+        stateBox.hidden = false;
+        stateBoxTitle.textContent = "Could not load cameras";
+        stateBoxText.textContent =
+          err instanceof Error ? err.message : "Check that Orion is running on this computer.";
+        showAllBtn.hidden = true;
+      }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        stopAllTileTimers();
+        stopDialogTimer();
+      } else {
+        for (const [camId] of tileElements) {
+          const cam = allCameras.find((c) => c.id === camId);
+          if (cam && shouldRequestFrame(cam)) {
+            void refreshCameraFrame(cam);
+          }
+        }
+        if (activeDialogCameraId && dialogEl.open) {
+          const dialogCam = allCameras.find((c) => c.id === activeDialogCameraId);
+          if (dialogCam && shouldRequestFrame(dialogCam)) {
+            void refreshDialogFrame(dialogCam);
+          }
+        }
+      }
+    });
+
+    let debounceTimer = null;
+    window.orbit.on((event) => {
+      if (
+        event.type === "db.changed" &&
+        (event.table === "cameras" || event.table === "workspace")
+      ) {
+        if (debounceTimer !== null) clearTimeout(debounceTimer);
+        debounceTimer = window.setTimeout(() => {
+          debounceTimer = null;
+          void loadData();
+        }, 300);
+      }
+    });
+
+    void loadData();
+  </script>
+</body>
+</html>

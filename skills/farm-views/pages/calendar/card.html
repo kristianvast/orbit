@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calendar card</title>
+  <link rel="stylesheet" href="../_orbit.css">
+  <script src="../_orbit.js"></script>
+  <style>
+    .calendar-card {
+      block-size: 100%;
+      max-block-size: 13rem;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+
+    .calendar-card__top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+
+    .calendar-card__date {
+      margin: 0;
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .calendar-card__overdue {
+      margin: 0;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--status-danger);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .calendar-card__week {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: var(--space-1);
+    }
+
+    .calendar-card__day {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-1);
+      padding-block: var(--space-2);
+      padding-inline: var(--space-1);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      background-color: var(--bg-surface);
+      min-inline-size: 0;
+    }
+
+    .calendar-card__day[data-today="true"] {
+      background-color: var(--accent-primary-subtle);
+      border-color: var(--accent-primary-border);
+    }
+
+    .calendar-card__dow {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-muted);
+      line-height: var(--leading-tight);
+      text-transform: uppercase;
+    }
+
+    .calendar-card__day[data-today="true"] .calendar-card__dow {
+      color: var(--accent-primary);
+    }
+
+    .calendar-card__num {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: var(--leading-tight);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .calendar-card__day[data-today="true"] .calendar-card__num {
+      color: var(--accent-primary);
+      font-weight: 700;
+    }
+
+    .calendar-card__mark-slot {
+      block-size: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .calendar-card__footer {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-inline-size: 0;
+      padding-block-start: var(--space-2);
+      border-block-start: 1px solid var(--border-subtle);
+    }
+
+    .calendar-card__next {
+      margin: 0;
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .calendar-card__next strong {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body class="kit-cardview calendar-card">
+  <div class="calendar-card__top">
+    <p class="calendar-card__date" id="calendar-card-date" data-testid="calendar-card-date">Loading...</p>
+    <p class="calendar-card__overdue" id="calendar-card-overdue" hidden></p>
+  </div>
+
+  <div class="calendar-card__week" id="calendar-card-week" data-testid="calendar-card-week"></div>
+
+  <div class="calendar-card__footer">
+    <p class="calendar-card__next" id="calendar-card-next" data-testid="calendar-card-next">Loading upcoming events...</p>
+  </div>
+
+  <script type="module">
+    import {
+      buildEvents,
+      buildWeekStrip,
+      getNextEventSummary,
+      parseLocalDay,
+      resolveConfig,
+    } from "./calendar.js";
+    import { DAY_MS } from "./repro.js";
+
+    const RECORDED_KINDS = ["calving", "insemination", "pregnancy_check", "dry_off", "treatment", "abortion"];
+
+    const dateEl = document.getElementById("calendar-card-date");
+    const overdueEl = document.getElementById("calendar-card-overdue");
+    const weekEl = document.getElementById("calendar-card-week");
+    const nextEl = document.getElementById("calendar-card-next");
+
+    function getLang() {
+      return document.documentElement.lang || "en";
+    }
+
+    function formatTodayLabel(now) {
+      return new Intl.DateTimeFormat(getLang(), {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      }).format(now);
+    }
+
+    function formatDowShort(dayStr) {
+      const dt = parseLocalDay(dayStr);
+      return new Intl.DateTimeFormat(getLang(), { weekday: "narrow" }).format(dt);
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch("./config.json", { cache: "no-store" });
+        if (res.ok) return resolveConfig(await res.json());
+      } catch {
+        // Fallback to defaults
+      }
+      return resolveConfig({});
+    }
+
+    function renderNextLine(summary) {
+      nextEl.replaceChildren();
+      if (!summary.next) {
+        nextEl.textContent = "Nothing planned in the coming weeks";
+        return;
+      }
+
+      const ev = summary.next;
+      const prefix = document.createElement("span");
+      prefix.textContent = "Next: ";
+      nextEl.append(prefix);
+
+      const strong = document.createElement("strong");
+      strong.textContent = ev.title;
+      nextEl.append(strong);
+
+      const who = document.createElement("span");
+      const animalLabel = [ev.animalName, ev.earTag].filter(Boolean).join(" ");
+      const relLower = ev.relativeLabel.charAt(0).toLowerCase() + ev.relativeLabel.slice(1);
+      who.textContent = animalLabel ? `, ${animalLabel}, ${relLower}` : `, ${relLower}`;
+      nextEl.append(who);
+    }
+
+    async function refreshCard() {
+      const now = new Date();
+      dateEl.textContent = formatTodayLabel(now);
+
+      const config = await loadConfig();
+      const since400 = new Date(now.getTime() - 400 * DAY_MS).toISOString();
+      const since60 = new Date(now.getTime() - 60 * DAY_MS).toISOString();
+
+      const [animalsRes, alertsRes, ...kindResults] = await Promise.all([
+        window.orbit.query("animals.list", { limit: 1000 }),
+        window.orbit.query("observations.recent", { alertsOnly: true, since: since60, limit: 1000 }),
+        ...RECORDED_KINDS.map((kind) =>
+          window.orbit.query("observations.recent", { kind, since: since400, limit: 1000 }),
+        ),
+      ]);
+
+      const animals = animalsRes?.rows ?? [];
+      const obsMap = new Map();
+      for (const row of alertsRes?.rows ?? []) {
+        if (row?.id) obsMap.set(row.id, row);
+      }
+      for (const res of kindResults) {
+        for (const row of res?.rows ?? []) {
+          if (row?.id) obsMap.set(row.id, row);
+        }
+      }
+
+      const events = buildEvents(animals, Array.from(obsMap.values()), config, now);
+      const strip = buildWeekStrip(events, config, now);
+
+      weekEl.replaceChildren();
+      for (const cell of strip) {
+        const div = document.createElement("div");
+        div.className = "calendar-card__day";
+        div.dataset.day = cell.day;
+        if (cell.isToday) div.dataset.today = "true";
+
+        const dow = document.createElement("span");
+        dow.className = "calendar-card__dow";
+        dow.textContent = formatDowShort(cell.day);
+        div.append(dow);
+
+        const num = document.createElement("span");
+        num.className = "calendar-card__num";
+        num.textContent = String(cell.dayNumber);
+        div.append(num);
+
+        const markSlot = document.createElement("span");
+        markSlot.className = "calendar-card__mark-slot";
+        if (cell.topEvent) {
+          const dot = document.createElement("span");
+          dot.className = "kit-dot";
+          if (cell.topEvent.tone && cell.topEvent.tone !== "neutral") {
+            dot.dataset.tone = cell.topEvent.tone;
+          }
+          dot.setAttribute("aria-hidden", "true");
+          markSlot.append(dot);
+        }
+        div.append(markSlot);
+
+        weekEl.append(div);
+      }
+
+      const summary = getNextEventSummary(events, config, now);
+      if (summary.overdueCount > 0) {
+        overdueEl.hidden = false;
+        overdueEl.textContent = `${summary.overdueCount} overdue`;
+      } else {
+        overdueEl.hidden = true;
+        overdueEl.textContent = "";
+      }
+
+      renderNextLine(summary);
+    }
+
+    let debounceTimer = null;
+    if (window.orbit?.on) {
+      window.orbit.on((event) => {
+        if (
+          event.type === "db.changed" &&
+          (!event.table || event.table === "animals" || event.table === "observations")
+        ) {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            refreshCard().catch(() => {});
+          }, 300);
+        }
+      });
+    }
+
+    refreshCard().catch((err) => {
+      nextEl.textContent = `Could not load calendar: ${err?.message || "Unknown error"}`;
+    });
+  </script>
+</body>
+</html>
