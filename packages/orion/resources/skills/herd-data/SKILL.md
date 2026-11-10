@@ -12,6 +12,9 @@ description: Look up and update animals, sensors and observations with the farm 
 3. Change records with `herd_upsert_animal`. Pass `id` to update; omit it to add.
 4. Sensors: `devices_list` shows each device and the animal it is on. `device_bind` puts a device
    on an animal or takes it off (`action: "unbind"`).
+5. When the farmer tells you something happened to an animal (inseminated, pregnancy check, calved
+   or foaled, dried off, treated), record it with `herd_record_event`. Herd and calendar pages work
+   out what is due from these records.
 
 Rules
 - One wearable per animal: collar OR bolus OR ear tag sensor. If `device_bind` reports a conflict,

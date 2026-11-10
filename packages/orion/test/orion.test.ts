@@ -266,6 +266,55 @@ describe("one-wearable rule", () => {
   });
 });
 
+describe("animal events", () => {
+  test("herd_record_event stores what a calendar needs and refuses what it cannot place", async () => {
+    const dir = tempDir();
+    cleanups.push(() => removeDir(dir));
+    const db = openDatabase(dir, { seed: true });
+    cleanups.push(() => db.close());
+    const farm = new FarmService(db.repo, new EncryptedFileStore(dir), join(dir, "workspace"));
+    const localUi = new LocalUiService(dir, join(dir, "app"), TOKEN, () => {});
+    const record = createFarmTools(farm, localUi).find((t) => t.name === "herd_record_event");
+    const ctx = {
+      sessionManager: { getSessionId: () => "test-session" },
+    } as unknown as ExtensionToolContext;
+    const call = (args: Record<string, unknown>) =>
+      record?.execute("call-1", args, undefined, undefined, ctx);
+    const fern = db.repo.findAnimal("Fern");
+
+    const served = await call({
+      animalId: "DK-1016",
+      kind: "insemination",
+      date: "2026-10-20",
+      naturalService: true,
+    });
+    expect(served?.isError).toBeUndefined();
+    const [insemination] = db.repo.recentObservations({
+      animalId: fern?.id,
+      kind: "insemination",
+      limit: 5,
+    });
+    expect(insemination).toMatchObject({
+      ts: "2026-10-20T00:00:00.000Z",
+      valueJson: { inseminationType: "NaturalService" },
+    });
+
+    await call({ animalId: "Fern", kind: "pregnancy_check", pregnant: false, note: "Scanned" });
+    const [check] = db.repo.recentObservations({
+      animalId: fern?.id,
+      kind: "pregnancy_check",
+      limit: 5,
+    });
+    expect(check?.valueJson).toEqual({ result: "Empty", message: "Scanned" });
+
+    const before = db.repo.recentObservations({ animalId: fern?.id, limit: 100 }).length;
+    expect((await call({ animalId: "Fern", kind: "pregnancy_check" }))?.isError).toBe(true);
+    expect((await call({ animalId: "Fern", kind: "calving", date: "soon" }))?.isError).toBe(true);
+    expect((await call({ animalId: "Nobody", kind: "calving" }))?.isError).toBe(true);
+    expect(db.repo.recentObservations({ animalId: fern?.id, limit: 100 })).toHaveLength(before);
+  });
+});
+
 describe("memory", () => {
   const ctx = {
     sessionManager: { getSessionId: () => "test-session" },

@@ -92,6 +92,15 @@ const AnimalParams = Type.Object({
 
 const SECRET_KEY = /pass|secret|token|key|credential/i;
 
+const RECORDED_EVENTS = [
+  "insemination",
+  "pregnancy_check",
+  "calving",
+  "abortion",
+  "dry_off",
+  "treatment",
+] as const;
+
 export function createFarmTools(
   farm: FarmService,
   localUi: LocalUiService,
@@ -237,6 +246,57 @@ export function createFarmTools(
             `- ${o.ts} ${o.kind}${o.valueNum !== null ? ` ${o.valueNum}` : ""}${o.valueJson ? ` ${JSON.stringify(o.valueJson)}` : ""} animal=${o.animalId ?? "-"}`,
         );
         return text([`${rows.length} observations.`, ...lines].join("\n"), { rows });
+      },
+    }),
+    tool({
+      name: "herd_record_event",
+      label: "Record an animal event",
+      description:
+        "Record something that happened to an animal: an insemination, pregnancy check, calving (or foaling), abortion, dry-off or treatment. Herd and calendar pages work out what is due (calving, dry-off, pregnancy check) from these records.",
+      parameters: Type.Object({
+        animalId: Type.String({ description: "Animal id, ear tag or name" }),
+        kind: Type.Enum([...RECORDED_EVENTS]),
+        date: OptStr("When it happened, YYYY-MM-DD or an ISO time; now when omitted"),
+        naturalService: Opt(
+          Type.Boolean({ description: "Insemination: served by a bull or stallion" }),
+        ),
+        pregnant: Opt(Type.Boolean({ description: "Pregnancy check: what the check found" })),
+        note: OptStr("What was done or seen, in the farmer's words"),
+      }),
+      async run(p, origin) {
+        const animal = repo.findAnimal(p.animalId);
+        if (!animal) return text(`Not done: no animal matches "${p.animalId}".`, {}, true);
+        const when = p.date ? new Date(p.date) : new Date();
+        if (Number.isNaN(when.getTime())) {
+          return text(`Not done: "${p.date}" is not a date.`, {}, true);
+        }
+        if (p.kind === "pregnancy_check" && p.pregnant === undefined) {
+          return text("Not done: say what the check found (pregnant: true or false).", {}, true);
+        }
+        const r = await farm.mutate(
+          {
+            mutation: "observations.add",
+            params: {
+              animalId: animal.id,
+              kind: p.kind,
+              ts: when.toISOString(),
+              valueJson: {
+                ...(p.kind === "insemination"
+                  ? { inseminationType: p.naturalService ? "NaturalService" : "Insemination" }
+                  : {}),
+                ...(p.kind === "pregnancy_check"
+                  ? { result: p.pregnant ? "Pregnant" : "Empty" }
+                  : {}),
+                ...(p.note ? { message: p.note } : {}),
+              },
+            },
+          },
+          origin,
+        );
+        return text(
+          `Recorded ${p.kind.replaceAll("_", " ")} for ${animal.name ?? animal.earTagNumber ?? animal.id} on ${when.toISOString().slice(0, 10)}. The farmer can undo this.`,
+          r,
+        );
       },
     }),
     tool({
@@ -514,6 +574,7 @@ export const FARM_TOOL_NAMES = [
   "devices_list",
   "device_bind",
   "observations_query",
+  "herd_record_event",
   "skill_search",
   "skill_install",
   "connectors_list",

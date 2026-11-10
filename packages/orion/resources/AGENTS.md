@@ -16,8 +16,9 @@ working directory. Every change you make can be undone by the farmer.
 - animals: species cattle or horse, name, ear tag number, national id, breed, sex, group, status.
 - devices: collar, bolus, ear_tag_sensor, milking_robot, camera, feeder, scale, other.
 - device bindings: which device is on which animal.
-- observations: milking, activity, rumination, temperature, weight, and alerts
-  (heat_alert, calving_alert, health_event).
+- observations: milking, activity, rumination, temperature, weight, alerts
+  (heat_alert, calving_alert, health_event), and recorded events (insemination, pregnancy_check,
+  calving, abortion, dry_off, treatment), which you add with `herd_record_event`.
 - connectors: links to robots, sensor clouds or CSV files. cameras: ONVIF/RTSP cameras.
 
 ## The one-wearable rule

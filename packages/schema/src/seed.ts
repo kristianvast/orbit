@@ -1,7 +1,9 @@
 // Deterministic demo farm used by `orion --seed`, the UI in browser dev mode and e2e tests.
 // 24 cattle (16 dairy, 8 beef), 4 horses, a milking robot, one wearable per tagged animal
 // (collar OR bolus OR ear tag sensor), 3 cameras, 1 connector (generic CSV) and 7 days of observations with
-// a heat alert, a calving alert and a health event.
+// a heat alert, a calving alert and a health event. Cows, two beef cows and one mare also carry a
+// lactation and reproduction status with the recorded events behind it (calving, insemination,
+// pregnancy check, dry-off, one treatment).
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DeviceKind } from "./enums";
@@ -402,6 +404,102 @@ export function seedDemoFarm(db: BunSQLiteDatabase<any>, options: SeedOptions = 
       cameraId: cameraRows[1]?.id,
     },
     source: `camera:${cameraRows[1]?.id}`,
+  });
+
+  // Lactation and reproduction, in days before the end of the window. A cow in calf is due about
+  // 280 days after her insemination, so Ruby (the calving alert above) is due tomorrow.
+  interface ReproPlan {
+    animal: NewAnimal | undefined;
+    lactation?: NewAnimal["lactationStatus"];
+    reproduction: NewAnimal["reproductionStatus"];
+    calved?: number;
+    inseminated?: number;
+    confirmed?: number;
+    driedOff?: number;
+    naturalService?: boolean;
+  }
+  const inCalf = { lactation: "lactating", reproduction: "pregnant" } as const;
+  const dry = { lactation: "dry", reproduction: "pregnant" } as const;
+  const reproPlans: ReproPlan[] = [
+    { animal: dairy[0], lactation: "fresh", reproduction: "birthed", calved: 9 },
+    { animal: dairy[1], lactation: "fresh", reproduction: "birthed", calved: 21 },
+    { animal: dairy[2], lactation: "early", reproduction: "open", calved: 62 },
+    {
+      animal: dairy[3],
+      lactation: "early",
+      reproduction: "inseminated",
+      calved: 80,
+      inseminated: 12,
+    },
+    {
+      animal: dairy[4],
+      lactation: "early",
+      reproduction: "inseminated",
+      calved: 95,
+      inseminated: 38,
+    },
+    { animal: dairy[5], ...inCalf, calved: 150, inseminated: 75, confirmed: 40 },
+    { animal: dairy[6], ...inCalf, calved: 190, inseminated: 110, confirmed: 74 },
+    { animal: dairy[7], ...inCalf, calved: 230, inseminated: 150, confirmed: 115 },
+    { animal: dairy[8], ...inCalf, calved: 265, inseminated: 185, confirmed: 150 },
+    { animal: dairy[9], ...inCalf, calved: 300, inseminated: 215, confirmed: 180 },
+    { animal: dairy[10], ...dry, inseminated: 240, confirmed: 205, driedOff: 18 },
+    { animal: dairy[11], ...dry, inseminated: 252, confirmed: 215, driedOff: 30 },
+    { animal: dairy[12], ...dry, inseminated: 279, confirmed: 240, driedOff: 55 },
+    { animal: dairy[13], ...dry, inseminated: 266, confirmed: 230, driedOff: 44 },
+    { animal: dairy[14], reproduction: "inseminated", inseminated: 6 },
+    { animal: dairy[15], reproduction: "open" },
+    {
+      animal: beef[1],
+      reproduction: "pregnant",
+      inseminated: 200,
+      confirmed: 160,
+      naturalService: true,
+    },
+    {
+      animal: beef[2],
+      reproduction: "pregnant",
+      inseminated: 170,
+      confirmed: 130,
+      naturalService: true,
+    },
+    { animal: horses[1], reproduction: "pregnant", inseminated: 300, confirmed: 270 },
+  ];
+  for (const plan of reproPlans) {
+    if (!plan.animal) continue;
+    plan.animal.lactationStatus = plan.lactation ?? null;
+    plan.animal.reproductionStatus = plan.reproduction;
+    const record = (
+      kind: NewObservation["kind"],
+      daysAgo: number | undefined,
+      valueJson: NewObservation["valueJson"],
+    ) => {
+      if (daysAgo === undefined) return;
+      push({
+        animalId: plan.animal?.id,
+        deviceId: null,
+        kind,
+        ts: at(daysAgo * DAY),
+        valueNum: null,
+        valueJson,
+        source: "manual",
+      });
+    };
+    record("calving", plan.calved, {});
+    record("insemination", plan.inseminated, {
+      inseminationType: plan.naturalService ? "NaturalService" : "Insemination",
+    });
+    record("pregnancy_check", plan.confirmed, { method: "Echography", result: "Pregnant" });
+    record("dry_off", plan.driedOff, {});
+  }
+  push({
+    animalId: dairy[11]?.id,
+    deviceId: null,
+    kind: "treatment",
+    ts: at(20 * 3_600_000),
+    valueNum: null,
+    valueJson: { procedure: "Examination", message: "Checked by the vet after a high temperature" },
+    source: "manual",
   });
 
   db.transaction((tx) => {
