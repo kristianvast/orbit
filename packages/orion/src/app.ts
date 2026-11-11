@@ -19,10 +19,12 @@ import {
 } from "@orbit/protocol";
 import type { ServerWebSocket } from "bun";
 import { AuthFlows, systemBrowserOpener } from "./agent/auth";
+import { createBrowserTool } from "./agent/browser";
 import { createComputerTool } from "./agent/computer";
 import { GATEWAY_PROVIDER, HubError, SessionHub } from "./agent/hub";
 import { MOCK_MODEL, MOCK_PROVIDER } from "./agent/mock-model";
 import { createFarmTools, createFeedbackTools } from "./agent/tools";
+import { createWebTools } from "./agent/web";
 import { Workspace } from "./agent/workspace";
 import type { OrionConfig } from "./config";
 import { openDatabase } from "./db/open";
@@ -153,6 +155,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     (status) => emit("localUi.updated", status),
   );
   const feedback = new FeedbackService(workspace.dir, SERVER_VERSION);
+  const browser = createBrowserTool(config.dataDir);
   const hub = await SessionHub.create({
     dataDir: config.dataDir,
     workspace,
@@ -162,6 +165,8 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     tools: [
       ...createFarmTools(farm, localUi, skills, modules),
       ...createFeedbackTools(feedback),
+      ...createWebTools(),
+      browser.tool,
       createComputerTool(),
     ],
     emit,
@@ -570,6 +575,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       voice.dispose();
       for (const ws of sockets) ws.close(CloseCode.serverShutdown, "server shutdown");
       await relay.stop();
+      browser.session.close();
       auth.dispose();
       await account.stop();
       await hub.dispose();

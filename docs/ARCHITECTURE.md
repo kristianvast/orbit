@@ -247,6 +247,13 @@ mapped resource against them.
 - **Tools:** farm tools are registered as Pi custom tools (typebox parameters). They call the same
   named query and mutation layer as `db.query` and `db.mutate`. Pi's coding tools (read/write/edit/bash)
   start in the workspace and can reach the rest of the machine.
+- **Web access:** `web_search` and `web_fetch` (`agent/web.ts`) run on the farm PC with no
+  account or key: search goes to DuckDuckGo's HTML endpoint and pages are turned into text with
+  `HTMLRewriter`. The `browser` tool (`agent/browser.ts`) drives a headless browser through
+  `Bun.WebView` (system WebKit on macOS, an installed Edge or Chrome elsewhere) with a persistent
+  profile in `<data-dir>/browser-profile`; every action returns the page as text plus numbered
+  items to act on. All three label their output as untrusted, and the system prompt tells Orion
+  never to follow instructions found on the web.
 - **Computer use:** the `computer` tool (`agent/computer.ts`) takes screenshots of the main screen
   and sends mouse and keyboard input, so Orion can work in programs that have no connector. It uses
   the operating system's own tools and adds no native dependency: macOS `screencapture`/`sips`/
