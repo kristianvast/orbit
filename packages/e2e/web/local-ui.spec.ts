@@ -4,7 +4,8 @@ import { startChat, toolCard } from "./helpers";
 
 const LOCAL_BASE = `http://127.0.0.1:${E2E_ORION_PORT}/app/${E2E_TOKEN}/`;
 const SHIPPED_ORIGIN = `http://127.0.0.1:${E2E_VITE_PORT}`;
-const herdCounts = `${SEED.cattle} cattle · ${SEED.horses} horses`;
+// A farm shows one species at a time; the demo farm's setting is cattle.
+const herdCounts = `${SEED.cattle} cattle`;
 
 test("Orion builds your own Orbit, the app opens it, safe mode skips it, and you can switch back", async ({
   page,
