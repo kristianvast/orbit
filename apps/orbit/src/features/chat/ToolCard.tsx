@@ -46,6 +46,8 @@ function toolMetaKey(name: string): { key: MessageKey; icon: typeof Tag } | null
       return { key: "chat.tool.deviceBind", icon: Radio };
     case "observations_query":
       return { key: "chat.tool.observationsQuery", icon: Activity };
+    case "orbit_modules":
+      return { key: "chat.tool.orbitModules", icon: Wrench };
     case "connectors_list":
       return { key: "chat.tool.connectorsList", icon: Plug };
     case "connector_scaffold":

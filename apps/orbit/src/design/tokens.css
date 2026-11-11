@@ -368,6 +368,38 @@ a {
   line-height: 1;
 }
 
+.orbit-update-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: var(--space-3) var(--space-4) 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  font-size: var(--text-sm);
+}
+
+.orbit-rail__feedback {
+  display: flex;
+  margin-block-start: auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+}
+
+.orbit-rail__feedback:hover,
+.orbit-rail__feedback:focus-visible {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
 .orbit-rail__status {
   display: flex;
   align-items: center;
@@ -939,6 +971,7 @@ a {
   }
 
   .orbit-brand,
+  .orbit-rail__feedback,
   .orbit-rail__status {
     display: none;
   }

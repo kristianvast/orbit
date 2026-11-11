@@ -39,20 +39,40 @@ export function isTauriRuntime(): boolean {
   return Boolean(w.__TAURI_INTERNALS__ || w.__TAURI__);
 }
 
+export type ShellOrionStatus =
+  | { kind: "ready"; endpoint: OrionEndpoint }
+  | { kind: "starting" }
+  | { kind: "stopped"; reason: string };
+
+/** The desktop shell rejects `orion_endpoint` with `starting` or `stopped: <reason>`. */
+export function parseShellOrionError(error: unknown): ShellOrionStatus {
+  const text = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+  return text.startsWith("stopped: ")
+    ? { kind: "stopped", reason: text.slice("stopped: ".length) }
+    : { kind: "starting" };
+}
+
+async function readShellOrion(): Promise<ShellOrionStatus> {
+  try {
+    const endpoint = await invoke<OrionEndpoint>("orion_endpoint");
+    return endpoint?.url && endpoint?.token ? { kind: "ready", endpoint } : { kind: "starting" };
+  } catch (error) {
+    return parseShellOrionError(error);
+  }
+}
+
+export class OrionStoppedError extends Error {
+  override name = "OrionStoppedError";
+}
+
 export async function resolveOrionEndpoint(): Promise<OrionEndpoint> {
   const local = localUiEndpoint();
   if (local) return local;
   if (isTauriRuntime()) {
-    const deadline = Date.now() + 30_000;
-    while (Date.now() < deadline) {
-      try {
-        const endpoint = await invoke<OrionEndpoint>("orion_endpoint");
-        if (endpoint?.url && endpoint?.token) {
-          return endpoint;
-        }
-      } catch {
-        // Sidecar is still starting (migrating/seeding SQLite); retry shortly.
-      }
+    for (;;) {
+      const status = await readShellOrion();
+      if (status.kind === "ready") return status.endpoint;
+      if (status.kind === "stopped") throw new OrionStoppedError(status.reason);
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
@@ -79,6 +99,9 @@ export interface OrionContextValue {
   endpoint: OrionEndpoint | null;
   syncStatus: SyncStatusSnapshot;
   reconnect: () => void;
+  /** Desktop only: why the Orion sidecar is not running after the shell gave up restarting it. */
+  stopped: string | null;
+  restart: () => void;
 }
 
 const DEFAULT_SYNC_STATUS: SyncStatusSnapshot = {
@@ -103,6 +126,7 @@ export function OrionProvider({ children, initialClient, initialEndpoint }: Orio
   );
   const [syncStatus, setSyncStatus] = useState<SyncStatusSnapshot>(DEFAULT_SYNC_STATUS);
   const [connectEpoch, setConnectEpoch] = useState(0);
+  const [stopped, setStopped] = useState<string | null>(null);
 
   useEffect(() => {
     void connectEpoch;
@@ -128,33 +152,66 @@ export function OrionProvider({ children, initialClient, initialEndpoint }: Orio
     let activeClient: OrionClient | null = null;
     let offState: (() => void) | null = null;
     let offSync: (() => void) | null = null;
+    let shellWatch: ReturnType<typeof setInterval> | null = null;
 
-    resolveOrionEndpoint().then((resolved) => {
-      if (cancelled) return;
-      setEndpoint(resolved);
-      const created = createOrionClient(resolved.url, resolved.token, {
-        clientName: "@orbit/app",
-      });
-      activeClient = created;
-      setClient(created);
-      setState(created.state);
-      offState = created.onState((next) => {
-        if (!cancelled) setState(next);
-      });
-      offSync = created.on("sync.status", (ev) => {
-        if (!cancelled) {
-          setSyncStatus({
-            state: ev.state,
-            pendingOutbox: ev.pendingOutbox,
-            lastSyncedAt: ev.lastSyncedAt,
-            error: ev.error,
-          });
-        }
-      });
-    });
+    // A restarted sidecar listens on a new port with a new token, so the old client can never
+    // reconnect: while it retries, ask the shell for the current endpoint and switch to it.
+    const watchShell = (current: OrionEndpoint) => {
+      if (shellWatch || !isTauriRuntime() || localUiEndpoint()) return;
+      shellWatch = setInterval(() => {
+        void readShellOrion().then((status) => {
+          if (cancelled) return;
+          if (status.kind === "stopped") setStopped(status.reason);
+          if (
+            status.kind === "ready" &&
+            (status.endpoint.url !== current.url || status.endpoint.token !== current.token)
+          ) {
+            setConnectEpoch((n) => n + 1);
+          }
+        });
+      }, 1000);
+    };
+    const stopWatch = () => {
+      if (shellWatch) clearInterval(shellWatch);
+      shellWatch = null;
+    };
+
+    resolveOrionEndpoint().then(
+      (resolved) => {
+        if (cancelled) return;
+        setStopped(null);
+        setEndpoint(resolved);
+        const created = createOrionClient(resolved.url, resolved.token, {
+          clientName: "@orbit/app",
+        });
+        activeClient = created;
+        setClient(created);
+        setState(created.state);
+        offState = created.onState((next) => {
+          if (cancelled) return;
+          setState(next);
+          if (next === "reconnecting") watchShell(resolved);
+          else stopWatch();
+        });
+        offSync = created.on("sync.status", (ev) => {
+          if (!cancelled) {
+            setSyncStatus({
+              state: ev.state,
+              pendingOutbox: ev.pendingOutbox,
+              lastSyncedAt: ev.lastSyncedAt,
+              error: ev.error,
+            });
+          }
+        });
+      },
+      (error: unknown) => {
+        if (!cancelled && error instanceof OrionStoppedError) setStopped(error.message);
+      },
+    );
 
     return () => {
       cancelled = true;
+      stopWatch();
       offState?.();
       offSync?.();
       activeClient?.close();
@@ -165,6 +222,14 @@ export function OrionProvider({ children, initialClient, initialEndpoint }: Orio
     setConnectEpoch((n) => n + 1);
   }, []);
 
+  const restart = useCallback(() => {
+    setStopped(null);
+    invoke("orion_restart").then(
+      () => setConnectEpoch((n) => n + 1),
+      (error: unknown) => setStopped(String(error)),
+    );
+  }, []);
+
   const value = useMemo<OrionContextValue>(
     () => ({
       client,
@@ -172,8 +237,10 @@ export function OrionProvider({ children, initialClient, initialEndpoint }: Orio
       endpoint,
       syncStatus,
       reconnect,
+      stopped,
+      restart,
     }),
-    [client, state, endpoint, syncStatus, reconnect],
+    [client, state, endpoint, syncStatus, reconnect, stopped, restart],
   );
 
   return createElement(OrionContext.Provider, { value }, children);
@@ -299,23 +366,30 @@ const BANNER_STATE_KEYS: Record<Exclude<ConnectionState, "open">, MessageKey> = 
 };
 
 export function OrionConnectionBanner() {
-  const { state, endpoint, reconnect } = useOrion();
+  const { state, endpoint, reconnect, stopped, restart } = useOrion();
   const t = useT();
 
-  if (state === "open") return null;
+  if (state === "open" && !stopped) return null;
 
-  const isAuthError = state === "unauthorized";
+  const isAuthError = state === "unauthorized" || stopped !== null;
   const isConnecting = state === "connecting";
 
-  const title = isAuthError
-    ? t("connection.title.unauthorized")
-    : isConnecting
-      ? t("connection.title.connecting")
-      : t("connection.title.unreachable");
+  const title = stopped
+    ? t("connection.title.stopped")
+    : state === "unauthorized"
+      ? t("connection.title.unauthorized")
+      : isConnecting
+        ? t("connection.title.connecting")
+        : t("connection.title.unreachable");
 
-  const detail = isAuthError
-    ? t("connection.detail.unauthorized")
-    : t("connection.detail.waiting", { url: endpoint?.url ?? DEV_SERVER_URL });
+  const detail = stopped
+    ? t("connection.detail.stopped", { reason: stopped })
+    : state === "unauthorized"
+      ? t("connection.detail.unauthorized")
+      : t("connection.detail.waiting", { url: endpoint?.url ?? DEV_SERVER_URL });
+  const badgeKey = stopped
+    ? "connection.state.stopped"
+    : BANNER_STATE_KEYS[state as Exclude<ConnectionState, "open">];
 
   return createElement(
     "div",
@@ -370,11 +444,7 @@ export function OrionConnectionBanner() {
             },
           },
           title,
-          createElement(
-            Badge,
-            { variant: isAuthError ? "danger" : "warn" },
-            t(BANNER_STATE_KEYS[state]),
-          ),
+          createElement(Badge, { variant: isAuthError ? "danger" : "warn" }, t(badgeKey)),
         ),
         createElement(
           "div",
@@ -382,7 +452,9 @@ export function OrionConnectionBanner() {
             style: {
               fontSize: "var(--text-xs)",
               color: "var(--text-secondary)",
+              whiteSpace: "pre-wrap",
             },
+            "data-testid": "orion-connection-detail",
           },
           detail,
         ),
@@ -393,10 +465,10 @@ export function OrionConnectionBanner() {
       {
         variant: "secondary",
         size: "sm",
-        onClick: reconnect,
+        onClick: stopped ? restart : reconnect,
         icon: createElement(RefreshCw, { size: 15 }),
       },
-      t("connection.retry"),
+      t(stopped ? "connection.restart" : "connection.retry"),
     ),
   );
 }

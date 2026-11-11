@@ -94,10 +94,17 @@ export function PlanErrorCard({ code, onDismiss }: PlanErrorCardProps) {
           variant="primary"
           size="sm"
           icon={<CreditCard size={14} />}
-          onClick={() => void navigate("/settings#account")}
+          onClick={() =>
+            void navigate(
+              "/settings#account",
+              code === "model_required" ? { state: { accountMode: "register" } } : undefined,
+            )
+          }
           data-testid="chat-plan-error-see-plans"
         >
-          {t("chat.planError.seePlans")}
+          {code === "model_required"
+            ? t("chat.planError.startTrial")
+            : t("chat.planError.seePlans")}
         </Button>
       </div>
     </section>

@@ -1,5 +1,6 @@
 import type { AccountStatus } from "@orbit/protocol";
 import { type FormEvent, useEffect, useState } from "react";
+import { useLocation } from "react-router";
 import { Badge, Button, Card, Input, useToast } from "../../design";
 import { useT } from "../../i18n";
 import { useOrion, useOrionEvent } from "../../lib/orion";
@@ -91,7 +92,10 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
   const t = useT();
   const { client, syncStatus } = useOrion();
   const { busy, run } = useRun();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const wantsRegister = (useLocation().state as { accountMode?: string } | null)?.accountMode;
+  const [mode, setMode] = useState<"login" | "register">(
+    wantsRegister === "register" ? "register" : "login",
+  );
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

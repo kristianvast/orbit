@@ -24,7 +24,7 @@ export const account: Catalog<typeof en> = {
   "forgot.sent": "Hvis det finnes en konto for adressen, har vi sendt en lenke for å nullstille",
   "verify.title": "Bekreft e-postadressen din",
   "verify.body":
-    "Vi sendte en lenke til {email}. Bekreft den for å starte et abonnement eller bli med på en gård. Orbit virker som før imens.",
+    "Vi sendte en lenke til {email}. Bekreft den for å starte den gratis Orion-måneden, starte et abonnement eller bli med på en gård. Orbit virker som før imens.",
   "verify.resend": "Send e-posten på nytt",
   "verify.sent": "E-post sendt",
   "verify.done": "Jeg har bekreftet",
@@ -75,13 +75,12 @@ export const account: Catalog<typeof en> = {
   "members.empty": "Ingen andre ennå.",
   "billing.title": "Plan og skyforbruk",
   "billing.planLabel": "Nåværende plan",
-  "billing.plan.free": "Gratis (egen nøkkel)",
-  "billing.plan.pen": "Binge",
-  "billing.plan.barn": "Fjøs",
-  "billing.planDesc.pen":
-    "Kalvings- eller føllbinge · EUR 49/mnd eller EUR 490/år · 3M Orion-tokens + 60 talemin/mnd",
-  "billing.planDesc.barn":
-    "Fjøs opptil 200 dyr · EUR 189/mnd eller EUR 1 890/år · 15M Orion-tokens + 300 talemin/mnd",
+  "billing.plan.unknown": "Nåværende plan",
+  "billing.trial": {
+    one: "Gratis Orion-måned: {days} dag igjen (slutter {date})",
+    other: "Gratis Orion-måned: {days} dager igjen (slutter {date})",
+  },
+  "billing.websitePricing": "Se planer på nettsiden",
   "billing.status.active": "Aktiv",
   "billing.status.trialing": "Prøveperiode",
   "billing.status.past_due": "Forfalt",
@@ -100,11 +99,9 @@ export const account: Catalog<typeof en> = {
   "billing.signedOutPrompt": "Logg inn ovenfor for å velge en plan eller se gårdens skyforbruk.",
   "billing.pickerPlanLabel": "Plan",
   "billing.pickerIntervalLabel": "Betalingsperiode",
-  "billing.option.pen.month": "Binge · EUR 49 / måned (3M tokens, 60 talemin)",
-  "billing.option.pen.year": "Binge · EUR 490 / år (3M tokens/mnd, 60 talemin/mnd)",
-  "billing.option.barn.month": "Fjøs · EUR 189 / måned (15M tokens, 300 talemin)",
-  "billing.option.barn.year": "Fjøs · EUR 1 890 / år (15M tokens/mnd, 300 talemin/mnd)",
+  "billing.option.month": "{name} · {price} / måned ({tokens} tokens, {minutes} talemin per måned)",
+  "billing.option.year": "{name} · {price} / år ({tokens} tokens, {minutes} talemin per måned)",
   "billing.choosePlan": "Velg en plan",
   "billing.manageBilling": "Administrer betaling",
-  "billing.includedNote": "Orion-skyforbruk er inkludert i Binge- og Fjøs-planene.",
+  "billing.includedNote": "Orion-skyforbruk er inkludert i betalte planer.",
 };

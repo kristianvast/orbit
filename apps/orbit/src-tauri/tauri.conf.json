@@ -18,7 +18,8 @@
         "minWidth": 1024,
         "minHeight": 700,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "backgroundColor": "#f6f3ec"
       }
     ],
     "security": {
@@ -29,6 +30,10 @@
     "active": true,
     "targets": ["msi", "nsis", "dmg", "app", "appimage", "deb"],
     "externalBin": ["binaries/orion", "binaries/go2rtc"],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "entitlements": "Entitlements.plist"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -40,7 +45,7 @@
   "plugins": {
     "updater": {
       "endpoints": ["https://github.com/kristianvast/orbit/releases/latest/download/latest.json"],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDAwMDAwMDAwMDAwMDAwMDAKUldT placeholdersetinciwithrealminisignpubkey0000000000000000000000000="
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFBNzNEMENEREE3QzEyQTEKUldTaEVuemF6ZEJ6cXNxdkNKUEp3cmFYL25VbGJIb0NrdFFjODlqZldBSlUvRVdGY21OcDZESWoK"
     }
   }
 }

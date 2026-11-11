@@ -12,6 +12,7 @@ import { chat as enChat } from "./locales/en/chat";
 import { connection as enConnection } from "./locales/en/connection";
 import { design as enDesign } from "./locales/en/design";
 import { devices as enDevices } from "./locales/en/devices";
+import { feedback as enFeedback } from "./locales/en/feedback";
 import { herd as enHerd } from "./locales/en/herd";
 import { home as enHome } from "./locales/en/home";
 import { localUi as enLocalUi } from "./locales/en/localUi";
@@ -25,6 +26,7 @@ import { chat as nbChat } from "./locales/nb/chat";
 import { connection as nbConnection } from "./locales/nb/connection";
 import { design as nbDesign } from "./locales/nb/design";
 import { devices as nbDevices } from "./locales/nb/devices";
+import { feedback as nbFeedback } from "./locales/nb/feedback";
 import { herd as nbHerd } from "./locales/nb/herd";
 import { home as nbHome } from "./locales/nb/home";
 import { localUi as nbLocalUi } from "./locales/nb/localUi";
@@ -40,6 +42,7 @@ const en = {
   connection: enConnection,
   design: enDesign,
   devices: enDevices,
+  feedback: enFeedback,
   herd: enHerd,
   home: enHome,
   localUi: enLocalUi,
@@ -62,6 +65,7 @@ const nb: Tree = {
   connection: nbConnection,
   design: nbDesign,
   devices: nbDevices,
+  feedback: nbFeedback,
   herd: nbHerd,
   home: nbHome,
   localUi: nbLocalUi,

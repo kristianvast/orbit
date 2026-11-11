@@ -12,6 +12,23 @@ export const shell: Catalog<typeof en> = {
   "nav.main": "Hovedmeny",
   "nav.alerts": " varsler",
   "nav.yourPages": "Dine sider",
+  "nav.feedback": "Send tilbakemelding",
+  "update.ready": "En ny versjon av Orbit er klar.",
+  "update.restart": "Start på nytt for å oppdatere",
+  "module.disabled.herd.title": "Kyr og hester er ikke lagt til ennå",
+  "module.disabled.herd.description":
+    "Orion legger til dyreregisteret når du begynner å registrere storfe eller hester.",
+  "module.disabled.herd.prompt": "Hjelp meg å føre oversikt over besetningen",
+  "module.disabled.devices.title": "Sensorer og roboter er ikke lagt til ennå",
+  "module.disabled.devices.description":
+    "Orion legger til denne skjermen når du kobler til en melkerobot, et halsbånd, en bolus, en øremerkesensor eller en vekt.",
+  "module.disabled.devices.prompt": "Koble til melkeroboten eller sensorene mine",
+  "module.disabled.cameras.title": "Kameraer er ikke lagt til ennå",
+  "module.disabled.cameras.description":
+    "Orion legger til fjøskartet når du kobler til det første kameraet i fjøset eller stallen.",
+  "module.disabled.cameras.prompt": "Sett opp fjøskameraer",
+  "module.disabled.askOrion": "Be Orion legge det til",
+  "module.disabled.addNow": "Legg det til nå",
   "sync.localWaiting": "Venter lokalt",
   "sync.syncing": "Synkroniserer ({count})",
   "sync.error": "Synkroniseringsfeil",
@@ -28,5 +45,5 @@ export const shell: Catalog<typeof en> = {
   "theme.lightTitle": "Dagslys-tema",
   "theme.dark": "Nattevakt",
   "theme.light": "Dagslys",
-  "farm.fallbackName": "North Ridge Barn",
+  "farm.fallbackName": "Din gård",
 };

@@ -22,7 +22,7 @@ export const account = {
   "forgot.sent": "If an account exists for that address, we emailed a reset link",
   "verify.title": "Confirm your email address",
   "verify.body":
-    "We sent a link to {email}. Confirm it to start a plan or join a farm. Orbit keeps working meanwhile.",
+    "We sent a link to {email}. Confirm it to start your free Orion month, start a plan or join a farm. Orbit keeps working meanwhile.",
   "verify.resend": "Send the email again",
   "verify.sent": "Email sent",
   "verify.done": "I have confirmed it",
@@ -72,13 +72,12 @@ export const account = {
   "members.empty": "No one else yet.",
   "billing.title": "Plan & cloud usage",
   "billing.planLabel": "Current plan",
-  "billing.plan.free": "Free (bring your own key)",
-  "billing.plan.pen": "Pen",
-  "billing.plan.barn": "Barn",
-  "billing.planDesc.pen":
-    "Calving or foaling pen · EUR 49/mo or EUR 490/yr · 3M Orion tokens + 60 voice min/mo",
-  "billing.planDesc.barn":
-    "Barn up to 200 head · EUR 189/mo or EUR 1,890/yr · 15M Orion tokens + 300 voice min/mo",
+  "billing.plan.unknown": "Current plan",
+  "billing.trial": {
+    one: "Free Orion month: {days} day left (ends {date})",
+    other: "Free Orion month: {days} days left (ends {date})",
+  },
+  "billing.websitePricing": "See plans on the website",
   "billing.status.active": "Active",
   "billing.status.trialing": "Trial",
   "billing.status.past_due": "Past due",
@@ -97,11 +96,10 @@ export const account = {
   "billing.signedOutPrompt": "Sign in above to choose a plan or check your farm's cloud usage.",
   "billing.pickerPlanLabel": "Plan",
   "billing.pickerIntervalLabel": "Billing interval",
-  "billing.option.pen.month": "Pen · EUR 49 / month (3M tokens, 60 voice min)",
-  "billing.option.pen.year": "Pen · EUR 490 / year (3M tokens/mo, 60 voice min/mo)",
-  "billing.option.barn.month": "Barn · EUR 189 / month (15M tokens, 300 voice min)",
-  "billing.option.barn.year": "Barn · EUR 1,890 / year (15M tokens/mo, 300 voice min/mo)",
+  "billing.option.month":
+    "{name} · {price} / month ({tokens} tokens, {minutes} voice min per month)",
+  "billing.option.year": "{name} · {price} / year ({tokens} tokens, {minutes} voice min per month)",
   "billing.choosePlan": "Choose a plan",
   "billing.manageBilling": "Manage billing",
-  "billing.includedNote": "Orion cloud allowance is included in Pen and Barn plans.",
+  "billing.includedNote": "Orion cloud allowance is included in paid plans.",
 } as const satisfies Messages;

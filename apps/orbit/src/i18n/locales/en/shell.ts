@@ -11,6 +11,23 @@ export const shell = {
   "nav.main": "Main",
   "nav.alerts": " alerts",
   "nav.yourPages": "Your pages",
+  "nav.feedback": "Send feedback",
+  "update.ready": "A new version of Orbit is ready.",
+  "update.restart": "Restart to update",
+  "module.disabled.herd.title": "Cows & Horses is not added yet",
+  "module.disabled.herd.description":
+    "Orion adds the herd register when you start tracking cattle or horses.",
+  "module.disabled.herd.prompt": "Help me track my herd",
+  "module.disabled.devices.title": "Sensors & Robots is not added yet",
+  "module.disabled.devices.description":
+    "Orion adds this screen when you connect a milking robot, collar, bolus, ear tag sensor, or scale.",
+  "module.disabled.devices.prompt": "Connect my milking robot or sensors",
+  "module.disabled.cameras.title": "Cameras is not added yet",
+  "module.disabled.cameras.description":
+    "Orion adds the barn map when you connect your first barn or stable camera.",
+  "module.disabled.cameras.prompt": "Set up barn cameras",
+  "module.disabled.askOrion": "Ask Orion to add it",
+  "module.disabled.addNow": "Add it now",
   "sync.localWaiting": "Local waiting",
   "sync.syncing": "Syncing ({count})",
   "sync.error": "Sync error",
@@ -27,5 +44,5 @@ export const shell = {
   "theme.lightTitle": "Daylight theme",
   "theme.dark": "Night watch",
   "theme.light": "Daylight",
-  "farm.fallbackName": "North Ridge Barn",
+  "farm.fallbackName": "Your farm",
 } as const satisfies Messages;

@@ -1,7 +1,9 @@
 import {
   type AccountStatus,
+  type BillingPlans,
   type BillingStatus,
   type ConnectionState,
+  MODULE_IDS,
   type OrionClient,
   OrionRequestError,
   type RequestParams,
@@ -15,6 +17,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "../../app/providers";
 import { AccountCard } from "../settings";
+import { BillingSection } from "../settings/BillingSection";
 import ChatPage, { base64ToPcm16Float32, pcm16ToBase64, resampleTo16kHzPcm16 } from "./index";
 
 const baseSession: SessionSummary = {
@@ -44,8 +47,8 @@ const freeBilling: BillingStatus = {
   usage: { tokensUsed: 0, tokenAllowance: 0, voiceSecondsUsed: 0, voiceSecondsAllowance: 0 },
 };
 
-const paidBarnBilling: BillingStatus = {
-  plan: "barn",
+const paidCameraBilling: BillingStatus = {
+  plan: "cam6",
   interval: "month",
   status: "active",
   currentPeriodEnd: "2026-12-06T00:00:00.000Z",
@@ -58,9 +61,65 @@ const paidBarnBilling: BillingStatus = {
   },
 };
 
+const billingPlans: BillingPlans = {
+  currency: "eur",
+  locked: false,
+  trialDays: 30,
+  plans: [
+    {
+      id: "free",
+      name: "Free from Core",
+      cameras: 0,
+      monthly: 0,
+      yearly: 0,
+      orionTokens: 0,
+      voiceMinutes: 0,
+    },
+    {
+      id: "orion",
+      name: "Orion from Core",
+      cameras: 0,
+      monthly: 23,
+      yearly: 230,
+      orionTokens: 2000000,
+      voiceMinutes: 30,
+    },
+    {
+      id: "cam2",
+      name: "Pair from Core",
+      cameras: 2,
+      monthly: 51,
+      yearly: 510,
+      orionTokens: 3000000,
+      voiceMinutes: 60,
+    },
+    {
+      id: "cam4",
+      name: "Four from Core",
+      cameras: 4,
+      monthly: 77,
+      yearly: 770,
+      orionTokens: 5000000,
+      voiceMinutes: 100,
+    },
+    {
+      id: "cam6",
+      name: "Six from Core",
+      cameras: 6,
+      monthly: 97,
+      yearly: 970,
+      orionTokens: 8000000,
+      voiceMinutes: 150,
+    },
+  ],
+  hardware: [],
+};
+
 function createBillingVoiceClient(
   options: {
     billing?: BillingStatus;
+    plans?: BillingPlans;
+    plansFailure?: boolean;
     promptErrorCode?: "plan_required" | "budget_exceeded" | "not_ready";
   } = {},
 ) {
@@ -77,6 +136,9 @@ function createBillingVoiceClient(
           return signedInAccount as RequestResult<T>;
         case "billing.status":
           return currentBilling as RequestResult<T>;
+        case "billing.plans":
+          if (options.plansFailure) throw new Error("Catalogue unavailable");
+          return (options.plans ?? billingPlans) as RequestResult<T>;
         case "billing.checkout":
           return { url: "https://checkout.stripe.com/c/pay/cs_test_orbit" } as RequestResult<T>;
         case "billing.portal":
@@ -142,6 +204,15 @@ function createBillingVoiceClient(
         case "voice.audio":
         case "voice.text":
           return { accepted: true } as RequestResult<T>;
+        case "modules.list":
+          return {
+            modules: MODULE_IDS.map((id) => ({
+              id,
+              enabled: false,
+              enabledAt: null,
+              enabledBy: null,
+            })),
+          } as RequestResult<T>;
         default:
           throw new Error(`Unhandled request: ${type}`);
       }
@@ -203,7 +274,18 @@ describe("AccountCard billing plans and usage meters", () => {
     );
 
     await waitFor(() => expect(requestMock).toHaveBeenCalledWith("billing.status", {}));
-    expect(screen.getByTestId("billing-plan-name")).toHaveTextContent("Free (bring your own key)");
+    await screen.findByTestId("billing-picker");
+    expect(screen.getByTestId("billing-plan-name")).toHaveTextContent("Free from Core");
+    for (const [id, name, price] of [
+      ["orion", "Orion from Core", "€23.00"],
+      ["cam2", "Pair from Core", "€51.00"],
+      ["cam4", "Four from Core", "€77.00"],
+      ["cam6", "Six from Core", "€97.00"],
+    ] as const) {
+      const option = screen.getByTestId(`billing-plan-${id}`);
+      expect(option).toHaveTextContent(name);
+      expect(option).toHaveTextContent(price);
+    }
     expect(screen.getByTestId("billing-free-copy")).toHaveTextContent(
       /Orbit and Orion are open source and free/,
     );
@@ -211,12 +293,13 @@ describe("AccountCard billing plans and usage meters", () => {
     expect(screen.getByTestId("billing-meter-voice-value")).toHaveTextContent("0 / 0 min");
 
     fireEvent.click(screen.getByTestId("billing-interval-year"));
-    fireEvent.click(screen.getByTestId("billing-plan-barn"));
+    expect(screen.getByTestId("billing-plan-cam6")).toHaveTextContent("€970.00 / year");
+    fireEvent.click(screen.getByTestId("billing-plan-cam6"));
     fireEvent.click(screen.getByTestId("billing-checkout-button"));
 
     await waitFor(() =>
       expect(requestMock).toHaveBeenCalledWith("billing.checkout", {
-        plan: "barn",
+        plan: "cam6",
         interval: "year",
       }),
     );
@@ -226,7 +309,7 @@ describe("AccountCard billing plans and usage meters", () => {
       "noopener,noreferrer",
     );
 
-    setBilling(paidBarnBilling);
+    setBilling(paidCameraBilling);
     rerender(
       <MemoryRouter>
         <AppProviders initialClient={client}>
@@ -235,7 +318,9 @@ describe("AccountCard billing plans and usage meters", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.getByTestId("billing-plan-name")).toHaveTextContent("Barn"));
+    await waitFor(() =>
+      expect(screen.getByTestId("billing-plan-name")).toHaveTextContent("Six from Core"),
+    );
     expect(screen.getByTestId("billing-status-badge")).toHaveTextContent("Active");
     expect(screen.getByTestId("billing-meter-tokens-value")).toHaveTextContent(
       "4,500,000 / 15,000,000 tokens",
@@ -250,6 +335,100 @@ describe("AccountCard billing plans and usage meters", () => {
       "noopener,noreferrer",
     );
   });
+
+  it.each(["locked", "failed", "missing prices"] as const)(
+    "shows website pricing and keeps the portal working when the catalogue is %s",
+    async (mode) => {
+      const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+      const plans: BillingPlans = {
+        ...billingPlans,
+        locked: mode === "locked",
+        plans:
+          mode === "locked"
+            ? billingPlans.plans
+            : billingPlans.plans.map(({ monthly: _monthly, yearly: _yearly, ...plan }) => plan),
+      };
+      const { client } = createBillingVoiceClient({
+        billing: paidCameraBilling,
+        plans,
+        plansFailure: mode === "failed",
+      });
+      render(
+        <AppProviders initialClient={client}>
+          <BillingSection status={signedInAccount} />
+        </AppProviders>,
+      );
+      const portal = await screen.findByTestId("billing-portal-button");
+      expect(screen.queryByTestId("billing-picker")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("billing-checkout-button")).not.toBeInTheDocument();
+      expect(screen.getByTestId("billing-pricing-link")).toHaveAttribute(
+        "href",
+        "https://pecorva.com/pricing/",
+      );
+      expect(screen.getByTestId("billing-section")).not.toHaveTextContent("€");
+      expect(screen.getByTestId("billing-plan-name")).toHaveTextContent(
+        mode === "failed" ? "Current plan" : "Six from Core",
+      );
+      fireEvent.click(portal);
+      await waitFor(() =>
+        expect(openSpy).toHaveBeenCalledWith(
+          "https://billing.stripe.com/p/session/test_portal",
+          "_blank",
+          "noopener,noreferrer",
+        ),
+      );
+    },
+  );
+
+  it("keeps the sign-in prompt without loading billing when signed out", () => {
+    const { client, requestMock } = createBillingVoiceClient();
+    render(
+      <AppProviders initialClient={client}>
+        <BillingSection
+          status={{ state: "signed_out", coreUrl: "https://core.test", user: null, farm: null }}
+        />
+      </AppProviders>,
+    );
+    expect(screen.getByTestId("billing-signin-prompt")).toBeInTheDocument();
+    expect(screen.queryByTestId("billing-picker")).not.toBeInTheDocument();
+    expect(requestMock).not.toHaveBeenCalledWith("billing.plans", {});
+  });
+
+  it.each([
+    { plan: "free", trialEndsAt: "2026-11-13T00:00:00Z", visible: true },
+    { plan: "free", trialEndsAt: null, visible: false },
+    { plan: "free", trialEndsAt: undefined, visible: false },
+    { plan: "free", trialEndsAt: "2026-11-09T00:00:00Z", visible: false },
+    { plan: "free", trialEndsAt: "2026-11-10T00:00:00Z", visible: false },
+    { plan: "orion", trialEndsAt: "2026-11-13T00:00:00Z", visible: false },
+  ] as const)(
+    "shows the free month only for a future free trial: $plan $trialEndsAt",
+    async ({ plan, trialEndsAt, visible }) => {
+      const { client } = createBillingVoiceClient({
+        billing: { ...freeBilling, plan, ...(trialEndsAt === undefined ? {} : { trialEndsAt }) },
+      });
+      render(
+        <AppProviders initialClient={client}>
+          <BillingSection status={signedInAccount} now={Date.parse("2026-11-10T00:00:00Z")} />
+        </AppProviders>,
+      );
+      await screen.findByTestId("billing-picker");
+      if (visible) {
+        expect(screen.getByTestId("billing-trial")).toHaveTextContent(
+          "Free Orion month: 3 days left",
+        );
+        expect(screen.getByTestId("billing-trial")).toHaveTextContent(
+          new Intl.DateTimeFormat("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          }).format(new Date("2026-11-13T00:00:00Z")),
+        );
+      } else {
+        expect(screen.queryByTestId("billing-trial")).not.toBeInTheDocument();
+      }
+    },
+  );
 });
 
 describe("Chat plan_required card", () => {

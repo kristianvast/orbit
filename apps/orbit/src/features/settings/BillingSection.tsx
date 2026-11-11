@@ -1,12 +1,12 @@
 import "./providers.css";
-import type { AccountStatus, BillingStatus } from "@orbit/protocol";
+import type { AccountStatus, BillingPlans, BillingStatus } from "@orbit/protocol";
 import { Check, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge, type BadgeVariant, Button, useToast } from "../../design";
 import { type MessageKey, useI18n } from "../../i18n";
 import { isTauriRuntime, useOrion } from "../../lib/orion";
 
-export type PaidPlan = "pen" | "barn";
+export type PaidPlan = Exclude<BillingStatus["plan"], "free">;
 export type BillingInterval = "month" | "year";
 
 const DEFAULT_FREE_BILLING: BillingStatus = {
@@ -96,31 +96,43 @@ function UsageMeter({
 
 export interface BillingSectionProps {
   readonly status: AccountStatus;
+  readonly now?: number;
 }
 
-export function BillingSection({ status }: BillingSectionProps) {
+export function BillingSection({ status, now = Date.now() }: BillingSectionProps) {
   const { t, formatNumber, formatDate } = useI18n();
   const { client } = useOrion();
   const { pushToast } = useToast();
 
   const [billing, setBilling] = useState<BillingStatus>(DEFAULT_FREE_BILLING);
-  const [selectedPlan, setSelectedPlan] = useState<PaidPlan>("pen");
+  const [catalogue, setCatalogue] = useState<BillingPlans | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<PaidPlan>("orion");
   const [selectedInterval, setSelectedInterval] = useState<BillingInterval>("month");
   const [busyAction, setBusyAction] = useState<"checkout" | "portal" | null>(null);
 
   useEffect(() => {
+    setCatalogue(null);
+    setBilling(DEFAULT_FREE_BILLING);
     if (!client || status.state !== "signed_in") return;
     let live = true;
     client.request("billing.status", {}).then(
       (next) => {
         if (!live) return;
         setBilling(next);
-        if (next.plan === "pen" || next.plan === "barn") setSelectedPlan(next.plan);
+        if (next.plan !== "free") setSelectedPlan(next.plan);
         if (next.interval === "month" || next.interval === "year")
           setSelectedInterval(next.interval);
       },
       () => {
         if (live) setBilling(DEFAULT_FREE_BILLING);
+      },
+    );
+    client.request("billing.plans", {}).then(
+      (next) => {
+        if (live) setCatalogue(next);
+      },
+      () => {
+        if (live) setCatalogue(null);
       },
     );
     return () => {
@@ -150,15 +162,25 @@ export function BillingSection({ status }: BillingSectionProps) {
   const badge = statusBadgeMeta(billing.status);
   const voiceMinutesUsed = Math.round(billing.usage.voiceSecondsUsed / 60);
   const voiceMinutesAllowance = Math.round(billing.usage.voiceSecondsAllowance / 60);
+  const paidPlans = catalogue?.plans.filter((plan) => plan.id !== "free") ?? [];
+  const canPick =
+    catalogue !== null &&
+    !catalogue.locked &&
+    paidPlans.length > 0 &&
+    paidPlans.every((plan) => plan.monthly !== undefined && plan.yearly !== undefined);
+  const activePlan = paidPlans.find((plan) => plan.id === selectedPlan) ?? paidPlans[0];
+  const trialEnd = billing.trialEndsAt ? new Date(billing.trialEndsAt).getTime() : 0;
+  const trialDays = billing.plan === "free" ? Math.ceil((trialEnd - now) / 86_400_000) : 0;
 
   const openBillingLink = async (kind: "checkout" | "portal") => {
     if (!client) return;
+    if (kind === "checkout" && (!canPick || !activePlan || activePlan.id === "free")) return;
     setBusyAction(kind);
     try {
       const res =
         kind === "checkout"
           ? await client.request("billing.checkout", {
-              plan: selectedPlan,
+              plan: activePlan && activePlan.id !== "free" ? activePlan.id : selectedPlan,
               interval: selectedInterval,
             })
           : await client.request("billing.portal", {});
@@ -180,7 +202,8 @@ export function BillingSection({ status }: BillingSectionProps) {
         <div className="orbit-billing__summary-lead">
           <strong>{t("account.billing.title")}:</strong>
           <span style={{ fontWeight: 600 }} data-testid="billing-plan-name">
-            {t(`account.billing.plan.${billing.plan}`)}
+            {catalogue?.plans.find((plan) => plan.id === billing.plan)?.name ??
+              t("account.billing.plan.unknown")}
           </span>
           <Badge variant={badge.variant} data-testid="billing-status-badge">
             {t(badge.key)}
@@ -210,6 +233,20 @@ export function BillingSection({ status }: BillingSectionProps) {
           </span>
         )}
       </div>
+
+      {trialDays > 0 && billing.trialEndsAt && (
+        <p data-testid="billing-trial">
+          {t("account.billing.trial", {
+            count: trialDays,
+            days: formatNumber(trialDays),
+            date: formatDate(billing.trialEndsAt, {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            }),
+          })}
+        </p>
+      )}
 
       {billing.plan === "free" && (
         <p
@@ -243,91 +280,114 @@ export function BillingSection({ status }: BillingSectionProps) {
         />
       </div>
 
-      <div
-        style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}
-        data-testid="billing-picker"
-      >
-        <div className="orbit-billing__picker-head">
-          <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
-            {t("account.billing.pickerPlanLabel")}
-          </span>
+      {canPick ? (
+        <div
+          style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}
+          data-testid="billing-picker"
+        >
+          <div className="orbit-billing__picker-head">
+            <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
+              {t("account.billing.pickerPlanLabel")}
+            </span>
+            <fieldset
+              className="orbit-billing__intervals"
+              aria-label={t("account.billing.pickerIntervalLabel")}
+            >
+              {(["month", "year"] as const).map((interval) => (
+                <Button
+                  key={interval}
+                  type="button"
+                  size="sm"
+                  variant={selectedInterval === interval ? "primary" : "secondary"}
+                  aria-pressed={selectedInterval === interval}
+                  onClick={() => setSelectedInterval(interval)}
+                  data-testid={`billing-interval-${interval}`}
+                >
+                  {t(`account.billing.interval.${interval}`)}
+                </Button>
+              ))}
+            </fieldset>
+          </div>
+
           <fieldset
-            className="orbit-billing__intervals"
-            aria-label={t("account.billing.pickerIntervalLabel")}
+            className="orbit-billing__grid"
+            aria-label={t("account.billing.pickerPlanLabel")}
           >
-            {(["month", "year"] as const).map((interval) => (
-              <Button
-                key={interval}
-                type="button"
-                size="sm"
-                variant={selectedInterval === interval ? "primary" : "secondary"}
-                aria-pressed={selectedInterval === interval}
-                onClick={() => setSelectedInterval(interval)}
-                data-testid={`billing-interval-${interval}`}
-              >
-                {t(`account.billing.interval.${interval}`)}
-              </Button>
-            ))}
+            {paidPlans.map((plan) => {
+              const id = plan.id;
+              if (id === "free") return null;
+              const selected = activePlan?.id === plan.id;
+              const price = selectedInterval === "month" ? plan.monthly : plan.yearly;
+              if (price === undefined) return null;
+              return (
+                <button
+                  key={plan.id}
+                  type="button"
+                  className="orbit-billing__plan-btn"
+                  aria-pressed={selected}
+                  onClick={() => setSelectedPlan(id)}
+                  data-testid={`billing-plan-${plan.id}`}
+                >
+                  <span className="orbit-billing__plan-title">
+                    {selected && (
+                      <Check
+                        size={15}
+                        style={{ color: "var(--accent-primary)" }}
+                        aria-hidden="true"
+                      />
+                    )}
+                    {plan.name}
+                  </span>
+                  <span className="orbit-billing__plan-desc">
+                    {t(`account.billing.option.${selectedInterval}`, {
+                      name: plan.name,
+                      price: formatNumber(price, { style: "currency", currency: "EUR" }),
+                      tokens: formatNumber(plan.orionTokens),
+                      minutes: formatNumber(plan.voiceMinutes),
+                    })}
+                  </span>
+                </button>
+              );
+            })}
           </fieldset>
-        </div>
 
-        <fieldset className="orbit-billing__grid" aria-label={t("account.billing.pickerPlanLabel")}>
-          {(["pen", "barn"] as const).map((plan) => {
-            const selected = selectedPlan === plan;
-            return (
-              <button
-                key={plan}
-                type="button"
-                className="orbit-billing__plan-btn"
-                aria-pressed={selected}
-                onClick={() => setSelectedPlan(plan)}
-                data-testid={`billing-plan-${plan}`}
-              >
-                <span className="orbit-billing__plan-title">
-                  {selected && (
-                    <Check
-                      size={15}
-                      style={{ color: "var(--accent-primary)" }}
-                      aria-hidden="true"
-                    />
-                  )}
-                  {t(`account.billing.plan.${plan}`)}
-                </span>
-                <span className="orbit-billing__plan-desc">
-                  {t(`account.billing.option.${plan}.${selectedInterval}`)}
-                </span>
-              </button>
-            );
-          })}
-        </fieldset>
-
-        <div className="orbit-billing__actions">
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            loading={busyAction === "checkout"}
-            icon={<ExternalLink size={14} />}
-            onClick={() => void openBillingLink("checkout")}
-            data-testid="billing-checkout-button"
-          >
-            {t("account.billing.choosePlan")}
-          </Button>
-          {billing.plan !== "free" && (
+          <div className="orbit-billing__actions">
             <Button
               type="button"
-              variant="secondary"
+              variant="primary"
               size="sm"
-              loading={busyAction === "portal"}
+              loading={busyAction === "checkout"}
               icon={<ExternalLink size={14} />}
-              onClick={() => void openBillingLink("portal")}
-              data-testid="billing-portal-button"
+              onClick={() => void openBillingLink("checkout")}
+              data-testid="billing-checkout-button"
             >
-              {t("account.billing.manageBilling")}
+              {t("account.billing.choosePlan")}
             </Button>
-          )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <a
+          href="https://pecorva.com/pricing/"
+          target="_blank"
+          rel="noreferrer"
+          data-testid="billing-pricing-link"
+        >
+          {t("account.billing.websitePricing")}
+        </a>
+      )}
+      {billing.plan !== "free" && (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          loading={busyAction === "portal"}
+          icon={<ExternalLink size={14} />}
+          onClick={() => void openBillingLink("portal")}
+          data-testid="billing-portal-button"
+        >
+          {t("account.billing.manageBilling")}
+        </Button>
+      )}
     </div>
   );
 }

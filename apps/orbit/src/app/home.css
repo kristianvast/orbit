@@ -32,6 +32,25 @@
   color: var(--text-primary);
 }
 
+.orbit-home__lede {
+  margin: 0;
+  max-inline-size: 60ch;
+  font-size: var(--text-lg);
+  color: var(--text-secondary);
+  line-height: var(--leading-body);
+}
+
+.orbit-home--minimal {
+  justify-content: space-between;
+  min-block-size: calc(100dvh - var(--topbar-height) - var(--space-16));
+}
+
+.orbit-home__head--minimal {
+  max-inline-size: 46rem;
+  padding-block-start: var(--space-8);
+  gap: var(--space-5);
+}
+
 .orbit-ask {
   display: flex;
   align-items: center;
@@ -348,4 +367,39 @@
     grid-column: 2;
     justify-self: start;
   }
+}
+
+.orbit-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+
+.orbit-setup__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-h3);
+  line-height: var(--leading-tight);
+}
+
+.orbit-setup__body {
+  margin: 0;
+  max-inline-size: 52ch;
+  color: var(--text-secondary);
+}
+
+.orbit-setup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.orbit-setup__alt {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
