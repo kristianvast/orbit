@@ -16,6 +16,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@elevenlabs/client": "^1.36.0",
     "@orbit/protocol": "workspace:*",
     "@orbit/schema": "workspace:*",
     "@tauri-apps/api": "^2.3.0",

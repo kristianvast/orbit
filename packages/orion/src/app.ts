@@ -1,4 +1,5 @@
 // Wires the database, secret store, Pi sessions and the WebSocket protocol server.
+// allow: SIZE_OK -- The composition root keeps resource ownership, socket routing and shutdown in one lifetime.
 import { timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
@@ -47,7 +48,7 @@ import { listPages, PAGE_SDK, PAGES_DIR, resolvePageFile } from "./services/page
 import { Go2rtcRelay } from "./services/relay";
 import { DEFAULT_SKILLS_URL, SkillService } from "./services/skills";
 import { maskKey, SettingsStore } from "./settings";
-import { VoiceSessions } from "./voice/session";
+import { type VoiceOptions, VoiceSessions } from "./voice/session";
 
 export const SERVER_VERSION = "0.1.5";
 
@@ -106,7 +107,10 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string; de
   return { code: "internal", message: error instanceof Error ? error.message : String(error) };
 }
 
-export async function startOrion(config: OrionConfig): Promise<OrionApp> {
+export async function startOrion(
+  config: OrionConfig,
+  voiceOptions: Pick<VoiceOptions, "transport" | "toolBudgetMs"> = {},
+): Promise<OrionApp> {
   mkdirSync(config.dataDir, { recursive: true });
   const workspace = new Workspace(join(config.dataDir, "workspace"));
   await workspace.init();
@@ -125,6 +129,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
           if (ws.data.authed) ws.send(frame);
           break;
         case "camera":
+        case "voice":
           break;
         default:
           assertNever(ws.data);
@@ -203,9 +208,12 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     farm,
     account,
     billing,
-    credentials: hub.credentials,
+    hub,
+    browser: browser.session,
+    token: config.token,
     emit,
     mockModel: config.mockModel,
+    ...voiceOptions,
   });
 
   const auth = new AuthFlows(hub.runtime, emit, {
@@ -453,10 +461,14 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
         return voice.start(msg.sessionId, owner);
       case "voice.stop":
         return { accepted: voice.stop(msg.voiceId, owner) };
-      case "voice.audio":
-        return { accepted: voice.audio(msg.voiceId, owner, msg.data) };
-      case "voice.text":
-        return { accepted: voice.text(msg.voiceId, owner, msg.text) };
+      case "voice.turn":
+        return { accepted: voice.turn(msg.voiceId, owner, msg.role, msg.text) };
+      case "voice.tool":
+        return voice.tool(msg.voiceId, owner, {
+          toolCallId: msg.toolCallId,
+          name: msg.name,
+          args: msg.args,
+        });
       case "account.acceptInvite":
         return account.acceptInvite(msg.code);
       case "members.list":
@@ -492,12 +504,28 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       if (url.pathname.startsWith("/fonts/")) return serveFont(url.pathname);
       if (url.pathname.startsWith(`/${LOCAL_UI_PREFIX}/`)) return serveLocalUi(url.pathname);
       if (url.pathname.startsWith("/camera/")) return serveCamera(req, srv, { tokenPath, relay });
+      if (url.pathname.startsWith("/voice/")) {
+        const parsed = tokenPath(url.pathname);
+        if (parsed instanceof Response) return parsed;
+        const [voiceId] = parsed.segments;
+        if (!voiceId || parsed.segments.length !== 1) return notFound();
+        if (req.method !== "GET") return new Response("method not allowed", { status: 405 });
+        if (req.headers.get("upgrade")?.toLowerCase() !== "websocket")
+          return new Response("WebSocket upgrade required", { status: 426 });
+        const status = voice.claim(voiceId);
+        if (status) return new Response("Voice socket unavailable", { status });
+        if (srv.upgrade(req, { data: { kind: "voice", voiceId } })) return undefined;
+        return new Response("WebSocket upgrade required", { status: 426 });
+      }
       return new Response("not found", { status: 404 });
     },
     websocket: {
       open(ws) {
         sockets.add(ws);
         switch (ws.data.kind) {
+          case "voice":
+            void voice.open(ws.data.voiceId, ws);
+            break;
           case "camera":
             cameraWebSocket.open(ws, ws.data);
             break;
@@ -511,6 +539,9 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
         sockets.delete(ws);
         voice.disconnect(ws);
         switch (ws.data.kind) {
+          case "voice":
+            voice.close(ws.data.voiceId);
+            break;
           case "camera":
             cameraWebSocket.close(ws.data);
             break;
@@ -522,6 +553,9 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       },
       async message(ws, raw) {
         switch (ws.data.kind) {
+          case "voice":
+            voice.message(ws.data.voiceId, raw);
+            return;
           case "camera":
             cameraWebSocket.message(ws, ws.data, raw);
             return;

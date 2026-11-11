@@ -1,0 +1,264 @@
+.orbit-guide-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 70;
+  overflow: hidden;
+}
+
+.orbit-guide-highlight {
+  position: fixed;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  pointer-events: none;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bg-surface);
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+  background-color: var(--accent-primary-subtle);
+  box-shadow: var(--shadow-sm);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.orbit-guide-pointer {
+  position: fixed;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  inline-size: var(--space-8);
+  block-size: var(--space-8);
+  pointer-events: none;
+  will-change: transform;
+}
+
+@keyframes orbit-guide-glide {
+  from {
+    transform: translate3d(var(--guide-dx, 0px), var(--guide-dy, 0px), 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.orbit-guide-pointer__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--space-8);
+  block-size: var(--space-8);
+  border-radius: var(--radius-full);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  outline: 2px solid var(--border-focus);
+  outline-offset: 0;
+  box-shadow: var(--shadow-md);
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.orbit-guide-pointer[data-phase="moving"] .orbit-guide-pointer__badge {
+  animation: orbit-guide-glide var(--duration-normal) var(--ease-out) both;
+}
+
+.orbit-guide-pointer[data-phase="pressing"] .orbit-guide-pointer__badge {
+  transform: scale(0.84);
+  background-color: var(--bg-elevated);
+}
+
+.orbit-guide-note {
+  position: fixed;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+  padding-inline-start: var(--space-3);
+  padding-inline-end: var(--space-1);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  max-inline-size: min(20rem, calc(100vw - var(--space-6)));
+}
+
+.orbit-guide-note__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-primary);
+}
+
+.orbit-guide-note__text {
+  margin: 0;
+  flex: 1;
+  min-inline-size: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.orbit-guide-note__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  pointer-events: auto;
+  min-inline-size: var(--control-height-md);
+  min-block-size: var(--control-height-md);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background-color: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.orbit-guide-note__close:hover {
+  background-color: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.orbit-guide-note__close:active {
+  background-color: var(--bg-hover);
+  transform: translateY(1px);
+}
+
+.orbit-browser-view {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.orbit-browser-view__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--bg-elevated);
+  border-block-end: 1px solid var(--border-subtle);
+  min-inline-size: 0;
+}
+
+.orbit-browser-view__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  color: var(--text-primary);
+}
+
+.orbit-browser-view__icon {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}
+
+.orbit-browser-view__title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.orbit-browser-view__url {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.orbit-browser-view__stage {
+  position: relative;
+  inline-size: 100%;
+  min-inline-size: 0;
+  background-color: var(--bg-canvas);
+  overflow: hidden;
+}
+
+.orbit-browser-view__frame {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  block-size: auto;
+  user-select: none;
+}
+
+.orbit-browser-view__highlight {
+  position: absolute;
+  pointer-events: none;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--bg-surface);
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+  background-color: var(--accent-primary-subtle);
+}
+
+.orbit-browser-view__note {
+  position: absolute;
+  inset-inline-start: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  inline-size: max-content;
+  max-inline-size: min(16rem, 84vw);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.orbit-browser-view__note[data-align="end"] {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+}
+
+.orbit-browser-view__note[data-position="below"] {
+  inset-block-start: calc(100% + var(--space-2));
+}
+
+.orbit-browser-view__note[data-position="above"] {
+  inset-block-end: calc(100% + var(--space-2));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit-guide-highlight,
+  .orbit-guide-pointer__badge,
+  .orbit-guide-note__close {
+    transition: none;
+  }
+
+  .orbit-guide-pointer[data-phase="moving"] .orbit-guide-pointer__badge {
+    animation: none;
+  }
+}

@@ -1,5 +1,7 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { AssistantItem, ToolItem, TranscriptItem, UserItem } from "@orbit/protocol";
+import { ToolItem as ToolItemSchema } from "@orbit/protocol";
+import { Value } from "typebox/value";
 
 type AnyMessage = { role: string; content?: unknown; timestamp?: number } & Record<string, unknown>;
 
@@ -26,9 +28,10 @@ const isoOf = (ms: number | undefined, fallback: string) =>
 export function userItem(id: string, message: AnyMessage, fallbackTs: string): UserItem {
   return {
     kind: "user",
-    id,
+    id: typeof message.voiceItemId === "string" ? message.voiceItemId : id,
     ts: isoOf(message.timestamp, fallbackTs),
     text: contentText(message.content),
+    ...(message.voice === true ? { voice: true } : {}),
   };
 }
 
@@ -36,9 +39,10 @@ export function assistantItem(id: string, message: AnyMessage, fallbackTs: strin
   const thinking = thinkingText(message.content);
   const item: AssistantItem = {
     kind: "assistant",
-    id,
+    id: typeof message.voiceItemId === "string" ? message.voiceItemId : id,
     ts: isoOf(message.timestamp, fallbackTs),
     text: contentText(message.content),
+    ...(message.voice === true ? { voice: true } : {}),
   };
   if (thinking) item.thinking = thinking;
   if (typeof message.model === "string")
@@ -61,6 +65,10 @@ export function buildTranscript(
   const items: TranscriptItem[] = [];
   const tools = new Map<string, ToolItem>();
   for (const entry of entries) {
+    if (entry.type === "custom" && entry.customType === "orbit.voice.tool") {
+      if (Value.Check(ToolItemSchema, entry.data)) items.push(entry.data);
+      continue;
+    }
     if (entry.type === "compaction") {
       items.push({
         kind: "system",

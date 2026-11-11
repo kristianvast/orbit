@@ -16,9 +16,9 @@ describe("billing and voice wire contracts", () => {
     { type: "billing.portal" },
     { type: "billing.status" },
     { type: "voice.start", sessionId: "s" },
-    { type: "voice.audio", voiceId: "v", data: "AAAA" },
     { type: "voice.stop", voiceId: "v" },
-    { type: "voice.text", voiceId: "v", text: "How is the herd?" },
+    { type: "voice.turn", voiceId: "v", role: "user", text: "How is the herd?" },
+    { type: "voice.tool", voiceId: "v", toolCallId: "t", name: "db_query", args: {} },
   ])("accepts $type requests", (frame) => {
     expect(decodeClientMessage(JSON.stringify({ id: "1", ...frame })).ok).toBe(true);
   });
@@ -28,8 +28,9 @@ describe("billing and voice wire contracts", () => {
     { type: "billing.checkout", plan: "pen", interval: "month" },
     { type: "billing.checkout", plan: "barn", interval: "month" },
     { type: "billing.checkout", plan: "cam2", interval: "week" },
-    { type: "voice.audio", voiceId: "v", data: "not audio!" },
-    { type: "voice.audio", voiceId: "v", data: "A".repeat(87388) },
+    { type: "voice.turn", voiceId: "v", role: "system", text: "Herd?" },
+    { type: "voice.turn", voiceId: "v", role: "user", text: "" },
+    { type: "voice.tool", voiceId: "v", toolCallId: "t", name: "bash", args: {} },
     { type: "voice.start" },
   ])("rejects malformed $type", (frame) => {
     expect(decodeClientMessage(JSON.stringify({ id: "1", ...frame })).ok).toBe(false);
@@ -87,14 +88,37 @@ describe("billing and voice wire contracts", () => {
   });
 
   test.each([
-    { type: "voice.state", state: "listening" },
-    { type: "voice.audio", data: "AAAA", sampleRate: 24000 },
-    { type: "voice.transcript", role: "user", text: "Herd?", final: true },
-    { type: "voice.tool", toolCallId: "t", name: "db_query", state: "done", result: "{}" },
+    { type: "voice.note", voiceId: "v", text: "The page is built." },
+    {
+      type: "browser.view",
+      url: "https://example.com/",
+      title: "Example",
+      image: "AAAA",
+      width: 1280,
+      height: 900,
+      highlight: { x: 10, y: 20, width: 120, height: 32, note: "Start here" },
+    },
+    {
+      type: "browser.view",
+      url: "",
+      title: "",
+      image: null,
+      width: 0,
+      height: 0,
+      highlight: null,
+    },
   ])("accepts $type events", (frame) => {
-    expect(decodeServerMessage(JSON.stringify({ sessionId: "s", voiceId: "v", ...frame })).ok).toBe(
-      true,
-    );
+    expect(decodeServerMessage(JSON.stringify({ sessionId: "s", ...frame })).ok).toBe(true);
+  });
+
+  test("voice.start answers with the local socket path and the prompt values", () => {
+    const started = {
+      voiceId: "v",
+      path: "/voice/token/v",
+      variables: { farm_name: "Hillside", conversation_recap: "" },
+    };
+    expect(validateResult("voice.start", started).ok).toBe(true);
+    expect(validateResult("voice.start", { voiceId: "v" }).ok).toBe(false);
   });
 
   test("uses the named observation mutation codec", () => {

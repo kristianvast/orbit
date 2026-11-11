@@ -14,6 +14,7 @@ import { type FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Badge, Button, EmptyState, OrbitRings, type OrbitSatellite, Skeleton } from "../design";
 import { PageCards, useCustomPages } from "../features/pages";
+import { HomeVoiceWidget, useVoice } from "../features/voice";
 import { type MessageKey, type TranslateFn, useI18n } from "../i18n";
 import { type ModuleId, useModules } from "../lib/modules";
 import { useOrion, useOrionQuery } from "../lib/orion";
@@ -113,6 +114,7 @@ const GROUP_PALETTE = [
 export function HomePage() {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const voice = useVoice();
   const [question, setQuestion] = useState("");
   const { loading: modulesLoading, isEnabled, anyEnabled } = useModules();
   const { species } = useFarmSpecies();
@@ -338,6 +340,8 @@ export function HomePage() {
               </ul>
             </>
           )}
+
+          <HomeVoiceWidget />
         </header>
 
         <PageCards pages={customPages} theme={theme} />
@@ -526,7 +530,7 @@ export function HomePage() {
             variant="secondary"
             size="sm"
             icon={<Mic size={15} />}
-            onClick={() => navigate("/chat")}
+            onClick={() => void (voice.isLive ? voice.stop() : voice.start({ resumeRecent: true }))}
             data-testid="home-voice-btn"
           >
             {t("home.ask.voice")}
@@ -555,6 +559,8 @@ export function HomePage() {
             </li>
           ))}
         </ul>
+
+        <HomeVoiceWidget />
       </header>
 
       <div className="orbit-home__grid">

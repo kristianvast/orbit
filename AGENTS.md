@@ -37,6 +37,7 @@ All workspaces use `"type": "module"`, `"license": "AGPL-3.0-only"`, and source-
   - Synced (SQLite + PG parity): `farms`, `animals`, `devices`, `device_bindings`, `connectors`, `observations`, `cameras`, `camera_layouts`. Every synced row carries `farm_id`, `created_at`, `updated_at`, `deleted_at` (soft delete only), `hlc`, and `origin_device`.
   - Local-only (SQLite): `outbox`, `snapshots` (undo log for DB + `isomorphic-git` workspace commits), `sync_state`.
 - **Feedback & shared builds:** Orion relays `feedback.send` (`POST /v1/feedback`, works signed out) and `shared.list` / `share_build` / `share_status` (`POST` & `GET /v1/submissions`, requires sign-in, refuses files matching secret patterns; reviewed via `/v1/admin/*` and `/admin` using `CORE_ADMIN_TOKEN`).
+- **Voice:** The app runs the ElevenLabs client SDK against Orion's own socket (`/voice/<token>/<voiceId>` from `voice.start`); Orion relays it to Core's `/v1/voice/agent` and no key reaches the app. Finished turns and tool calls go through `voice.turn` / `voice.tool` and are saved in the conversation like chat. The agent's prompt and its five client tools live in `core/api/src/orion-voice-agent.ts` and must stay in step with `packages/protocol/src/voice.ts` and the `app` tool in `apps/orbit/src/features/guide`.
 - **Protocol handshake:** First frame on `ws://127.0.0.1:<port>/ws` must be `hello { token, protocolVersion: 1 }`. Bad token closes with `4401` (terminal, do not reconnect).
 
 ## Hard invariants

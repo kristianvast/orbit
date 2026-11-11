@@ -31,21 +31,29 @@ export function classifyPlanError(
 export interface PlanErrorCardProps {
   readonly code: PlanErrorCode;
   readonly message?: string | null;
+  readonly surface?: "chat" | "voice";
   readonly onDismiss?: () => void;
 }
 
-export function PlanErrorCard({ code, onDismiss }: PlanErrorCardProps) {
+export function PlanErrorCard({ code, surface = "chat", onDismiss }: PlanErrorCardProps) {
   const t = useT();
   const navigate = useNavigate();
+  const isVoice = surface === "voice";
 
-  const title =
-    code === "plan_required"
+  const title = isVoice
+    ? code === "budget_exceeded"
+      ? t("voice.plan.budgetTitle")
+      : t("voice.plan.requiredTitle")
+    : code === "plan_required"
       ? t("chat.planError.planRequiredTitle")
       : code === "model_required"
         ? t("chat.planError.modelRequiredTitle")
         : t("chat.planError.budgetExceededTitle");
-  const defaultBody =
-    code === "plan_required"
+  const defaultBody = isVoice
+    ? code === "budget_exceeded"
+      ? t("voice.plan.budgetBody")
+      : t("voice.plan.requiredBody")
+    : code === "plan_required"
       ? t("chat.planError.planRequiredBody")
       : code === "model_required"
         ? t("chat.planError.modelRequiredBody")
@@ -77,18 +85,20 @@ export function PlanErrorCard({ code, onDismiss }: PlanErrorCardProps) {
       </div>
 
       <div className="orbit-plan-error__actions">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          icon={<KeyRound size={14} />}
-          onClick={() => void navigate("/settings#providers")}
-          data-testid="chat-plan-error-use-key"
-        >
-          {code === "model_required"
-            ? t("chat.planError.setUpModel")
-            : t("chat.planError.useOwnKey")}
-        </Button>
+        {!isVoice && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            icon={<KeyRound size={14} />}
+            onClick={() => void navigate("/settings#providers")}
+            data-testid="chat-plan-error-use-key"
+          >
+            {code === "model_required"
+              ? t("chat.planError.setUpModel")
+              : t("chat.planError.useOwnKey")}
+          </Button>
+        )}
         <Button
           type="button"
           variant="primary"

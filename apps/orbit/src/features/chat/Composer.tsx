@@ -1,4 +1,13 @@
-import { ArrowUp, CornerDownRight, ListPlus, Loader2, Mic, Square, Zap } from "lucide-react";
+import {
+  ArrowUp,
+  CornerDownRight,
+  ListPlus,
+  Loader2,
+  Mic,
+  PhoneOff,
+  Square,
+  Zap,
+} from "lucide-react";
 import { type KeyboardEvent, type RefObject, useLayoutEffect } from "react";
 import { useT } from "../../i18n";
 import type { QueuedMessage } from "./reducer";
@@ -45,13 +54,13 @@ export function Composer({
   });
 
   const t = useT();
-  const canSend = value.trim().length > 0 && (streaming || !sendingPrompt);
+  const canSend = value.trim().length > 0 && (voiceOpen || streaming || !sendingPrompt);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
     e.preventDefault();
     if (!canSend) return;
-    if (!streaming) onSend("prompt");
+    if (voiceOpen || !streaming) onSend("prompt");
     else onSend(e.metaKey || e.ctrlKey ? "steer" : "followUp");
   };
 
@@ -89,7 +98,11 @@ export function Composer({
           rows={1}
           className="orbit-composer__input"
           placeholder={
-            streaming ? t("chat.composer.placeholderStreaming") : t("chat.composer.placeholder")
+            voiceOpen
+              ? t("voice.composer.placeholder")
+              : streaming
+                ? t("chat.composer.placeholderStreaming")
+                : t("chat.composer.placeholder")
           }
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -112,16 +125,20 @@ export function Composer({
                 type="button"
                 className="orbit-composer__chip"
                 aria-pressed={voiceOpen}
-                aria-label={t("chat.voice.talkToOrion")}
-                title={t("chat.voice.talkToOrion")}
+                aria-label={t(voiceOpen ? "voice.action.end" : "voice.action.start")}
+                title={t(voiceOpen ? "voice.action.end" : "voice.action.start")}
                 onClick={onStartVoice}
                 data-testid="chat-voice-button"
               >
-                <Mic size={13} aria-hidden="true" />
-                {t("chat.voice.talkToOrion")}
+                {voiceOpen ? (
+                  <PhoneOff size={13} aria-hidden="true" />
+                ) : (
+                  <Mic size={13} aria-hidden="true" />
+                )}
+                {t(voiceOpen ? "voice.action.end" : "voice.action.start")}
               </button>
             )}
-            {streaming ? (
+            {streaming && !voiceOpen ? (
               <>
                 <button
                   type="button"

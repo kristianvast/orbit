@@ -7,6 +7,7 @@ import {
   Copy,
   GitBranch,
   Loader2,
+  Mic,
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -164,7 +165,22 @@ function AssistantMessage({ item }: { item: AssistantItem }) {
   const t = useT();
   if (!item.text && !item.thinking && !item.errorMessage) return null;
   return (
-    <article className="orbit-msg-assistant" data-testid={`message-assistant-${item.id}`}>
+    <article
+      className="orbit-msg-assistant"
+      data-testid={`message-assistant-${item.id}`}
+      data-voice={item.voice ? "true" : undefined}
+    >
+      {item.voice && (
+        <span
+          className="orbit-msg-voice-mark"
+          role="img"
+          title={t("voice.spokenTurn")}
+          aria-label={t("voice.spokenTurn")}
+          data-testid="message-voice-mark"
+        >
+          <Mic size={12} aria-hidden="true" />
+        </span>
+      )}
       {item.thinking && (
         <details className="orbit-thinking" data-testid={`message-thinking-${item.id}`}>
           <summary>
@@ -216,8 +232,25 @@ function TurnView({
   return (
     <section className="orbit-turn" data-testid={`turn-${turn.id}`}>
       {user?.text && (
-        <article className="orbit-msg-user" data-testid={`message-user-${user.id}`}>
-          <div className="orbit-msg-user__bubble">{user.text}</div>
+        <article
+          className="orbit-msg-user"
+          data-testid={`message-user-${user.id}`}
+          data-voice={user.voice ? "true" : undefined}
+        >
+          <div className="orbit-msg-user__bubble">
+            {user.voice && (
+              <span
+                className="orbit-msg-voice-mark"
+                role="img"
+                title={t("voice.spokenTurn")}
+                aria-label={t("voice.spokenTurn")}
+                data-testid="message-voice-mark"
+              >
+                <Mic size={12} aria-hidden="true" />
+              </span>
+            )}
+            {user.text}
+          </div>
           {canFork && (
             <div className="orbit-msg-actions orbit-msg-actions--end">
               <button

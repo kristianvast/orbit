@@ -184,7 +184,16 @@ function dequeueDelivered(state: ChatState, text: string): ChatState {
 function applyMessageEnd(prev: ChatState, ev: EventFrame<"message.end">): ChatState {
   if (prev.sessionId && ev.sessionId !== prev.sessionId) return prev;
 
-  const state = ev.item.kind === "user" ? dequeueDelivered(prev, ev.item.text) : prev;
+  const baseState = ev.item.kind === "user" ? dequeueDelivered(prev, ev.item.text) : prev;
+  const isVoiceTurn =
+    (ev.item.kind === "user" || ev.item.kind === "assistant") && ev.item.voice === true;
+  const state: ChatState = isVoiceTurn
+    ? {
+        ...baseState,
+        streaming: Boolean(baseState.session?.streaming),
+        runStartedAt: baseState.session?.streaming ? baseState.runStartedAt : null,
+      }
+    : baseState;
   const nextItems = [...state.items];
 
   if (ev.item.kind === "user") {

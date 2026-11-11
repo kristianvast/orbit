@@ -1,224 +1,177 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { canWriteTable } from "@orbit/schema/roles";
-import { openDatabase } from "../src/db/open";
-import { EncryptedFileStore } from "../src/secrets";
-import { AccountError } from "../src/services/account";
-import { FarmService } from "../src/services/farm";
-import { MockVoiceTransport } from "../src/voice/mock";
-import { VoiceSessions } from "../src/voice/session";
-import { removeDir, tempDir } from "./helpers";
+import { expect, test } from "bun:test";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
+import { connect, record, waitFor } from "./helpers";
+import { bounded, holdModel, VoicePeer, voiceFixture } from "./voice-helpers";
 
-let dir: string;
-let db: ReturnType<typeof openDatabase>;
-let farm: FarmService;
-let sessions: VoiceSessions;
-const owner = {};
-let mock: MockVoiceTransport;
-let events: Array<{ type: string } & Record<string, unknown>>;
-let done: ReturnType<typeof Promise.withResolvers<void>>;
-let ready: ReturnType<typeof Promise.withResolvers<void>>;
+const Call = Type.Object({
+  tool_name: Type.Literal("db_query"),
+  tool_call_id: Type.String(),
+  parameters: Type.Unknown(),
+});
 
-beforeEach(() => {
-  dir = tempDir();
-  db = openDatabase(dir, { seed: true });
-  farm = new FarmService(db.repo, new EncryptedFileStore(dir), dir);
-  mock = new MockVoiceTransport();
-  events = [];
-  done = Promise.withResolvers<void>();
-  ready = Promise.withResolvers<void>();
-  sessions = new VoiceSessions({
-    farm,
-    account: {
-      status: () => ({ state: "signed_out", coreUrl: null, user: null, farm: null }),
-      cloudConnection: () => {
-        throw new AccountError("unauthorized", "Sign in first.");
-      },
-    },
-    billing: {
-      status: async () => {
-        throw new AccountError("unauthorized", "Sign in first.");
-      },
-    },
-    credentials: { read: async () => undefined },
-    mockModel: true,
-    transport: () => mock,
-    emit: (type, body) => {
-      events.push({ type, ...body });
-      if (type === "voice.tool" && "state" in body && body.state === "done") done.resolve();
-      if (type === "voice.state" && "state" in body && body.state === "listening") ready.resolve();
-      if (type === "voice.state" && "error" in body && typeof body.error === "string")
-        done.reject(new Error(body.error));
+test("a real mock voice socket greets and answers a herd question using the actual animal count", async () => {
+  const f = await voiceFixture();
+  const peer = new VoicePeer(`ws://127.0.0.1:${f.app.port}${f.path}`);
+  await peer.opened;
+  const greeting = peer.next("agent_response");
+  peer.send({ type: "conversation_initiation_client_data", dynamic_variables: f.variables });
+  expect(await peer.next("conversation_initiation_metadata")).toMatchObject({
+    conversation_initiation_metadata_event: { conversation_id: expect.stringMatching(/^mock-/) },
+  });
+  expect(await greeting).toMatchObject({
+    agent_response_event: { agent_response: "Hello, Orion here. How can I help?" },
+  });
+  const tool = peer.next("client_tool_call");
+  peer.send({ type: "user_message", text: "Who is in my herd?" });
+  const call = (await tool).client_tool_call;
+  if (!Value.Check(Call, call)) throw new Error("Expected herd query");
+  const answer = await f.client.request("voice.tool", {
+    voiceId: f.voiceId,
+    toolCallId: call.tool_call_id,
+    name: call.tool_name,
+    args: call.parameters,
+  });
+  const response = peer.next("agent_response");
+  peer.send({
+    type: "client_tool_result",
+    tool_call_id: call.tool_call_id,
+    result: answer.result,
+    is_error: answer.isError,
+  });
+  const herd = await f.client.request("db.query", { query: "animals.list", params: {} });
+  if (!Value.Check(Type.Object({ total: Type.Number() }), herd))
+    throw new Error("Missing herd count");
+  expect(await response).toMatchObject({
+    agent_response_event: {
+      agent_response: `There are ${herd.total} animals in your herd. I checked the records on this computer.`,
     },
   });
 });
-afterEach(() => {
-  sessions.dispose();
-  db.close();
-  removeDir(dir);
-});
 
-test("a spoken herd question runs the farm query and sends Gemini a toolResponse", async () => {
-  await farm.mutate({
-    mutation: "animals.upsert",
-    params: { animal: { species: "cattle", name: "Voice cow" } },
-  });
-  const { voiceId } = await sessions.start("conversation", owner);
-  await ready.promise;
-  sessions.text(voiceId, owner, "Who is in my herd?");
-  await done.promise;
-  expect(mock.sent).toContainEqual({
-    toolResponse: {
-      functionResponses: [
-        expect.objectContaining({
-          name: "db_query",
-          response: {
-            result: {
-              total: expect.any(Number),
-              rows: expect.arrayContaining([expect.objectContaining({ name: "Voice cow" })]),
-            },
-          },
-        }),
-      ],
-    },
-  });
-  expect(events).toContainEqual(
-    expect.objectContaining({
-      type: "voice.tool",
+test.each([
+  ['{"species":"cattle"}', false],
+  ["{invalid", true],
+  ["[]", true],
+  ["", false],
+  [undefined, false],
+])(
+  "database tool parses params %p and reports invalid input in plain words",
+  async (params, isError) => {
+    const f = await voiceFixture();
+    const answer = await f.client.request("voice.tool", {
+      voiceId: f.voiceId,
+      toolCallId: "params",
       name: "db_query",
-      state: "done",
-      isError: false,
-    }),
-  );
+      args: { query: "animals.list", params },
+    });
+    expect(answer.isError).toBe(isError);
+    if (isError) expect(answer.result).toStartWith("Not done: ");
+    else expect(JSON.parse(answer.result)).toMatchObject({ total: params ? 24 : 28 });
+  },
+);
+
+test("another protocol socket cannot report turns or tools for a call", async () => {
+  const f = await voiceFixture();
+  const other = await connect(f.app);
+  try {
+    await expect(
+      other.request("voice.turn", {
+        voiceId: f.voiceId,
+        role: "user",
+        text: "Injected",
+      }),
+    ).rejects.toMatchObject({ code: "not_found", message: "Voice session is closed." });
+    await expect(
+      other.request("voice.tool", {
+        voiceId: f.voiceId,
+        toolCallId: "injected",
+        name: "db_query",
+        args: { query: "animals.list" },
+      }),
+    ).rejects.toMatchObject({ code: "not_found" });
+  } finally {
+    other.close();
+  }
 });
 
-test("worker voice writes cannot change cameras", async () => {
-  farm.guard = (mutation) => {
-    if (mutation === "cameras.upsert" && !canWriteTable("worker", "cameras")) {
-      throw new AccountError("forbidden", "Workers cannot change cameras.");
-    }
-  };
-  await sessions.start("conversation", owner);
-  await ready.promise;
-  mock.deliver({
-    toolCall: {
-      functionCalls: [
-        {
-          id: "camera-write",
-          name: "db_mutate",
-          args: {
-            mutation: "cameras.upsert",
-            params: { camera: { name: "Forbidden camera", status: "offline" } },
-          },
-        },
-      ],
-    },
-  });
-  await done.promise;
-  expect(mock.sent).toContainEqual({
-    toolResponse: {
-      functionResponses: [
-        {
-          id: "camera-write",
-          name: "db_mutate",
-          response: { error: { code: "forbidden", message: "Workers cannot change cameras." } },
-        },
-      ],
-    },
-  });
+test("closing the SDK socket still accepts final reports until stop", async () => {
+  const f = await voiceFixture();
+  const peer = new VoicePeer(`ws://127.0.0.1:${f.app.port}${f.path}`);
+  await peer.opened;
+  peer.socket.close();
+  await bounded(peer.closed);
   expect(
-    db.repo
-      .query("cameras.list", undefined)
-      .rows.find((camera) => camera.name === "Forbidden camera"),
-  ).toBeUndefined();
-});
-
-test("voice observation writes create an undo snapshot through the shared mutation layer", async () => {
-  await sessions.start("conversation", owner);
-  await ready.promise;
-  mock.deliver({
-    toolCall: {
-      functionCalls: [
-        {
-          id: "observation",
-          name: "db_mutate",
-          args: {
-            mutation: "observations.add",
-            // Newer than any seeded observation, so observations.recent (newest 100) lists it.
-            params: { kind: "weight", ts: "2999-01-01T00:00:00Z", valueNum: 515 },
-          },
-        },
-      ],
-    },
-  });
-  await done.promise;
-  const snapshot = db.repo
-    .listSnapshots("conversation")
-    .find((s) => s.toolCallId === "observation");
-  expect(snapshot?.id).toBeString();
-  if (!snapshot) throw new Error("voice write did not create a snapshot");
-  const rowId = db.repo.getSnapshot(snapshot.id).changes[0]?.rowId;
+    await f.client.request("voice.turn", { voiceId: f.voiceId, role: "user", text: "Last turn" }),
+  ).toEqual({ accepted: true });
   expect(
-    db.repo.query("observations.recent", {}).rows.find((row) => row.id === rowId)?.valueNum,
-  ).toBe(515);
-  db.repo.undoDbSnapshot(snapshot.id);
-  expect(
-    db.repo.query("observations.recent", {}).rows.find((row) => row.id === rowId),
-  ).toBeUndefined();
+    (
+      await f.client.request("voice.tool", {
+        voiceId: f.voiceId,
+        toolCallId: "last",
+        name: "db_query",
+        args: { query: "animals.list" },
+      })
+    ).isError,
+  ).toBe(false);
+  await f.client.request("voice.stop", { voiceId: f.voiceId });
+  await expect(
+    f.client.request("voice.turn", { voiceId: f.voiceId, role: "user", text: "Too late" }),
+  ).rejects.toMatchObject({ code: "not_found" });
 });
 
-test("a different connection cannot inject audio into an existing voice session", async () => {
-  const { voiceId } = await sessions.start("conversation", owner);
-  await ready.promise;
-  expect(() => sessions.audio(voiceId, {}, "AAAA")).toThrow("Voice session is closed.");
+test("orion_task answers Started while streaming and later ends its tool and sends a voice note", async () => {
+  const f = await voiceFixture();
+  const gate = holdModel(f.app.hub.runtime);
+  const events = record(f.client);
+  const settled = waitFor(f.client, "agent.settled");
+  const ended = waitFor(f.client, "tool.end", (event) => event.toolCallId === "task");
+  const note = waitFor(f.client, "voice.note");
+  const answer = await f.client.request("voice.tool", {
+    voiceId: f.voiceId,
+    toolCallId: "task",
+    name: "orion_task",
+    args: { request: "Help me plan today" },
+  });
+  await gate.entered;
+  expect(answer).toEqual({ result: "Started. I will tell you when it is ready.", isError: false });
+  expect(f.app.hub.isStreaming(f.sessionId)).toBe(true);
+  expect(events.filter((event) => event.type === "tool.end")).toEqual([]);
+  const busy = await f.client.request("voice.tool", {
+    voiceId: f.voiceId,
+    toolCallId: "busy",
+    name: "orion_task",
+    args: { request: "Another job" },
+  });
+  expect(busy).toEqual({
+    result: "Not done: Orion is already working on something in this conversation.",
+    isError: true,
+  });
+  gate.release();
+  await settled;
+  expect(await ended).toMatchObject({ isError: false });
+  expect((await note).text).toStartWith("Done: ");
 });
 
-test("voice binding tools refuse a second wearable on the same animal", async () => {
-  const animal = await farm.mutate({
-    mutation: "animals.upsert",
-    params: { animal: { species: "cattle", name: "One wearable" } },
+test("a stopped orion_task is saved as stopped and the voice agent is told", async () => {
+  const f = await voiceFixture();
+  const gate = holdModel(f.app.hub.runtime);
+  const ended = waitFor(f.client, "tool.end", (event) => event.toolCallId === "task");
+  const note = waitFor(f.client, "voice.note");
+  await f.client.request("voice.tool", {
+    voiceId: f.voiceId,
+    toolCallId: "task",
+    name: "orion_task",
+    args: { request: "Help me plan today" },
   });
-  const collar = await farm.mutate({
-    mutation: "devices.upsert",
-    params: { device: { kind: "collar" } },
-  });
-  const bolus = await farm.mutate({
-    mutation: "devices.upsert",
-    params: { device: { kind: "bolus" } },
-  });
-  const animalId = animal.ids[0];
-  const collarId = collar.ids[0];
-  const bolusId = bolus.ids[0];
-  if (!animalId || !collarId || !bolusId) throw new Error("fixture records were not created");
-  await farm.mutate({
-    mutation: "bindings.set",
-    params: { animalId, deviceId: collarId },
-  });
-  await sessions.start("conversation", owner);
-  await ready.promise;
-  mock.deliver({
-    toolCall: {
-      functionCalls: [
-        {
-          id: "second-wearable",
-          name: "db_mutate",
-          args: { mutation: "bindings.set", params: { animalId, deviceId: bolusId } },
-        },
-      ],
-    },
-  });
-  await done.promise;
-  expect(mock.sent).toContainEqual({
-    toolResponse: {
-      functionResponses: [
-        {
-          id: "second-wearable",
-          name: "db_mutate",
-          response: { error: { code: "rule_violation", message: expect.any(String) } },
-        },
-      ],
-    },
-  });
-  expect(db.repo.query("bindings.list", { animalId }).rows.map((row) => row.deviceId)).toEqual([
-    collarId,
+  await gate.entered;
+  const stopping = f.app.hub.abort(f.sessionId);
+  gate.release();
+  expect(await stopping).toBe(true);
+  expect(await ended).toMatchObject({ result: "It was stopped.", isError: false });
+  expect((await note).text).toBe("It was stopped.");
+  const { items } = await f.client.request("sessions.open", { sessionId: f.sessionId });
+  expect(items.filter((item) => item.kind === "tool")).toEqual([
+    expect.objectContaining({ toolCallId: "task", status: "aborted" }),
   ]);
 });

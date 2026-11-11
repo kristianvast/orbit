@@ -81,7 +81,7 @@ The transport is one JSON object per WebSocket text frame. There are three frame
 - Event (server to client, no id): `{ type, ...body }`. Every chat event carries `sessionId`.
 
 Requests: `hello`, `sessions.list|create|open|fork|rename|delete`,
-`chat.prompt|steer|followUp|abort`, `modules.list|enable|disable`, `pages.list`, `localUi.status|launched|booted|disable`, `settings.get|update`, `auth.providers|login|respond|cancel|logout`, `account.*`, `members.*`, `invites.*`, `billing.plans|status|checkout|portal`, `feedback.send`, `shared.list`, `voice.start|stop|audio|text`, `db.query`,
+`chat.prompt|steer|followUp|abort`, `modules.list|enable|disable`, `pages.list`, `localUi.status|launched|booted|disable`, `settings.get|update`, `auth.providers|login|respond|cancel|logout`, `account.*`, `members.*`, `invites.*`, `billing.plans|status|checkout|portal`, `feedback.send`, `shared.list`, `voice.start|stop|turn|tool`, `db.query`,
 `db.mutate`, `snapshots.list|undo`.
 
 - `sessions.open` returns the transcript as UI-ready `TranscriptItem`s:
@@ -385,19 +385,44 @@ terminated when Orion stops.
 
 ## Voice agent
 
-Orion owns each `voice.start` session and connects to Core's `/v1/voice/live` WebSocket
-with the stored account session and `x-orbit-farm`, after checking paid-plan voice allowance.
-A Gemini API key in Orion's provider credential store enables direct Gemini Live access
-without a cloud plan; keys never cross the app protocol. `--mock-model` uses a deterministic
-Gemini-protocol transport that still executes the real farm queries and mutations.
+The app runs the official ElevenLabs client SDK in WebSocket mode. `voice.start` checks
+the conversation and the account's plan and voice allowance, then returns a local
+`/voice/<token>/<voiceId>` path and the `farm_name` and `conversation_recap` dynamic variables.
+Orion relays JSON text frames verbatim to Core's `/v1/voice/agent`, using the stored account
+session and `x-orbit-farm`; Core connects to ElevenLabs and meters usage. No key reaches the app.
+Frames sent before Core connects are delivered in order. A budget close (4402) also emits
+`error` with `budget_exceeded`. Each call accepts one SDK socket and belongs to one protocol socket.
 
-The app sends base64 PCM16 mono at 16 kHz via `voice.audio`, captured with an AudioWorklet,
-and plays the streamed 24 kHz PCM replies. Orion speaks Gemini's BidiGenerateContent JSON
-protocol, forwards live transcripts and tool events, and answers function calls with
-`toolResponse`. `db_query` and `db_mutate` use the same named farm operations as the app;
-mutations enforce the user's farm role, the one-wearable rule, and undo snapshots.
-Disconnecting, signing out, stopping voice or shutting down Orion closes the upstream
-session. Billing requests are relayed to Core; Core owns subscription state and metering.
+The SDK reports finished user and assistant turns through `voice.turn`. Orion appends real Pi
+messages with a persistent `voice: true` marker, so the text agent reads spoken conversation.
+During a chat run those writes wait until settlement, before `agent.settled`; afterward Orion
+rebuilds the agent from the updated file. Finished voice tools are custom history entries,
+rendered in the transcript but excluded from model context.
+
+Four client tools run through `voice.tool`: `db_query`, `db_mutate`, `browser`, and `orion_task`.
+Database operations share farm role checks, the one-wearable rule and undo snapshots; `params`
+may be an object or JSON object text. Browser actions use the text agent's browser session and
+emit JPEG `browser.view` pictures with an optional highlight box. The app itself owns the fifth
+tool, `app`, which operates its screen. `orion_task` starts the normal chat agent and answers
+immediately; completion follows as `tool.end` and `voice.note`. Other tools exceeding twelve
+seconds also answer immediately and deliver their result later. The app forwards notes as
+contextual user updates without saving another turn.
+
+`--mock-model` uses a deterministic ElevenLabs protocol peer with a greeting, client-tool
+calls and text responses, without audio. Herd answers use the real database result. Stopping,
+signing out, the owner protocol socket disconnecting or Orion shutting down ends the call.
+Closing only the SDK socket closes its upstream, while final turn and tool reports remain
+accepted until the call ends.
+
+In the app, `features/voice` owns the call. `VoiceProvider` (mounted in `AppProviders`) starts
+the SDK against the local socket and serves the SDK's audio worklets from
+`public/vendor/elevenlabs`, because the desktop content security policy allows neither blob nor
+CDN scripts. Without a microphone it falls back to a text-only call. The call is shown in three
+places: the Home widget, the pinned stage in chat, and a floating dock on every other screen.
+While a call is live in the open conversation, the chat composer sends into the call instead of
+starting a chat run. `features/guide` runs the `app` tool on the app's own screen (a numbered
+listing of what is visible, highlight, pointer, click and navigation; buttons that destroy or
+sign out are highlight-only) and renders the `browser.view` pictures.
 
 ## Building the desktop app
 

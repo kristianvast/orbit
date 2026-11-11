@@ -5,7 +5,7 @@ Orbit v0.1.0 ships the local-first desktop app and cloud foundation:
 - **Minimal-first desktop app (`@orbit/app`):** Starts with Home, Ask Orion, and Settings; built-in Herd, Devices, and Cameras modules turn on when needed. Built and signed for Windows, macOS, and Linux with background auto-updates.
 - **Orion sidecar (`@orion/agent`):** Local SQLite single writer (`@orbit/schema` with ICAR ADE v1.5.1 mapping), undo snapshots for database rows and workspace files (via bundled `isomorphic-git`), custom pages and Home cards, local UI builds (`local_ui_build`), persistent farm/user memory, and OS-native `computer` use.
 - **Skills and connectors (`skills/`, `@orbit/connectors`):** On-demand skill catalog (`delaval-delpro` and `farm-views`), generic CSV import, and workspace connector scaffolding.
-- **Core cloud, sync, billing, and feedback (`@orbit/sync`, `@core/api`):** Accounts, farm roles and invites, ElectricSQL + HLC outbox sync, metered LLM and Gemini Live voice gateway, Stripe subscriptions and hardware checkout, in-app feedback (`POST /v1/feedback`), and reviewed farm-shared builds (`POST /v1/submissions`).
+- **Core cloud, sync, billing, and feedback (`@orbit/sync`, `@core/api`):** Accounts, farm roles and invites, ElectricSQL + HLC outbox sync, metered LLM and voice gateways (the ElevenLabs agent route the app uses, and the Gemini Live route kept for released clients), Stripe subscriptions and hardware checkout, in-app feedback (`POST /v1/feedback`), and reviewed farm-shared builds (`POST /v1/submissions`).
 
 Here is what we are building next.
 

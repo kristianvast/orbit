@@ -272,6 +272,10 @@
   background-color: var(--bg-surface);
 }
 
+.orbit-thread-pane[data-voice="on"] {
+  grid-template-rows: auto auto minmax(13rem, 1fr) auto;
+}
+
 .orbit-thread-pane__header {
   display: flex;
   align-items: center;
@@ -465,6 +469,9 @@
 }
 
 .orbit-msg-user__bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-xl);
   background-color: var(--bg-elevated);
@@ -632,7 +639,7 @@
   flex-shrink: 0;
 }
 
-/* ------------------------------------------------------------------ plan error card & voice panel */
+/* ------------------------------------------------------------------ plan error card */
 
 .orbit-plan-error {
   display: flex;
@@ -681,149 +688,13 @@
   gap: var(--space-2);
 }
 
-.orbit-voice-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  max-inline-size: 48rem;
-  margin: 0 auto var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  background-color: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-}
-
-.orbit-voice-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.orbit-voice-panel__status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.orbit-voice-panel__indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 2rem;
-  block-size: 2rem;
-  border-radius: var(--radius-full);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  color: var(--accent-primary);
-}
-
-.orbit-voice-panel__indicator[data-state="listening"],
-.orbit-voice-panel__indicator[data-state="speaking"] {
-  background-color: var(--accent-primary-subtle);
-  border-color: var(--accent-primary-border);
-}
-
-.orbit-voice-panel__title {
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.orbit-voice-panel__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.orbit-voice-panel__notice {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  background-color: var(--status-warn-bg);
-  border: 1px solid var(--status-warn-border);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-}
-
-.orbit-voice-panel__notice p {
-  margin: var(--space-1) 0 0;
-  color: var(--text-secondary);
-}
-
-.orbit-voice-panel__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  max-block-size: 16rem;
-  overflow-y: auto;
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-}
-
-.orbit-voice-panel__empty {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-.orbit-voice-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: var(--text-sm);
-}
-
-.orbit-voice-entry__speaker {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.orbit-voice-entry[data-role="assistant"] .orbit-voice-entry__speaker {
-  color: var(--accent-primary);
-}
-
-.orbit-voice-entry__text {
-  color: var(--text-primary);
-  line-height: var(--leading-snug);
-}
-
-.orbit-voice-panel__tools {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-block-start: var(--space-1);
-}
-
-.orbit-voice-panel__form {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.orbit-voice-panel__input {
-  flex: 1;
-  min-block-size: var(--control-height-sm);
-}
-
 @media (max-width: 900px), (pointer: coarse) {
   .orbit-plan-error__actions .orbit-btn,
-  .orbit-voice-panel__actions .orbit-btn,
-  .orbit-voice-panel__form .orbit-btn,
-  .orbit-voice-panel__input,
   .orbit-composer__actions [data-testid="chat-voice-button"] {
     min-block-size: var(--control-height-md);
   }
 
-  .orbit-plan-error__header .orbit-thread__icon,
-  .orbit-voice-panel__actions .orbit-thread__icon {
+  .orbit-plan-error__header .orbit-thread__icon {
     min-inline-size: var(--control-height-md);
     min-block-size: var(--control-height-md);
   }
@@ -1292,6 +1163,10 @@
 
   .orbit-thread-pane__toggle {
     display: inline-flex;
+  }
+
+  .orbit-thread-pane[data-voice="on"] {
+    grid-template-rows: auto auto minmax(9.5rem, 1fr) auto;
   }
 
   .orbit-thread-pane__header,

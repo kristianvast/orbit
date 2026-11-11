@@ -356,6 +356,60 @@ function speciesLabel(species: string, t: TranslateFn): string {
   }
 }
 
+function summarizeDbQuery(query: string, t: TranslateFn): string {
+  switch (query) {
+    case "farm.summary":
+      return t("chat.args.db.farmSummary");
+    case "animals.list":
+      return t("chat.args.db.animalsList");
+    case "animals.get":
+      return t("chat.args.db.animalsGet");
+    case "devices.list":
+      return t("chat.args.db.devicesList");
+    case "bindings.list":
+      return t("chat.args.db.bindingsList");
+    case "connectors.list":
+      return t("chat.args.db.connectorsList");
+    case "observations.recent":
+      return t("chat.args.db.observationsRecent");
+    case "cameras.list":
+      return t("chat.args.db.camerasList");
+    case "cameras.relay":
+      return t("chat.args.db.camerasRelay");
+    case "cameraLayout.get":
+      return t("chat.args.db.cameraLayoutGet");
+    default:
+      return "";
+  }
+}
+
+function summarizeDbMutate(mutation: string, t: TranslateFn): string {
+  switch (mutation) {
+    case "observations.add":
+      return t("chat.args.db.observationsAdd");
+    case "animals.upsert":
+      return t("chat.args.db.animalsUpsert");
+    case "devices.upsert":
+      return t("chat.args.db.devicesUpsert");
+    case "bindings.set":
+      return t("chat.args.db.bindingsSet");
+    case "bindings.clear":
+      return t("chat.args.db.bindingsClear");
+    case "connectors.upsert":
+      return t("chat.args.db.connectorsUpsert");
+    case "connectors.syncNow":
+      return t("chat.args.db.connectorsSyncNow");
+    case "cameras.upsert":
+      return t("chat.args.db.camerasUpsert");
+    case "cameraLayout.save":
+      return t("chat.args.db.cameraLayoutSave");
+    case "farm.update":
+      return t("chat.args.db.farmUpdate");
+    default:
+      return "";
+  }
+}
+
 export function summarizeToolArgs(name: string, args: unknown, t: TranslateFn): string {
   if (!args || typeof args !== "object") return "";
   const rec = args as Record<string, unknown>;
@@ -453,11 +507,11 @@ export function summarizeToolArgs(name: string, args: unknown, t: TranslateFn): 
     );
     return parts.join(" / ");
   }
-  if (name === "db_query" && typeof rec.query === "string") {
-    return rec.query;
+  if (name === "db_query") {
+    return typeof rec.query === "string" ? summarizeDbQuery(rec.query, t) : "";
   }
-  if (name === "db_mutate" && typeof rec.mutation === "string") {
-    return rec.mutation;
+  if (name === "db_mutate") {
+    return typeof rec.mutation === "string" ? summarizeDbMutate(rec.mutation, t) : "";
   }
   const entries = Object.entries(rec).filter(([, v]) => v !== undefined && v !== null && v !== "");
   if (entries.length === 0) return "";
@@ -601,7 +655,10 @@ export function ToolCard({ item, repeatCount = 1, defaultExpanded = false }: Too
                   style={{
                     fontSize: "var(--text-xs)",
                     color: "var(--text-secondary)",
-                    fontFamily: "var(--font-mono)",
+                    fontFamily:
+                      item.name === "db_query" || item.name === "db_mutate"
+                        ? "var(--font-sans)"
+                        : "var(--font-mono)",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",

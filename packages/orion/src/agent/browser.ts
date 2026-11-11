@@ -2,11 +2,15 @@
 // It uses the browser engine already on the computer (WebKit on macOS, Edge or Chrome elsewhere)
 // through Bun.WebView, so nothing is downloaded or installed. It is headless: the farmer does
 // not see the window, which is why Orion reports each page back as text.
+// allow: SIZE_OK -- This serialized WebView state machine keeps navigation, page refs and voice pictures on one queue.
 import { release } from "node:os";
 import { join } from "node:path";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { EventBody } from "@orbit/protocol";
 import { type Static, Type } from "typebox";
+import { Value } from "typebox/value";
+import { assertNever } from "../services/camera-proxy";
 import { UNTRUSTED_NOTICE } from "./web";
 
 const TEXT_CHARS = 6000;
@@ -145,7 +149,7 @@ function inField(selector: string, what: "select" | "submit"): string {
   return `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; ${act} })()`;
 }
 
-const BrowserParams = Type.Object({
+export const BrowserParams = Type.Object({
   action: Type.Enum(
     ["open", "read", "click", "type", "press", "scroll", "back", "screenshot", "close"],
     {
@@ -167,6 +171,27 @@ const BrowserParams = Type.Object({
   ),
 });
 type BrowserAction = Static<typeof BrowserParams>;
+const VoiceBrowserParams = Type.Union([
+  BrowserParams,
+  Type.Object({
+    action: Type.Literal("highlight"),
+    ref: Type.Integer({ minimum: 1 }),
+    note: Type.Optional(Type.String()),
+  }),
+]);
+const PicturePage = Type.Object({
+  url: Type.String(),
+  title: Type.String(),
+  width: Type.Integer(),
+  height: Type.Integer(),
+});
+const HighlightBox = Type.Object({
+  x: Type.Number(),
+  y: Type.Number(),
+  width: Type.Number(),
+  height: Type.Number(),
+});
+type BrowserView = Omit<EventBody<"browser.view">, "sessionId">;
 
 export class BrowserSession {
   private view: Bun.WebView | null = null;
@@ -177,6 +202,79 @@ export class BrowserSession {
   /** One action at a time: the page allows a single click, key or script in flight. */
   run(action: BrowserAction): Promise<AgentToolResult<unknown>> {
     const next = this.queue.then(() => this.act(action));
+    this.queue = next.catch(() => undefined);
+    return next;
+  }
+
+  runVoice(raw: unknown): Promise<{ result: string; view: BrowserView }> {
+    if (!Value.Check(VoiceBrowserParams, raw))
+      return Promise.reject(new BrowserError("Invalid browser action."));
+    const next = this.queue.then(async () => {
+      let highlight: BrowserView["highlight"] = null;
+      let listing: AgentToolResult<unknown>;
+      switch (raw.action) {
+        case "highlight": {
+          const view = this.page();
+          const selector = `[data-orion-ref="${raw.ref}"]`;
+          await this.within(
+            view.scrollTo(selector, { timeout: ACTION_TIMEOUT_MS }),
+            "find that item",
+          );
+          const box: unknown = await this.within(
+            view.evaluate(`(() => {
+          const el = document.querySelector(${JSON.stringify(selector)});
+          if (!el) return null;
+          el.scrollIntoView({block:"center"});
+          const r = el.getBoundingClientRect();
+          return {x:r.x,y:r.y,width:r.width,height:r.height};
+        })()`),
+            "highlight that item",
+          );
+          if (!Value.Check(HighlightBox, box))
+            throw new BrowserError("That item is no longer on the page.");
+          highlight = { ...box, ...(raw.note ? { note: raw.note } : {}) };
+          listing = await this.snapshot(view, false);
+          break;
+        }
+        case "screenshot":
+          listing = await this.snapshot(this.page(), false);
+          break;
+        case "open":
+        case "read":
+        case "click":
+        case "type":
+        case "press":
+        case "scroll":
+        case "back":
+        case "close":
+          listing = await this.act(raw);
+          break;
+        default:
+          return assertNever(raw);
+      }
+      const result = listing.content
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n");
+      if (raw.action === "close")
+        return {
+          result,
+          view: { url: "", title: "", image: null, width: 0, height: 0, highlight: null },
+        };
+      const page = this.page();
+      const metadata: unknown = await this.within(
+        page.evaluate(
+          "({url:location.href,title:document.title,width:innerWidth,height:innerHeight})",
+        ),
+        "read the picture dimensions",
+      );
+      if (!Value.Check(PicturePage, metadata))
+        throw new BrowserError("Could not read the browser picture.");
+      const image = await this.within(
+        page.screenshot({ format: "jpeg", quality: 60, encoding: "base64" }),
+        "take a picture",
+      );
+      return { result, view: { ...metadata, image, highlight } };
+    });
     this.queue = next.catch(() => undefined);
     return next;
   }
@@ -332,7 +430,7 @@ export class BrowserSession {
   }
 }
 
-class BrowserError extends Error {}
+export class BrowserError extends Error {}
 
 export function createBrowserTool(dataDir: string): {
   tool: ToolDefinition;

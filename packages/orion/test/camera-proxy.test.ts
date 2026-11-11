@@ -61,6 +61,7 @@ test("camera proxy preserves upstream HTTP responses and MSE text and binary fra
             cameraWebSocket.open(ws, ws.data);
             break;
           case "protocol":
+          case "voice":
             break;
           default:
             assertNever(ws.data);
@@ -72,6 +73,7 @@ test("camera proxy preserves upstream HTTP responses and MSE text and binary fra
             cameraWebSocket.message(ws, ws.data, raw);
             break;
           case "protocol":
+          case "voice":
             break;
           default:
             assertNever(ws.data);
@@ -84,6 +86,7 @@ test("camera proxy preserves upstream HTTP responses and MSE text and binary fra
             cameraWebSocket.close(ws.data);
             break;
           case "protocol":
+          case "voice":
             break;
           default:
             assertNever(ws.data);

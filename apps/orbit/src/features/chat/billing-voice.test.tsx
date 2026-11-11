@@ -18,7 +18,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "../../app/providers";
 import { AccountCard } from "../settings";
 import { BillingSection } from "../settings/BillingSection";
-import ChatPage, { base64ToPcm16Float32, pcm16ToBase64, resampleTo16kHzPcm16 } from "./index";
+import type { VoiceSdkStartInput, VoiceStartSessionFn } from "../voice";
+import ChatPage from "./index";
 
 const baseSession: SessionSummary = {
   id: "sess-voice-1",
@@ -121,6 +122,7 @@ function createBillingVoiceClient(
     plans?: BillingPlans;
     plansFailure?: boolean;
     promptErrorCode?: "plan_required" | "budget_exceeded" | "not_ready";
+    voiceErrorCode?: "plan_required" | "budget_exceeded";
   } = {},
 ) {
   const listeners = new Map<string, Set<(ev: ServerEvent) => void>>();
@@ -170,40 +172,28 @@ function createBillingVoiceClient(
           }
           return { accepted: true } as RequestResult<T>;
         case "voice.start": {
-          const p = _params as RequestParams<"voice.start">;
-          queueMicrotask(() => {
-            for (const key of ["voice.state", "*"]) {
-              for (const fn of listeners.get(key) ?? []) {
-                fn({
-                  type: "voice.state",
-                  sessionId: p.sessionId,
-                  voiceId: "voice-1",
-                  state: "listening",
-                });
-              }
-            }
-          });
-          return { voiceId: "voice-1" } as RequestResult<T>;
+          if (options.voiceErrorCode) {
+            throw new OrionRequestError(
+              options.voiceErrorCode,
+              options.voiceErrorCode === "budget_exceeded"
+                ? "Voice allowance is used up for this billing period."
+                : "Sign in with a paid plan to talk to Orion.",
+            );
+          }
+          return {
+            voiceId: "voice-1",
+            path: "/voice/dev/voice-1",
+            variables: { farm_name: "North Meadow Farm", conversation_recap: "" },
+          } as RequestResult<T>;
         }
-        case "voice.stop": {
-          const p = _params as RequestParams<"voice.stop">;
-          queueMicrotask(() => {
-            for (const key of ["voice.state", "*"]) {
-              for (const fn of listeners.get(key) ?? []) {
-                fn({
-                  type: "voice.state",
-                  sessionId: baseSession.id,
-                  voiceId: p.voiceId,
-                  state: "stopped",
-                });
-              }
-            }
-          });
+        case "voice.stop":
+        case "voice.turn":
           return { accepted: true } as RequestResult<T>;
-        }
-        case "voice.audio":
-        case "voice.text":
-          return { accepted: true } as RequestResult<T>;
+        case "voice.tool":
+          return {
+            result: JSON.stringify({ rows: [], total: 2 }),
+            isError: false,
+          } as RequestResult<T>;
         case "modules.list":
           return {
             modules: MODULE_IDS.map((id) => ({
@@ -491,130 +481,161 @@ describe("Chat with no AI model set up", () => {
   });
 });
 
-describe("VoicePanel transcript, tool card, and audio helpers", () => {
-  it("opens voice panel on a draft conversation without re-triggering voice.stop when sessionId is created", async () => {
+describe("Voice stage, activity rows, and plan errors in Chat", () => {
+  function makeStubVoiceStarter() {
+    let sdkInput: VoiceSdkStartInput | null = null;
+    const endSession = vi.fn(async () => undefined);
+    const sendUserMessage = vi.fn();
+    const startSession: VoiceStartSessionFn = vi.fn(async (input) => {
+      sdkInput = input;
+      input.onStatusChange("connected");
+      return {
+        session: {
+          type: "voice" as const,
+          endSession,
+          sendUserMessage,
+          setMicMuted: vi.fn(),
+          getInputVolume: () => 0,
+          getOutputVolume: () => 0,
+        },
+        micUnavailable: false,
+      };
+    });
+    return {
+      startSession,
+      endSession,
+      getSdkInput: () => {
+        if (!sdkInput) throw new Error("SDK session not started");
+        return sdkInput;
+      },
+    };
+  }
+
+  it("opens voice stage on a draft conversation without re-triggering voice.stop when sessionId is created", async () => {
     const { client, requestMock } = createBillingVoiceClient();
+    const stub = makeStubVoiceStarter();
 
     render(
       <MemoryRouter initialEntries={["/chat"]}>
-        <AppProviders initialClient={client}>
+        <AppProviders initialClient={client} voiceStartSession={stub.startSession}>
           <ChatPage />
         </AppProviders>
       </MemoryRouter>,
     );
 
     fireEvent.click(await screen.findByTestId("chat-voice-button"));
-    await waitFor(() =>
-      expect(screen.getByTestId("voice-state-badge")).toHaveTextContent("Listening"),
-    );
+    const stage = await screen.findByTestId("voice-stage");
+    await waitFor(() => expect(stage).toHaveAttribute("data-voice-state", "listening"));
+    expect(stage.closest(".orbit-thread-pane")).toHaveAttribute("data-voice", "on");
     expect(requestMock).toHaveBeenCalledWith("voice.start", { sessionId: "sess-voice-1" });
     expect(requestMock).not.toHaveBeenCalledWith("voice.stop", expect.anything());
   });
 
-  it("opens voice panel, accumulates transcript chunks and tool card from mocked events, and stops cleanly", async () => {
+  it("pins voice stage outside chat-transcript, shows only the live caption line, and clears finished turns from the stage", async () => {
     const { client, requestMock, emit } = createBillingVoiceClient();
+    const stub = makeStubVoiceStarter();
 
     render(
       <MemoryRouter initialEntries={["/chat?s=sess-voice-1"]}>
-        <AppProviders initialClient={client}>
+        <AppProviders initialClient={client} voiceStartSession={stub.startSession}>
           <ChatPage />
         </AppProviders>
       </MemoryRouter>,
     );
 
     fireEvent.click(await screen.findByTestId("chat-voice-button"));
+    const stage = await screen.findByTestId("voice-stage");
+    const transcript = screen.getByTestId("chat-transcript");
+    expect(transcript.contains(stage)).toBe(false);
     await waitFor(() =>
       expect(requestMock).toHaveBeenCalledWith("voice.start", { sessionId: "sess-voice-1" }),
     );
-    expect(screen.getByTestId("voice-panel")).toBeInTheDocument();
+    expect(stage).toHaveAttribute("data-voice-state", "listening");
 
     act(() => {
+      stub.getSdkInput().onTentativeUserTranscript("How many cows are in the calving pen?");
       emit({
-        type: "voice.state",
+        type: "tool.start",
         sessionId: "sess-voice-1",
-        voiceId: "voice-1",
-        state: "listening",
-      });
-      emit({
-        type: "voice.transcript",
-        sessionId: "sess-voice-1",
-        voiceId: "voice-1",
-        role: "user",
-        text: "How many cows ",
-        final: false,
-      });
-      emit({
-        type: "voice.transcript",
-        sessionId: "sess-voice-1",
-        voiceId: "voice-1",
-        role: "user",
-        text: "are in the calving pen?",
-        final: true,
-      });
-      emit({
-        type: "voice.tool",
-        sessionId: "sess-voice-1",
-        voiceId: "voice-1",
         toolCallId: "vcall-1",
         name: "db_query",
-        state: "running",
+        label: "db_query",
         args: { query: "animals.list", params: { groupName: "Calving" } },
       });
     });
 
-    expect(screen.getByTestId("voice-state-badge")).toHaveTextContent("Listening");
-    expect(screen.getByTestId("voice-transcript-user")).toHaveTextContent(
+    expect(stage).toHaveAttribute("data-voice-state", "working");
+    expect(screen.getByTestId("activity-row")).toHaveAttribute("data-status", "running");
+    expect(screen.getByTestId("voice-stage-live-caption")).toHaveTextContent(
       "How many cows are in the calving pen?",
     );
-    expect(screen.getByTestId("tool-card-vcall-1")).toHaveAttribute("data-tool-status", "running");
 
     act(() => {
+      stub.getSdkInput().onMessage({
+        role: "user",
+        message: "How many cows are in the calving pen?",
+      });
       emit({
-        type: "voice.tool",
+        type: "tool.end",
         sessionId: "sess-voice-1",
-        voiceId: "voice-1",
         toolCallId: "vcall-1",
-        name: "db_query",
-        state: "done",
-        result: JSON.stringify({ result: { rows: [], total: 2 } }),
+        result: JSON.stringify({ rows: [], total: 2 }),
+        details: null,
         isError: false,
+        durationMs: 12,
       });
-      emit({
-        type: "voice.transcript",
-        sessionId: "sess-voice-1",
-        voiceId: "voice-1",
-        role: "assistant",
+      stub.getSdkInput().onAgentChatResponsePart({
+        type: "delta",
         text: "Two cows are ",
-        final: false,
-      });
-      emit({
-        type: "voice.transcript",
-        sessionId: "sess-voice-1",
-        voiceId: "voice-1",
-        role: "assistant",
-        text: "in the calving pen right now.",
-        final: true,
+        event_id: 7,
       });
     });
 
-    expect(screen.getByTestId("tool-card-vcall-1")).toHaveAttribute("data-tool-status", "done");
-    expect(screen.getByTestId("voice-transcript-assistant")).toHaveTextContent(
-      "Two cows are in the calving pen right now.",
-    );
+    expect(screen.getByTestId("voice-stage-live-caption")).toHaveTextContent("Two cows are");
 
-    fireEvent.click(screen.getByTestId("voice-stop-button"));
+    act(() => {
+      stub.getSdkInput().onMessage({
+        role: "agent",
+        message: "Two cows are in the calving pen right now.",
+        event_id: 7,
+      });
+    });
+
+    expect(screen.getByTestId("activity-row")).toHaveAttribute("data-status", "done");
+    expect(screen.getByTestId("activity-row")).toHaveTextContent("2");
+    expect(screen.queryByTestId("voice-stage-live-caption")).not.toBeInTheDocument();
+    expect(stage).not.toHaveTextContent("Two cows are in the calving pen right now.");
+
+    fireEvent.click(screen.getByTestId("voice-end"));
     await waitFor(() =>
       expect(requestMock).toHaveBeenCalledWith("voice.stop", { voiceId: "voice-1" }),
     );
+    expect(stub.endSession).toHaveBeenCalledTimes(1);
   });
 
-  it("resamples Float32 audio to 16 kHz PCM16 and round-trips base64", () => {
-    const input48k = new Float32Array(480);
-    for (let i = 0; i < input48k.length; i++) input48k[i] = Math.sin((i / 480) * Math.PI * 2) * 0.5;
-    const pcm16 = resampleTo16kHzPcm16(input48k, 48_000);
-    expect(pcm16.length).toBe(160);
-    const decoded = base64ToPcm16Float32(pcm16ToBase64(pcm16));
-    expect(decoded.length).toBe(160);
-    expect(decoded[40]).toBeCloseTo(0.5, 2);
-  });
+  it.each(["plan_required", "budget_exceeded"] as const)(
+    "surfaces PlanErrorCard when voice.start fails with %s without prompting for a BYO key",
+    async (voiceErrorCode) => {
+      const { client } = createBillingVoiceClient({ voiceErrorCode });
+      const stub = makeStubVoiceStarter();
+
+      render(
+        <MemoryRouter initialEntries={["/chat"]}>
+          <AppProviders initialClient={client} voiceStartSession={stub.startSession}>
+            <Routes>
+              <Route path="/chat" element={<ChatPage />} />
+              <Route path="/settings" element={<LocationProbe />} />
+            </Routes>
+          </AppProviders>
+        </MemoryRouter>,
+      );
+
+      fireEvent.click(await screen.findByTestId("chat-voice-button"));
+      const card = await screen.findByTestId("chat-plan-error-card");
+      expect(card).toHaveAttribute("data-error-code", voiceErrorCode);
+      expect(screen.queryByTestId("chat-plan-error-use-key")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("chat-plan-error-see-plans"));
+      expect(await screen.findByTestId("route-probe")).toHaveTextContent("/settings#account");
+    },
+  );
 });

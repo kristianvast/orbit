@@ -17,6 +17,7 @@ import { useLocation, useSearchParams } from "react-router";
 import { Button, Dialog, useToast } from "../../design";
 import { type MessageKey, useT } from "../../i18n";
 import { useOrion } from "../../lib/orion";
+import { useVoice, VoiceStage } from "../voice";
 import { Composer, type SendMode } from "./Composer";
 import { forgetChat, lastChat, rememberChat } from "./last-chat";
 import { classifyPlanError, PlanErrorCard } from "./PlanErrorCard";
@@ -24,7 +25,6 @@ import { chatReducer, createInitialChatState } from "./reducer";
 import { ThreadSidebar } from "./Sidebar";
 import { Timeline } from "./Timeline";
 import { isListedSession } from "./turns";
-import { VoicePanel } from "./VoicePanel";
 
 export { Composer, type SendMode } from "./Composer";
 export { parseMarkdownBlocks, SafeMarkdown } from "./markdown";
@@ -66,12 +66,6 @@ export {
   type ToolKindCount,
   turnDurationMs,
 } from "./turns";
-export { VoicePanel, type VoicePanelProps, type VoiceState } from "./VoicePanel";
-export {
-  base64ToPcm16Float32,
-  pcm16ToBase64,
-  resampleTo16kHzPcm16,
-} from "./voice-audio";
 
 export interface StarterPrompt {
   id: string;
@@ -128,6 +122,7 @@ export default function ChatPage() {
   const { client, state: connState } = useOrion();
   const { pushToast } = useToast();
   const t = useT();
+  const voice = useVoice();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const statePrefill =
@@ -148,7 +143,6 @@ export default function ChatPage() {
   );
   const [sendingPrompt, setSendingPrompt] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [voiceOpen, setVoiceOpen] = useState(false);
   const [deletingSession, setDeletingSession] = useState<SessionSummary | null>(null);
   const [deletingBusy, setDeletingBusy] = useState(false);
 
@@ -292,6 +286,13 @@ export default function ChatPage() {
     };
   }, [client, connState, pushToast, t]);
 
+  const requestedSessionParam = searchParams.get(SESSION_PARAM);
+  useEffect(() => {
+    if (sessionsLoading || !client || connState !== "open" || !requestedSessionParam) return;
+    if (requestedSessionParam === sessionIdRef.current) return;
+    void openSessionRef.current(requestedSessionParam);
+  }, [client, connState, requestedSessionParam, sessionsLoading]);
+
   useEffect(() => {
     if (!client) return;
     return client.on("*", (event) => {
@@ -331,6 +332,13 @@ export default function ChatPage() {
   const send = async (mode: SendMode, override?: string) => {
     const text = (override ?? composerText).trim();
     if (!client || !text) return;
+    if (voice.isLive && chatState.sessionId !== null && voice.sessionId === chatState.sessionId) {
+      if (!voice.voiceId) return;
+      setComposerText("");
+      setAtBottom(true);
+      await voice.sendText(text);
+      return;
+    }
     if (mode === "prompt") {
       if (sendingPrompt) return;
       setSendingPrompt(true);
@@ -482,10 +490,29 @@ export default function ChatPage() {
     [sessions, chatState.sessionId],
   );
 
-  const showHero = chatState.items.length === 0 && !chatState.streaming && !voiceOpen;
+  const activeSessionId = chatState.sessionId;
+  const voiceActiveHere =
+    voice.isLive && activeSessionId !== null && voice.sessionId === activeSessionId;
+  const showHero = chatState.items.length === 0 && !chatState.streaming && !voiceActiveHere;
   const title = chatState.session?.title ?? t("chat.page.newChat");
   const modelLabel = shortModel(chatState.session?.model ?? defaultModel);
-  const activeSessionId = chatState.sessionId;
+
+  const handleToggleVoice = async () => {
+    if (voiceActiveHere) {
+      await voice.stop();
+      return;
+    }
+    try {
+      const resolvedId = await ensureSession();
+      await voice.start({ sessionId: resolvedId });
+    } catch (err) {
+      pushToast({
+        title: t("chat.toast.sendFailed"),
+        description: errorText(err),
+        tone: "danger",
+      });
+    }
+  };
 
   return (
     <div className="orbit-container orbit-chat-page" data-testid="chat-page">
@@ -511,7 +538,11 @@ export default function ChatPage() {
           />
         )}
 
-        <section className="orbit-thread-pane" aria-label={t("chat.page.paneLabel")}>
+        <section
+          className="orbit-thread-pane"
+          aria-label={t("chat.page.paneLabel")}
+          data-voice={voiceActiveHere ? "on" : "off"}
+        >
           <header className="orbit-thread-pane__header">
             <button
               type="button"
@@ -546,6 +577,8 @@ export default function ChatPage() {
               )}
             </div>
           </header>
+
+          {voiceActiveHere && <VoiceStage />}
 
           <div
             ref={scrollRef}
@@ -602,6 +635,16 @@ export default function ChatPage() {
                   />
                 );
               }
+              if (voice.planError) {
+                return (
+                  <PlanErrorCard
+                    code={voice.planError.code}
+                    message={voice.planError.message}
+                    surface="voice"
+                    onDismiss={voice.clearError}
+                  />
+                );
+              }
               if (!chatState.lastError) return null;
               return (
                 <div className="orbit-chat-error" role="alert" data-testid="chat-error-banner">
@@ -632,20 +675,13 @@ export default function ChatPage() {
                 {t("chat.page.jumpToLatest")}
               </button>
             )}
-            {voiceOpen && (
-              <VoicePanel
-                sessionId={activeSessionId}
-                ensureSession={ensureSession}
-                onClose={() => setVoiceOpen(false)}
-              />
-            )}
             <Composer
               value={composerText}
               onChange={setComposerText}
               onSend={(mode) => void send(mode)}
               onStop={() => void stopRun()}
-              onStartVoice={() => setVoiceOpen((v) => !v)}
-              voiceOpen={voiceOpen}
+              onStartVoice={() => void handleToggleVoice()}
+              voiceOpen={voiceActiveHere}
               streaming={chatState.streaming}
               sendingPrompt={sendingPrompt}
               queued={chatState.queued}

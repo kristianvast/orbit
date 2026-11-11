@@ -74,6 +74,8 @@ export const UserItem = Type.Object({
   id: Type.String(),
   ts: Type.String(),
   text: Type.String(),
+  /** True when the farmer said this in a voice call. */
+  voice: Type.Optional(Type.Boolean()),
 });
 export const AssistantItem = Type.Object({
   kind: Type.Literal("assistant"),
@@ -84,6 +86,8 @@ export const AssistantItem = Type.Object({
   model: Type.Optional(Type.String()),
   stopReason: Type.Optional(Type.String()),
   errorMessage: Type.Optional(Type.String()),
+  /** True when Orion said this in a voice call. */
+  voice: Type.Optional(Type.Boolean()),
 });
 export const ToolItem = Type.Object({
   kind: Type.Literal("tool"),

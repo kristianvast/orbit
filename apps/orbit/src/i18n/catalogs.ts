@@ -13,6 +13,7 @@ import { connection as enConnection } from "./locales/en/connection";
 import { design as enDesign } from "./locales/en/design";
 import { devices as enDevices } from "./locales/en/devices";
 import { feedback as enFeedback } from "./locales/en/feedback";
+import { guide as enGuide } from "./locales/en/guide";
 import { herd as enHerd } from "./locales/en/herd";
 import { home as enHome } from "./locales/en/home";
 import { localUi as enLocalUi } from "./locales/en/localUi";
@@ -20,6 +21,7 @@ import { pages as enPages } from "./locales/en/pages";
 import { providers as enProviders } from "./locales/en/providers";
 import { settings as enSettings } from "./locales/en/settings";
 import { shell as enShell } from "./locales/en/shell";
+import { voice as enVoice } from "./locales/en/voice";
 import { account as nbAccount } from "./locales/nb/account";
 import { cameras as nbCameras } from "./locales/nb/cameras";
 import { chat as nbChat } from "./locales/nb/chat";
@@ -27,6 +29,7 @@ import { connection as nbConnection } from "./locales/nb/connection";
 import { design as nbDesign } from "./locales/nb/design";
 import { devices as nbDevices } from "./locales/nb/devices";
 import { feedback as nbFeedback } from "./locales/nb/feedback";
+import { guide as nbGuide } from "./locales/nb/guide";
 import { herd as nbHerd } from "./locales/nb/herd";
 import { home as nbHome } from "./locales/nb/home";
 import { localUi as nbLocalUi } from "./locales/nb/localUi";
@@ -34,6 +37,7 @@ import { pages as nbPages } from "./locales/nb/pages";
 import { providers as nbProviders } from "./locales/nb/providers";
 import { settings as nbSettings } from "./locales/nb/settings";
 import { shell as nbShell } from "./locales/nb/shell";
+import { voice as nbVoice } from "./locales/nb/voice";
 
 const en = {
   account: enAccount,
@@ -43,6 +47,7 @@ const en = {
   design: enDesign,
   devices: enDevices,
   feedback: enFeedback,
+  guide: enGuide,
   herd: enHerd,
   home: enHome,
   localUi: enLocalUi,
@@ -50,6 +55,7 @@ const en = {
   providers: enProviders,
   settings: enSettings,
   shell: enShell,
+  voice: enVoice,
 };
 
 type En = typeof en;
@@ -66,6 +72,7 @@ const nb: Tree = {
   design: nbDesign,
   devices: nbDevices,
   feedback: nbFeedback,
+  guide: nbGuide,
   herd: nbHerd,
   home: nbHome,
   localUi: nbLocalUi,
@@ -73,6 +80,7 @@ const nb: Tree = {
   providers: nbProviders,
   settings: nbSettings,
   shell: nbShell,
+  voice: nbVoice,
 };
 
 const CATALOGS: Record<Locale, Tree> = { en, nb };

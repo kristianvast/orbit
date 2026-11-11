@@ -13,7 +13,9 @@ import {
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { Badge, BrandMark, Button } from "../design";
+import { GuideOverlay } from "../features/guide";
 import { CUSTOM_PAGE_ICON, useCustomPages } from "../features/pages";
+import { VoiceDock } from "../features/voice";
 import { type MessageKey, useT } from "../i18n";
 import { useLocalUiLifecycle, useLocalUiReady } from "../lib/local-ui";
 import { MODULE_IDS, type ModuleId, useModules } from "../lib/modules";
@@ -282,6 +284,8 @@ export function AppShell() {
         )}
         <Outlet />
       </main>
+      <VoiceDock />
+      <GuideOverlay />
     </div>
   );
 }

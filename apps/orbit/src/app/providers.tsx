@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { ToastProvider } from "../design";
+import { VoiceProvider, type VoiceStartSessionFn } from "../features/voice";
 import { I18nProvider, type Locale } from "../i18n";
 import { type OrionEndpoint, OrionProvider } from "../lib/orion";
 import { FarmSpeciesProvider } from "../lib/species";
@@ -86,6 +87,7 @@ export interface AppProvidersProps {
   /** Forces a UI language (tests, previews); otherwise stored choice or OS language. */
   initialLocale?: Locale;
   initialSpecies?: Species;
+  voiceStartSession?: VoiceStartSessionFn;
 }
 
 export function AppProviders({
@@ -95,13 +97,20 @@ export function AppProviders({
   defaultTheme = "light",
   initialLocale,
   initialSpecies,
+  voiceStartSession,
 }: AppProvidersProps) {
   return (
     <I18nProvider initialLocale={initialLocale}>
       <ThemeProvider defaultTheme={defaultTheme}>
         <ToastProvider>
           <OrionProvider initialClient={initialClient} initialEndpoint={initialEndpoint}>
-            <FarmSpeciesProvider initialSpecies={initialSpecies}>{children}</FarmSpeciesProvider>
+            <FarmSpeciesProvider initialSpecies={initialSpecies}>
+              <VoiceProvider
+                {...(voiceStartSession !== undefined ? { startSession: voiceStartSession } : {})}
+              >
+                {children}
+              </VoiceProvider>
+            </FarmSpeciesProvider>
           </OrionProvider>
         </ToastProvider>
       </ThemeProvider>

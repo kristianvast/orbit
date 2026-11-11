@@ -1,5 +1,6 @@
 // Owns every conversation: one Pi AgentSession per Orbit session, persisted as JSONL under
 // <data-dir>/sessions, with Pi events translated into @orbit/protocol events.
+// allow: SIZE_OK -- Pi lifecycle callbacks, settlement and deferred file writes share this conversation state machine.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Api, Model } from "@earendil-works/pi-ai";
@@ -13,8 +14,15 @@ import {
   SettingsManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import type { EventBody, EventType, SessionSummary, TranscriptItem } from "@orbit/protocol";
+import type {
+  EventBody,
+  EventType,
+  SessionSummary,
+  ToolItem,
+  TranscriptItem,
+} from "@orbit/protocol";
 import type { Repository } from "../db/repo";
+import { assertNever } from "../services/camera-proxy";
 import type { SettingsStore } from "../settings";
 import { billingError } from "./billing-error";
 import { FileCredentialStore } from "./credentials";
@@ -23,6 +31,7 @@ import { MOCK_MODEL, MOCK_PROVIDER, registerMockProvider } from "./mock-model";
 import { bundledShell, useBundledShell } from "./shell";
 import { cleanTitle, GATEWAY_TITLE_MODEL, pickTitleModel, titleRequest } from "./title";
 import { assistantItem, buildTranscript, contentText, toolStatus, userItem } from "./transcript";
+import { type TaskOutcome, voiceMessage } from "./voice-history";
 import type { Workspace } from "./workspace";
 
 export type Emit = <E extends EventType>(type: E, body: EventBody<E>) => void;
@@ -56,6 +65,8 @@ interface LiveSession {
   currentAssistantId: string | null;
   pendingEnds: Array<{ message: Record<string, unknown>; messageId: string }>;
   toolStarts: Map<string, number>;
+  pendingVoice: Array<() => void>;
+  settleListeners: Set<(outcome: TaskOutcome) => void>;
 }
 
 export interface HubOptions {
@@ -355,6 +366,8 @@ export class SessionHub {
       currentAssistantId: null,
       pendingEnds: [],
       toolStarts: new Map(),
+      pendingVoice: [],
+      settleListeners: new Set(),
     };
   }
 
@@ -390,6 +403,81 @@ export class SessionHub {
     live.sm.appendSessionInfo(title);
     this.touch(id, { title, titleSet: true });
     return this.summary(id);
+  }
+
+  recordVoiceTurn(id: string, role: "user" | "assistant", text: string): void {
+    const live = this.getLive(id);
+    if (!text.trim()) return;
+    const message = voiceMessage(role, text);
+    const item =
+      role === "user"
+        ? userItem(message.voiceItemId, { ...message }, new Date(message.timestamp).toISOString())
+        : assistantItem(
+            message.voiceItemId,
+            { ...message },
+            new Date(message.timestamp).toISOString(),
+          );
+    this.opts.emit("message.start", { sessionId: id, messageId: item.id, role });
+    this.opts.emit("message.end", { sessionId: id, messageId: item.id, item });
+    const append = () => live.sm.appendMessage(message);
+    if (live.streaming) live.pendingVoice.push(append);
+    else {
+      append();
+      this.dropAgent(live);
+    }
+    const entry = this.entry(id);
+    if (role === "user" && !entry.titleSet && entry.title === "New conversation") {
+      entry.title = text.trim().replace(/\s+/g, " ").slice(0, 60);
+    }
+    this.touch(id);
+  }
+
+  recordVoiceTool(id: string, item: ToolItem): void {
+    const live = this.getLive(id);
+    const append = () => {
+      live.sm.appendCustomEntry("orbit.voice.tool", item);
+    };
+    if (live.streaming) live.pendingVoice.push(append);
+    else append();
+    this.touch(id);
+  }
+
+  voiceRecap(id: string): string {
+    const lines = this.open(id).items.flatMap((item) => {
+      switch (item.kind) {
+        case "user":
+          return [`Farmer: ${item.text.slice(-3992)}`];
+        case "assistant":
+          return item.text ? [`Orion: ${item.text.slice(-3993)}`] : [];
+        case "tool":
+        case "system":
+          return [];
+        default:
+          return assertNever(item);
+      }
+    });
+    while (lines.join("\n").length > 4000) lines.shift();
+    return lines.join("\n");
+  }
+
+  async runTask(id: string, request: string): Promise<TaskOutcome> {
+    const live = this.getLive(id);
+    const result = Promise.withResolvers<TaskOutcome>();
+    live.settleListeners.add(result.resolve);
+    try {
+      await this.prompt(id, request);
+    } catch (error) {
+      live.settleListeners.delete(result.resolve);
+      throw error;
+    }
+    return result.promise;
+  }
+
+  private dropAgent(live: LiveSession): void {
+    live.unsubscribe?.();
+    live.agent?.dispose();
+    live.unsubscribe = null;
+    live.agent = null;
   }
 
   async delete(id: string): Promise<boolean> {
@@ -660,7 +748,7 @@ export class SessionHub {
       );
     }
     const last = [...(live.agent?.messages ?? [])].reverse().find((m) => m.role === "assistant") as
-      | { stopReason?: string; errorMessage?: string }
+      | { stopReason?: string; errorMessage?: string; content?: unknown }
       | undefined;
     const failed =
       errorMessage ??
@@ -682,7 +770,17 @@ export class SessionHub {
       process.stderr.write(`orion: workspace snapshot failed: ${String(error)}\n`);
     }
     live.streaming = false;
+    if (live.pendingVoice.length) {
+      for (const append of live.pendingVoice.splice(0)) append();
+      this.dropAgent(live);
+    }
     if (entry) this.touch(live.id);
+    const outcome: TaskOutcome = {
+      reason: aborted ? "aborted" : failed ? "error" : "completed",
+      text: failed ?? contentText(last?.content),
+    };
+    for (const listener of live.settleListeners) listener(outcome);
+    live.settleListeners.clear();
     this.opts.emit("agent.settled", {
       sessionId: live.id,
       reason: aborted ? "aborted" : failed ? "error" : "completed",
@@ -808,9 +906,16 @@ export class SessionHub {
 
   async dispose() {
     for (const live of this.live.values()) {
+      if (live.streaming) {
+        const settled = Promise.withResolvers<void>();
+        live.settleListeners.add(() => settled.resolve());
+        await this.abort(live.id);
+        await settled.promise;
+      }
       live.unsubscribe?.();
       live.agent?.dispose();
     }
+    await Promise.all(this.naming.values());
     this.live.clear();
   }
 

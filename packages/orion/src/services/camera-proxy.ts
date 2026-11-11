@@ -1,4 +1,5 @@
 import type { Server, ServerWebSocket } from "bun";
+import type { VoiceSocketData } from "../voice/session";
 import type { Go2rtcRelay } from "./relay";
 
 export type CameraSocketData = {
@@ -9,7 +10,10 @@ export type CameraSocketData = {
   pendingBytes: number;
 };
 
-export type SocketData = { readonly kind: "protocol"; authed: boolean } | CameraSocketData;
+export type SocketData =
+  | { readonly kind: "protocol"; authed: boolean }
+  | CameraSocketData
+  | VoiceSocketData;
 
 export function assertNever(value: never): never {
   throw new TypeError("unknown socket kind", { cause: value });
