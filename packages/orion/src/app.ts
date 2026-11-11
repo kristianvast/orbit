@@ -289,6 +289,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       provider: useMock ? MOCK_PROVIDER : s.provider,
       model: useMock ? MOCK_MODEL : s.model,
       thinkingLevel: s.thinkingLevel,
+      shareAnonymousData: s.shareAnonymousData,
       apiKeys,
       availableModels: hub.availableModels(),
     };
@@ -311,6 +312,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       ...(u.provider !== undefined ? { provider: u.provider } : {}),
       ...(u.model !== undefined ? { model: u.model } : {}),
       ...(u.thinkingLevel ? { thinkingLevel: u.thinkingLevel } : {}),
+      ...(u.shareAnonymousData !== undefined ? { shareAnonymousData: u.shareAnonymousData } : {}),
     });
     return settingsView();
   };
@@ -407,7 +409,6 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
           password: msg.password,
           name: msg.name,
           acceptTerms: msg.acceptTerms,
-          dataConsent: msg.dataConsent,
         });
       case "account.refresh":
         return account.refresh();

@@ -6,6 +6,8 @@ export interface StoredSettings {
   provider: string | null;
   model: string | null;
   thinkingLevel: ThinkingLevel;
+  /** Anonymised footage and outcomes may be shared to improve the models; on unless turned off. */
+  shareAnonymousData: boolean;
   /** Masked hints only ("…abcd"); keys live in Pi's credential store (<data-dir>/pi/auth.json). */
   keyHints: Record<string, string>;
 }
@@ -14,6 +16,7 @@ const DEFAULTS: StoredSettings = {
   provider: null,
   model: null,
   thinkingLevel: "off",
+  shareAnonymousData: true,
   keyHints: {},
 };
 

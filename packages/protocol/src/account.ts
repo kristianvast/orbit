@@ -72,7 +72,6 @@ export const AccountRequests = {
       ...Credentials,
       name: Type.Optional(Type.String({ maxLength: 200 })),
       acceptTerms: Type.Literal(true),
-      dataConsent: Type.Optional(Type.Boolean()),
     }),
     result: AccountStatus,
   },

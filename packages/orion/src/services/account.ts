@@ -172,7 +172,6 @@ export class AccountService {
     password: string;
     name?: string;
     acceptTerms: true;
-    dataConsent?: boolean;
   }): Promise<AccountStatus> {
     const body = { ...params, deviceName: this.opts.deviceName };
     return this.signIn(await this.call("POST", "/v1/auth/register", body, { anonymous: true }));

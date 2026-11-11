@@ -74,6 +74,7 @@ export default function SettingsPage() {
   const [savingModel, setSavingModel] = useState(false);
 
   const [undoingId, setUndoingId] = useState<string | null>(null);
+  const [savingSharing, setSavingSharing] = useState(false);
 
   const loadAll = useCallback(async (): Promise<Settings | null> => {
     if (!client) return null;
@@ -189,6 +190,22 @@ export default function SettingsPage() {
       });
     } finally {
       setSavingModel(false);
+    }
+  };
+
+  const handleShareDataChange = async (shareAnonymousData: boolean) => {
+    if (!client) return;
+    setSavingSharing(true);
+    try {
+      setSettings(await client.request("settings.update", { shareAnonymousData }));
+    } catch (err) {
+      pushToast({
+        title: t("settings.privacy.saveFailed"),
+        description: err instanceof Error ? err.message : String(err),
+        tone: "danger",
+      });
+    } finally {
+      setSavingSharing(false);
     }
   };
 
@@ -517,6 +534,32 @@ export default function SettingsPage() {
       <YourOrbitCard />
 
       <FeedbackCard />
+
+      <Card title={t("settings.privacy.title")} subtitle={t("settings.privacy.subtitle")}>
+        <label
+          style={{
+            display: "flex",
+            gap: "var(--space-2)",
+            alignItems: "flex-start",
+            fontSize: "var(--text-sm)",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={settings?.shareAnonymousData ?? true}
+            disabled={!settings || savingSharing}
+            onChange={(e) => void handleShareDataChange(e.target.checked)}
+            data-testid="settings-share-anonymous-data"
+          />
+          <span>
+            {t("settings.privacy.shareData")}
+            <br />
+            <span style={{ color: "var(--text-secondary)" }}>
+              {t("settings.privacy.shareDataHint")}
+            </span>
+          </span>
+        </label>
+      </Card>
 
       <div className="orbit-split-grid">
         <Card

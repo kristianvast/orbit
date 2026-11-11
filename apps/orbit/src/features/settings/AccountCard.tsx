@@ -101,7 +101,6 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
-  const [dataConsent, setDataConsent] = useState(false);
   const { pushToast } = useToast();
 
   const submit = (e: FormEvent) => {
@@ -115,7 +114,6 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
               email,
               password,
               acceptTerms: true,
-              dataConsent,
               ...(name.trim() ? { name: name.trim() } : {}),
             });
       setPassword("");
@@ -219,27 +217,16 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
               data-testid="account-password"
             />
             {mode === "register" && (
-              <>
-                <label style={check}>
-                  <input
-                    type="checkbox"
-                    required
-                    checked={acceptTerms}
-                    onChange={(e) => setAcceptTerms(e.target.checked)}
-                    data-testid="account-terms"
-                  />
-                  <span>{t("account.field.terms")}</span>
-                </label>
-                <label style={check}>
-                  <input
-                    type="checkbox"
-                    checked={dataConsent}
-                    onChange={(e) => setDataConsent(e.target.checked)}
-                    data-testid="account-data-consent"
-                  />
-                  <span style={muted}>{t("account.field.dataConsent")}</span>
-                </label>
-              </>
+              <label style={check}>
+                <input
+                  type="checkbox"
+                  required
+                  checked={acceptTerms}
+                  onChange={(e) => setAcceptTerms(e.target.checked)}
+                  data-testid="account-terms"
+                />
+                <span>{t("account.field.terms")}</span>
+              </label>
             )}
             <div style={row}>
               <Button

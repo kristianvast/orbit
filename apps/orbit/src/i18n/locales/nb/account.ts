@@ -17,8 +17,6 @@ export const account: Catalog<typeof en> = {
   "field.password": "Passord",
   "field.passwordHint": "Minst 10 tegn",
   "field.terms": "Jeg godtar Pecorvas vilkår for bruk og personvernerklæring",
-  "field.dataConsent":
-    "Del anonymiserte opptak og utfall for å forbedre modellene (du kan endre dette når som helst)",
   "forgot.link": "Glemt passordet?",
   "forgot.needEmail": "Skriv inn e-posten din over først",
   "forgot.sent": "Hvis det finnes en konto for adressen, har vi sendt en lenke for å nullstille",

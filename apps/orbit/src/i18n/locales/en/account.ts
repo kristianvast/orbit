@@ -15,8 +15,6 @@ export const account = {
   "field.password": "Password",
   "field.passwordHint": "At least 10 characters",
   "field.terms": "I accept the Pecorva terms of service and privacy policy",
-  "field.dataConsent":
-    "Share anonymised footage and outcomes to help improve the models (you can change this any time)",
   "forgot.link": "Forgot password?",
   "forgot.needEmail": "Enter your email above first",
   "forgot.sent": "If an account exists for that address, we emailed a reset link",
