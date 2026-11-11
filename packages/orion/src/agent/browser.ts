@@ -13,6 +13,8 @@ const TEXT_CHARS = 6000;
 const MAX_ITEMS = 150;
 const ACTION_TIMEOUT_MS = 8000;
 const SETTLE_TIMEOUT_MS = 10_000;
+const STEP_TIMEOUT_MS = 15_000;
+const LOAD_TIMEOUT_MS = 45_000;
 /** How long a click or key press gets to start loading another page before the page is read. */
 const NAVIGATION_START_MS = 1000;
 const KEYS = [
@@ -122,6 +124,27 @@ function canKeepProfile(): boolean {
   return major > 24 || (major === 24 && minor >= 2);
 }
 
+/**
+ * Orion always starts a browser of its own and never attaches to a window the farmer has open.
+ * ORION_BROWSER_BACKEND=chrome picks Chrome or Edge on macOS too, and ORION_BROWSER_ARGS adds
+ * launch flags for machines where the browser needs them (a container without a sandbox).
+ */
+function engine(): Bun.WebView.ConstructorOptions["backend"] {
+  if (process.platform === "darwin" && process.env.ORION_BROWSER_BACKEND !== "chrome")
+    return "webkit";
+  const argv = process.env.ORION_BROWSER_ARGS?.split(/\s+/).filter(Boolean) ?? [];
+  return { type: "chrome", url: false, ...(argv.length > 0 ? { argv } : {}) };
+}
+
+/** A script for the page that selects a field's text, or submits the form it belongs to. */
+function inField(selector: string, what: "select" | "submit"): string {
+  const act =
+    what === "select"
+      ? 'if (typeof el.select === "function") el.select(); return true;'
+      : "if (!el.form) return false; el.form.requestSubmit(); return true;";
+  return `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; ${act} })()`;
+}
+
 const BrowserParams = Type.Object({
   action: Type.Enum(
     ["open", "read", "click", "type", "press", "scroll", "back", "screenshot", "close"],
@@ -163,13 +186,37 @@ export class BrowserSession {
     this.view = null;
   }
 
+  /**
+   * Bounds one browser step. A step that never answers would otherwise keep its promise pending
+   * for good, which blocks later steps and keeps the whole Orion process from exiting; killing
+   * the browser rejects it and the next action starts a fresh one.
+   */
+  private async within<T>(step: Promise<T>, what: string, ms = STEP_TIMEOUT_MS): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        this.view = null;
+        Bun.WebView.closeAll();
+        reject(
+          new BrowserError(
+            `The browser did not answer while trying to ${what}, so it was restarted. Open the address again.`,
+          ),
+        );
+      }, ms);
+    });
+    try {
+      return await Promise.race([step, late]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   private open(): Bun.WebView {
     if (this.view) return this.view;
     this.view = new Bun.WebView({
       width: 1280,
       height: 900,
-      // Always a browser of Orion's own, never a window the farmer already has open.
-      backend: process.platform === "darwin" ? "webkit" : { type: "chrome", url: false },
+      backend: engine(),
       dataStore: canKeepProfile() ? { directory: this.profileDir } : "ephemeral",
     });
     return this.view;
@@ -198,17 +245,17 @@ export class BrowserSession {
 
   private async snapshot(view: Bun.WebView, mayNavigate = true): Promise<AgentToolResult<unknown>> {
     await this.settle(view, mayNavigate);
-    const page = await Promise.race([
-      view.evaluate(SNAPSHOT_SCRIPT) as Promise<PageSnapshot>,
-      Bun.sleep(SETTLE_TIMEOUT_MS).then(() => null),
-    ]);
-    if (!page) {
-      this.close();
-      throw new BrowserError(
-        "The page stopped responding, so the browser was restarted. Open the address again.",
-      );
-    }
+    const page = (await this.within(
+      view.evaluate(SNAPSHOT_SCRIPT),
+      "read the page",
+    )) as PageSnapshot;
     return text(describe(page), { url: page.url, title: page.title, items: page.items.length });
+  }
+
+  private async focus(view: Bun.WebView, selector: string): Promise<void> {
+    const options = { timeout: ACTION_TIMEOUT_MS };
+    await this.within(view.scrollTo(selector, options), "find that item on the page");
+    await this.within(view.click(selector, options), "click that item");
   }
 
   private async act(a: BrowserAction): Promise<AgentToolResult<unknown>> {
@@ -227,7 +274,7 @@ export class BrowserSession {
         throw new BrowserError("Only http and https addresses can be opened.");
       }
       const view = this.open();
-      await view.navigate(address.href);
+      await this.within(view.navigate(address.href), "open the page", LOAD_TIMEOUT_MS);
       return this.snapshot(view, false);
     }
     const view = this.page();
@@ -240,31 +287,39 @@ export class BrowserSession {
       case "read":
         return this.snapshot(view, false);
       case "click":
-        await view.scrollTo(target(a.ref), { timeout: ACTION_TIMEOUT_MS });
-        await view.click(target(a.ref), { timeout: ACTION_TIMEOUT_MS });
+        await this.focus(view, target(a.ref));
         return this.snapshot(view);
       case "type":
         if (a.text === undefined) throw new BrowserError("Action type needs text.");
-        await view.scrollTo(target(a.ref), { timeout: ACTION_TIMEOUT_MS });
-        await view.click(target(a.ref), { timeout: ACTION_TIMEOUT_MS });
-        await view.evaluate(
-          `(() => { const el = document.querySelector(${JSON.stringify(target(a.ref))}); if (el && typeof el.select === "function") el.select(); return true; })()`,
-        );
-        await view.type(a.text);
-        if (a.submit) await view.press("Enter");
+        await this.focus(view, target(a.ref));
+        await this.within(view.evaluate(inField(target(a.ref), "select")), "select the field");
+        await this.within(view.type(a.text), "type");
+        // Enter does not submit a form on every engine, so a field inside a form is submitted
+        // directly; a field outside one (a search box wired with script) gets the key.
+        if (a.submit) {
+          const sent = await this.within(
+            view.evaluate(inField(target(a.ref), "submit")),
+            "submit the form",
+          );
+          if (sent !== true) await this.within(view.press("Enter"), "press Enter");
+        }
         return this.snapshot(view, a.submit === true);
       case "press":
         if (!a.key) throw new BrowserError("Action press needs key.");
-        await view.press(a.key);
+        await this.within(view.press(a.key), "press the key");
         return this.snapshot(view);
       case "scroll":
-        await view.scroll(0, a.amount ?? 600);
+        await this.within(view.scroll(0, a.amount ?? 600), "scroll");
         return this.snapshot(view, false);
       case "back":
-        await view.goBack();
+        // The view's own goBack() never returns on the Chrome engine after a form navigation.
+        await this.within(view.evaluate("(history.back(), true)"), "go back");
         return this.snapshot(view);
       case "screenshot": {
-        const image = await view.screenshot({ format: "jpeg", quality: 70, encoding: "base64" });
+        const image = await this.within(
+          view.screenshot({ format: "jpeg", quality: 70, encoding: "base64" }),
+          "take a picture",
+        );
         return {
           content: [
             { type: "text", text: `Picture of ${view.url}` },
