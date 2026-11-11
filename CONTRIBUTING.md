@@ -6,22 +6,19 @@ Thanks for helping build Orbit. Whether you are adding a device connector, fixin
 
 - **Bun** 1.3+ (package manager, test runner, and runtime for Orion and Core)
 - **Node.js** 22.19+
-- **Git** (used by both developers and Orion's local workspace snapshot system)
+- **Git** (for cloning and contributing; Orion's own workspace snapshots use bundled `isomorphic-git` and do not need system Git installed on farm PCs)
 
-You do **not** need Rust, Cargo, or Docker installed on your machine to develop and test changes locally.
+Rust is only needed to build the native desktop app, and Docker is never needed for development or tests.
 
-## The compute rule (strict)
+## Native desktop builds
 
-Local development machines run **only light checks**:
+To build and run the real desktop app on your machine, install Rust (`rustup`, stable) and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS, then run:
 
-- Dependency installation ([`scripts/locked-install.sh`](scripts/locked-install.sh) or `bun install`)
-- Biome formatting and linting (`bun run lint`)
-- TypeScript typechecking (`bun run typecheck`)
-- Fast unit and integration tests (`bun run test`, using `bun test`, `vitest`, and in-process PGlite)
-- Vite web builds (`bun run --filter '@orbit/app' build`)
-- Playwright end-to-end tests against the web build and a short-lived local Orion dev server
+```bash
+scripts/build-desktop.sh
+```
 
-**Never run heavy builds locally.** Do not run `cargo`, `rustc`, `tauri dev`, `tauri build`, `bun build --compile`, `docker`, or any video/image rendering on your local machine. Rust compilation, native desktop installers (`.dmg`, `.msi`, `.deb`, `.AppImage`), compiled sidecar binaries, and Docker images are built exclusively in GitHub Actions CI. When editing Rust files under [`apps/orbit/src-tauri`](apps/orbit/src-tauri), read the types carefully and let CI compile them.
+It compiles the Orion sidecar for your platform, fetches the pinned go2rtc binary, and runs a debug `tauri build`. The first Rust build takes several minutes and a few GB of disk under `apps/orbit/src-tauri/target`. CI builds the same app on Windows, macOS and Linux on every push, and the release workflow builds the signed installers.
 
 ## Local development setup
 
@@ -61,6 +58,19 @@ bun run --filter '@orbit/app' dev
 - **Product copy:** Keep all UI copy, error messages, and documentation globally neutral (no single-country assumptions). Orbit supports cattle (dairy and beef) and horses.
 - **Deterministic tests:** Tests run via `bun test` (for backend/shared packages) and `vitest` (for `@orbit/app`). Subscribe to events or promises rather than using fixed sleeps.
 - **Secrets:** Never commit API keys, tokens, or camera passwords. Even in runtime code, secrets belong in the OS keychain, never in SQLite or Postgres tables.
+
+## Reviewing farm-shared builds into `skills/`
+
+Farmers can share a custom page, connector, or skill from Orbit (`share_build`), which uploads the text files to Core (`POST /v1/submissions`) after scanning for secrets. Submissions never reach other farms automatically.
+
+1. A maintainer reviews the submission in Core (`/admin` or `/v1/admin/submissions/:id`), checks that it contains no farm-specific data or credentials, and verifies how it works.
+2. After approving it, the maintainer places the skill under `skills/<name>/` (with a `SKILL.md` front matter containing `name` and `description`, plus `skill.json` and any `connector/` or `pages/` folders), regenerates [`skills/index.json`](skills/index.json) with:
+
+```bash
+bun run skills:index
+```
+
+3. Run `bun test ./skills` and `bun run skills:index --check`, then open a pull request to this repository.
 
 ## Submitting a pull request
 

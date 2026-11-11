@@ -24,12 +24,12 @@ license also available.
 |  |  - protocol server (@orbit/protocol)                      | |                 |
 |  |  - Pi SDK sessions, tools, undo snapshots                 |-+-----------------+
 |  |  - single writer of local SQLite (@orbit/schema)          |   @orbit/sync
-|  |  - @orbit/connectors (Lely, DeLaval, GEA, BouMatic,       |
-|  |    Allflex, smaXtec, CowManager, CSV, custom)             |---> LAN devices, robots,
-|  |  - farm workspace dir (AGENTS.md, skills, imports)        |     ONVIF/RTSP cameras,
+|  |  - @orbit/connectors (generic CSV + custom connectors)    |
+|  |  - farm workspace dir (AGENTS.md, pages, skills,          |---> LAN devices, robots,
+|  |    connectors, memory)                                    |     ONVIF/RTSP cameras,
 |  +-----------------------------+-----------------------------+     vendor cloud APIs
 |                                |                                                   
-|                         orbit.db (SQLite, bun:sqlite)                              
+|                       orbit.sqlite (SQLite, bun:sqlite)                            
 +---------------------------------------------------------------+
 ```
 
@@ -61,7 +61,12 @@ so workspace packages need no build step between them.
    the server replies with an `unauthorized` error and closes the socket with code 4401. The
    client does not reconnect after 4401. After any other close it reconnects with backoff and
    sends `hello` again.
-5. When the shell quits, it terminates the sidecar.
+5. When the shell quits, it terminates the sidecar. Orion runs with `--parent-watch` and exits when
+   its stdin pipe closes, so a force-killed shell never leaves an orphaned Orion holding the database.
+6. If Orion exits on its own, the shell restarts it with backoff (up to 5 tries). A restarted Orion has
+   a new port and token; while its client is reconnecting, the UI re-reads `orion_endpoint` and switches.
+   After the last try, `orion_endpoint` answers `stopped: <reason + last stderr lines>`, the UI shows
+   "Orion has stopped" with that reason, and its Restart button calls `orion_restart`.
 
 Browser dev mode: start Orion yourself (`orion --dev --seed`). It listens on
 `ws://127.0.0.1:7717/ws` with token `dev` (`DEV_SERVER_URL`, `DEV_TOKEN`). The UI runs under
@@ -76,7 +81,7 @@ The transport is one JSON object per WebSocket text frame. There are three frame
 - Event (server to client, no id): `{ type, ...body }`. Every chat event carries `sessionId`.
 
 Requests: `hello`, `sessions.list|create|open|fork|rename|delete`,
-`chat.prompt|steer|followUp|abort`, `pages.list`, `localUi.status|launched|booted|disable`, `settings.get|update`, `db.query`,
+`chat.prompt|steer|followUp|abort`, `modules.list|enable|disable`, `pages.list`, `localUi.status|launched|booted|disable`, `settings.get|update`, `auth.providers|login|respond|cancel|logout`, `account.*`, `members.*`, `invites.*`, `billing.plans|status|checkout|portal`, `feedback.send`, `shared.list`, `voice.start|stop|audio|text`, `db.query`,
 `db.mutate`, `snapshots.list|undo`.
 
 - `sessions.open` returns the transcript as UI-ready `TranscriptItem`s:
@@ -88,7 +93,7 @@ Requests: `hello`, `sessions.list|create|open|fork|rename|delete`,
 
 Events: `session.updated`, `message.start`, `message.delta {text|thinking}`,
 `message.end {item}` (authoritative; replaces any accumulated deltas), `tool.start`,
-`tool.update {partial}`, `tool.end`, `agent.settled`,
+`tool.update {partial}`, `tool.end`, `agent.settled`, `modules.updated`,
 `db.changed {table, ids}`, `sync.status`, `error`.
 
 Validation uses typebox `Value.Check`, which avoids `eval` and so works under a strict webview CSP.
@@ -97,12 +102,14 @@ events, and by default also validates results.
 
 ## Data ownership
 
-- Orion is the **single writer** of the local SQLite database (`orbit.db`). The UI never opens
+- Orion is the **single writer** of the local SQLite database (`orbit.sqlite`). The UI never opens
   the database; it reads with `db.query` and writes with `db.mutate`, both over the protocol.
   Connectors and the sync engine run inside the Orion process.
 - Every write made by the agent or the UI records a row in `snapshots` (the before and after state
-  of each changed row), so `snapshots.undo` can revert it. After each write commits, Orion emits
-  `db.changed`.
+  of each changed row), and every agent run that modifies files in `<data-dir>/workspace` commits a
+  workspace snapshot using `isomorphic-git` (bundled pure-JS Git, so Git does not need to be
+  installed on the farm PC) and records it in `snapshots` (`table: "workspace"`). `snapshots.undo`
+  can revert either kind of snapshot. After each database write commits, Orion emits `db.changed`.
 - Secrets never go into the database. Camera passwords, connector API keys and LLM keys are kept in
   the OS keychain; tables store only a reference key (`cameras.credential_ref`,
   `connectors.config.credentialRef`).
@@ -168,7 +175,7 @@ mapped resource against them.
 
 ## Accounts, farm roles and invites (Core)
 
-- **Billing:** `core/api/src/plans.ts` defines EUR Free, Pen and Barn plans and hardware.
+- **Billing:** `core/api/src/plans.ts` defines the `free`, `orion`, `cam2`, `cam4` and `cam6` plans and hardware.
   Session members read `/v1/billing/status`; owners and managers create Stripe checkout and
   portal sessions. Stripe-signed `/v1/billing/webhook` events update farm subscriptions in the
   same transaction as their idempotency claim. Stripe customer IDs stay farm-scoped.
@@ -195,6 +202,33 @@ mapped resource against them.
   role; unknown to the cloud: claim it as owner; someone else's: stay local with `linkError` until an
   invite is accepted), runs `@orbit/sync` with the session, and applies the same role matrix to
   `db.mutate` and the agent's farm tools (`forbidden`).
+- **First-run setup (`useNeedsSetup`):** when `account.status` is `"signed_out"` and
+  `settings.get` reports no `availableModels`, Home renders the first-run setup card (`home-setup`)
+  offering to create a free Orbit account (30-day free trial of Orion, no card needed), sign in, or
+  configure a bring-your-own AI provider key in Settings.
+
+## Feedback and sharing
+
+- **Feedback (`feedback.send` / `feedback_send`):** farmers can send feedback (`issue`, `idea`, or
+  `other`) from Settings > Feedback or by asking Orion (which shows the exact text and waits for a
+  yes before calling `feedback_send`). Orion attaches `appVersion` and `os` and posts to Core's
+  `POST /v1/feedback` (`session: "optional"`, so signed-out installs can send feedback too, with an
+  optional `contactEmail`). Core rate-limits `POST /v1/feedback` to 20 messages per 24 hours per
+  user or hashed client IP (`feedback_rate_events`) and stores rows in `feedback`.
+- **Sharing farm builds (`share_build` / `share_status` / `shared.list`):** when a farm builds a
+  custom page (`pages/<name>`), connector (`connectors/<name>`), or skill (`skills/<name>`), Orion
+  can submit it for review with `share_build` after the farmer says yes. `collectBuild()` walks the
+  folder, skips hidden/generated directories and binary files, enforces limits (at most 60 text
+  files and 512 KB total), and scans every line against `SECRET_PATTERNS`, refusing with
+  `rule_violation` if any line looks like a password, secret, or API key. Passing builds are posted
+  to `POST /v1/submissions` (requires a signed-in user session) and stored in `submissions` with
+  status `pending`. Farmers and Orion check review status (`pending`, `approved`, `rejected`, plus
+  any `reviewNote`) via `GET /v1/submissions` (`shared.list` in the UI and `share_status` for
+  Orion). Approved builds reach other farms only after the Orbit team reviews them and adds them to
+  the `skills/` catalog in git.
+- **Admin review:** Core serves admin endpoints under `/v1/admin/feedback` and
+  `/v1/admin/submissions` (list, inspect files, and `PATCH` status/review notes) plus a browser
+  review page at `/admin`, all gated by `CORE_ADMIN_TOKEN` (returned as 404 when unset).
 
 ## Agent design (`@orion/agent`)
 
@@ -224,6 +258,15 @@ mapped resource against them.
 - **No approval gate:** Orion trusts the model, like the Pi agent itself. Tool calls run
   directly; the system prompt and `resources/AGENTS.md` tell Orion to explain risky or hard-to-undo
   steps and wait for the farmer's yes in the chat. Undo snapshots are the safety net.
+### Minimal-first modules
+
+Orbit starts minimal. **Home**, **Chat** (Ask Orion), **Settings**, and **Your pages** (custom pages) are always present and are not modules. Built-in domain screens are optional modules that start disabled on a fresh install:
+
+- **Protocol contract (`@orbit/protocol`):** `MODULE_IDS = ["herd", "devices", "cameras"] as const` (`ModuleId` is the union of those three literals). Each `OrbitModule` has `{ id: ModuleId, enabled: boolean, enabledAt: string | null, enabledBy: "orion" | "user" | "auto" | null }` (`enabledAt` is an ISO timestamp). `ModulesState` is `{ modules: OrbitModule[] }`, always containing all three IDs in `MODULE_IDS` order.
+- **Wire messages:** `modules.list` (empty params) returns `ModulesState`; `modules.enable` and `modules.disable` take `{ id: ModuleId }` and return `ModulesState`. Orion emits `modules.updated` with body `ModulesState` on every change from any cause.
+- **Agent tool:** `orbit_modules` with `{ action: "list" | "enable" | "disable", id?: ModuleId }`.
+- **Persistence and auto-enable:** Orion persists state in `<data-dir>/modules.json`. A module is enabled by Orion (`enabledBy: "orion"`), by the farmer in Settings (`"user"`), or automatically (`"auto"`) when live data for that area first appears (any non-deleted row in `animals` enables `herd`, `devices` enables `devices`, and `cameras` enables `cameras`). Existing farms that already have data auto-enable their matching modules on first load.
+
 - **Custom pages (runtime UI):** Orion adds screens by writing `pages/<id>/index.html` (plus an
   optional `page.json` with `title`/`description`) in the workspace. `pages.list` returns them and the
   app shows them under "Your pages" in a sandboxed iframe (`allow-scripts allow-forms`). Orion serves
@@ -267,8 +310,9 @@ mapped resource against them.
   model was chosen: provider `orbit-gateway`, model `orbit-default`, sent to
   `<core>/v1/llm/v1` with the session and `x-orbit-farm`; Core maps `orbit-default` to
   `LLM_DEFAULT_MODEL` and calls the provider with its own key. Signing out clears that default.
-  Active or trialing Pen includes 3 million tokens and 60 voice minutes per UTC month; Barn
-  includes 15 million and 300 minutes. Free cloud calls return 402 `plan_required`, while BYO
+  Plans are `free`, `orion`, `cam2`, `cam4` and `cam6`; Core supplies their names, prices
+  and allowances through `billing.plans`. A free Orion month keeps the `free` plan with
+  `trialEndsAt` and cloud allowances. Calls without an allowance return 402 `plan_required`, while BYO
   providers remain available. `farm_budgets` overrides the token allowance; legacy farm API
   tokens retain their previous default/override budget behavior.
   `LLM_UPSTREAM_AUTH=google` uses cached ADC OAuth tokens and the global Vertex OpenAI endpoint,
@@ -316,8 +360,9 @@ mutations enforce the user's farm role, the one-wearable rule, and undo snapshot
 Disconnecting, signing out, stopping voice or shutting down Orion closes the upstream
 session. Billing requests are relayed to Core; Core owns subscription state and metering.
 
-## Compute rule
+## Building the desktop app
 
-The developer Mac runs only light checks: install, Biome, tsc, bun test, vitest, Vite and
-Playwright. Rust, Tauri bundles and `bun build --compile` sidecars are built in GitHub Actions
-only.
+`scripts/build-desktop.sh` builds the native app for the current machine (Orion sidecar via
+`bun build --compile`, pinned go2rtc, debug `tauri build`); it needs Rust and the Tauri
+prerequisites. CI builds and smoke-tests the same app on Windows, macOS and Linux, and the release
+workflow produces the signed installers.
