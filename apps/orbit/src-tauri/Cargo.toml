@@ -1,6 +1,6 @@
 [package]
 name = "orbit-desktop"
-version = "0.1.4"
+version = "0.1.5"
 description = "Orbit desktop app for livestock and farm intelligence with the Orion AI agent"
 authors = ["AgroIntel <kristian@agrointel.no>"]
 license = "AGPL-3.0-only"
