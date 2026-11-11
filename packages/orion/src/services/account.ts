@@ -18,6 +18,7 @@ import type {
 import { canWriteTable, type SyncedTable } from "@orbit/schema";
 import { createSyncEngine, type SyncEngine, type SyncStatus } from "@orbit/sync";
 import { GATEWAY_PROVIDER } from "../agent/hub";
+import { GATEWAY_TITLE_MODEL } from "../agent/title";
 import type { Repository } from "../db/repo";
 import type { SecretStore } from "../secrets";
 import type { SettingsStore } from "../settings";
@@ -403,6 +404,15 @@ export class AccountService {
           reasoning: false,
           // Without "image" Pi strips screenshots, and the computer tool would act blind.
           input: ["text", "image"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 128_000,
+          maxTokens: 8192,
+        },
+        {
+          id: GATEWAY_TITLE_MODEL,
+          name: "Orbit (small)",
+          reasoning: false,
+          input: ["text"],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           contextWindow: 128_000,
           maxTokens: 8192,

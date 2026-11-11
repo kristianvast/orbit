@@ -65,6 +65,7 @@ export function createApp(options: AppOptions) {
     authHeader: options.llm?.authHeader ?? "authorization",
     defaultMonthlyTokenBudget: options.llm?.defaultMonthlyTokenBudget ?? 2_000_000,
     defaultModel: options.llm?.defaultModel,
+    smallModel: options.llm?.smallModel,
     accessToken: options.llm?.accessToken,
     stripPrefix: options.llm?.stripPrefix,
     fetch: doFetch,

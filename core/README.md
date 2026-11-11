@@ -184,7 +184,7 @@ Redirect defaults are `BILLING_SUCCESS_URL` and `BILLING_CANCEL_URL`. Browser ac
 
 With `LLM_UPSTREAM_AUTH=google` and `GCP_PROJECT`, Core derives the global Vertex
 OpenAI endpoint, strips Orion's leading `/v1`, and maps `orbit-default` to
-`LLM_DEFAULT_MODEL` (default `google/gemini-3.8-flash`). Google access tokens are cached
+`LLM_DEFAULT_MODEL` (default `google/gemini-3.8-flash`). The `orbit-small` alias, used for short background jobs such as naming a conversation, maps to `LLM_SMALL_MODEL` (default `google/gemini-3.5-flash-lite`, falling back to the default model when unset). Google access tokens are cached
 until 60 seconds before expiration. Auth uses GCP metadata on Cloud Run, then a
 `GOOGLE_APPLICATION_CREDENTIALS` service account JWT, otherwise development-only
 `gcloud auth application-default print-access-token`.

@@ -798,7 +798,17 @@ describe("farm data with user sessions", () => {
     );
     expect(r.status).toBe(200);
     expect(sent.model).toBe("gpt-real");
+    // Without a small model configured, short background jobs still get an answer.
+    await call(
+      a,
+      "POST",
+      "/v1/llm/v1/chat/completions",
+      { model: "orbit-small", messages: [] },
+      as(viewer.token, FARM),
+    );
+    expect(sent.model).toBe("gpt-real");
     expect(await db.select().from(llmUsage)).toMatchObject([
+      { farmId: FARM, model: "gpt-real", totalTokens: 7 },
       { farmId: FARM, model: "gpt-real", totalTokens: 7 },
     ]);
   });

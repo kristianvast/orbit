@@ -194,11 +194,23 @@ describe("Orion account", () => {
       (e) => e.sessionId === session.id && e.item.kind === "assistant",
       15_000,
     );
+    // The conversation's title is asked of the gateway too, beside the answer.
+    const named = waitFor(
+      c,
+      "session.updated",
+      (e) => e.sessionId === session.id && e.session.title === "Hello from the cloud",
+      15_000,
+    );
     await c.request("chat.prompt", { sessionId: session.id, text: "How is the herd?" });
     expect((await reply).item.text).toBe("Hello from the cloud");
     expect((await settled).reason).toBe("completed");
-    expect(upstream).toEqual([{ model: "gpt-real", auth: "Bearer sk-core" }]);
-    expect(await db.select().from(llmUsage)).toMatchObject([{ farmId, totalTokens: 15 }]);
+    await named;
+    const call = { model: "gpt-real", auth: "Bearer sk-core" };
+    expect(upstream).toEqual([call, call]);
+    expect(await db.select().from(llmUsage)).toMatchObject([
+      { farmId, totalTokens: 15 },
+      { farmId, totalTokens: 15 },
+    ]);
   });
 
   test("an invited viewer is refused local writes and stays signed in across restarts", async () => {
@@ -298,10 +310,21 @@ describe("Orion account", () => {
       15_000,
     );
     const settled = waitFor(c, "agent.settled", (e) => e.sessionId === session.id, 15_000);
+    // The conversation's title is asked of the gateway too, beside the answer.
+    const named = waitFor(
+      c,
+      "session.updated",
+      (e) => e.sessionId === session.id && e.session.title === "Hello from the cloud",
+      15_000,
+    );
     await c.request("chat.prompt", { sessionId: session.id, text: "How is the herd?" });
     expect((await reply).item.text).toBe("Hello from the cloud");
     expect((await settled).reason).toBe("completed");
-    expect(await db.select().from(llmUsage)).toMatchObject([{ farmId: localFarmId }]);
+    await named;
+    expect(await db.select().from(llmUsage)).toMatchObject([
+      { farmId: localFarmId },
+      { farmId: localFarmId },
+    ]);
   });
 
   test("Gemini thought signatures on tool calls go back to the model on the next turn", async () => {

@@ -54,6 +54,8 @@ export function serveCore(db: CoreDb, defaultPort: number) {
       stripPrefix: process.env.LLM_UPSTREAM_STRIP_PREFIX ?? (google ? "/v1" : undefined),
       defaultModel:
         process.env.LLM_DEFAULT_MODEL ?? (google ? "google/gemini-3.8-flash" : undefined),
+      smallModel:
+        process.env.LLM_SMALL_MODEL ?? (google ? "google/gemini-3.5-flash-lite" : undefined),
       defaultMonthlyTokenBudget: Number(process.env.LLM_MONTHLY_TOKEN_BUDGET ?? 2_000_000),
     },
     version: process.env.CORE_VERSION,

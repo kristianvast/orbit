@@ -15,6 +15,8 @@ export interface LlmGatewayOptions {
   defaultMonthlyTokenBudget: number;
   /** Upstream model used when Orion asks for the generic "orbit-default" model. */
   defaultModel?: string;
+  /** Upstream model for "orbit-small": short background jobs such as naming a conversation. */
+  smallModel?: string;
   /** Google OAuth token provider; supersedes the static upstream key. */
   accessToken?: () => Promise<string>;
   stripPrefix?: string;
@@ -25,6 +27,7 @@ export interface LlmGatewayOptions {
 }
 
 export const ORBIT_DEFAULT_MODEL = "orbit-default";
+export const ORBIT_SMALL_MODEL = "orbit-small";
 
 const FORWARDED_HEADERS = ["content-type", "accept", "anthropic-version", "anthropic-beta"];
 
@@ -150,8 +153,14 @@ export async function handleLlm(
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     let changed = false;
-    if (parsed.model === ORBIT_DEFAULT_MODEL && options.defaultModel) {
-      parsed.model = options.defaultModel;
+    const upstreamModel =
+      parsed.model === ORBIT_DEFAULT_MODEL
+        ? options.defaultModel
+        : parsed.model === ORBIT_SMALL_MODEL
+          ? (options.smallModel ?? options.defaultModel)
+          : undefined;
+    if (upstreamModel) {
+      parsed.model = upstreamModel;
       changed = true;
     }
     model = typeof parsed.model === "string" ? parsed.model : null;

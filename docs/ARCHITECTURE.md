@@ -251,9 +251,12 @@ mapped resource against them.
   a shell always exists. Because a custom system prompt replaces Pi's own tool rules, the prompt in
   `agent/hub.ts` carries Orion's working rules plus a "This computer" block (`computerPrompt`:
   system, shell, Orbit version, workspace, data folder, checkout) so Orion never has to probe for them.
-- **Conversation titles:** a new conversation is listed under its opening line; when its first run
-  finishes, `SessionHub.nameSession` asks the session's model for a short title (`agent/title.ts`)
-  and emits `session.updated`. A title the farmer set is never replaced.
+- **Conversation titles:** a new conversation is listed under its opening line. The moment its first
+  message is sent, beside the run, `SessionHub.nameSession` asks a small model for a short title
+  (`agent/title.ts`) and emits `session.updated`: on the subscription that is the gateway's
+  `orbit-small` (Core maps it to `LLM_SMALL_MODEL`), with the farmer's own key the cheapest paid text
+  model of the same provider, and the conversation's own model only if the small one is refused. A
+  title the farmer set is never replaced.
 - **Web access:** `web_search` and `web_fetch` (`agent/web.ts`) run on the farm PC with no
   account or key: search goes to DuckDuckGo's HTML endpoint and pages are turned into text with
   `HTMLRewriter`. The `browser` tool (`agent/browser.ts`) drives a headless browser through

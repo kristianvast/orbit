@@ -21,7 +21,7 @@ import { FileCredentialStore } from "./credentials";
 import { MEMORY_SCOPES, memoryFile } from "./memory";
 import { MOCK_MODEL, MOCK_PROVIDER, registerMockProvider } from "./mock-model";
 import { bundledShell, useBundledShell } from "./shell";
-import { cleanTitle, titleRequest } from "./title";
+import { cleanTitle, GATEWAY_TITLE_MODEL, pickTitleModel, titleRequest } from "./title";
 import { assistantItem, buildTranscript, contentText, toolStatus, userItem } from "./transcript";
 import type { Workspace } from "./workspace";
 
@@ -163,7 +163,7 @@ export class SessionHub {
   private readonly agentDir: string;
   private index = new Map<string, IndexEntry>();
   private live = new Map<string, LiveSession>();
-  private naming = new Set<string>();
+  private naming = new Map<string, Promise<void>>();
   private restartWanted = false;
 
   private constructor(
@@ -210,6 +210,15 @@ export class SessionHub {
             contextWindow: 128_000,
             maxTokens: 8192,
           },
+          {
+            id: GATEWAY_TITLE_MODEL,
+            name: "Orbit (small)",
+            reasoning: false,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 128_000,
+            maxTokens: 8192,
+          },
         ],
       });
     }
@@ -235,6 +244,8 @@ export class SessionHub {
     const extra = [MOCK_PROVIDER, GATEWAY_PROVIDER].flatMap((p) => this.runtime.getModels(p));
     for (const m of [...extra, ...this.runtime.getAvailableSnapshot()]) {
       const key = `${m.provider}/${m.id}`;
+      // The small model only names conversations; it is not one the farmer chats with.
+      if (m.provider === GATEWAY_PROVIDER && m.id === GATEWAY_TITLE_MODEL) continue;
       if (seen.has(key)) continue;
       seen.add(key);
       out.push({ provider: m.provider, id: m.id, name: m.name });
@@ -676,11 +687,9 @@ export class SessionHub {
       reason: aborted ? "aborted" : failed ? "error" : "completed",
       ...(failed && !aborted ? { errorMessage: failed } : {}),
     });
-    const named =
-      entry && !entry.titleSet && !aborted && !failed
-        ? this.nameSession(live, entry)
-        : Promise.resolve();
-    if (this.restartWanted) void named.then(() => this.restartIfIdle());
+    if (this.restartWanted) {
+      void (this.naming.get(live.id) ?? Promise.resolve()).then(() => this.restartIfIdle());
+    }
   }
 
   /** True when Orion will restart by itself once no conversation is running. */
@@ -695,40 +704,60 @@ export class SessionHub {
     this.opts.restart?.();
   }
 
-  /** Replaces the provisional title (the opening line) with one the model writes. */
-  private async nameSession(live: LiveSession, entry: IndexEntry) {
-    const model = live.agent?.model;
-    if (!model || this.naming.has(entry.id)) return;
-    const messages = live.sm
+  /**
+   * Replaces the provisional title (the opening line) with one a small model writes. Asked as soon
+   * as the first message is sent, beside the run, so the title does not wait for the answer.
+   */
+  private nameSession(live: LiveSession, entry: IndexEntry, sent: string): Promise<void> {
+    const running = this.naming.get(entry.id);
+    if (running) return running;
+    const naming = this.writeTitle(live, entry, sent).finally(() => this.naming.delete(entry.id));
+    this.naming.set(entry.id, naming);
+    return naming;
+  }
+
+  private titleModels(session: Model<Api>): Model<Api>[] {
+    const small =
+      session.provider === GATEWAY_PROVIDER
+        ? this.runtime.getModel(GATEWAY_PROVIDER, GATEWAY_TITLE_MODEL)
+        : pickTitleModel(session, this.runtime.getModels(session.provider) as Model<Api>[]);
+    // The conversation's own model is the fallback when the small one is refused.
+    return small && small.id !== session.id ? [small as Model<Api>, session] : [session];
+  }
+
+  private async writeTitle(live: LiveSession, entry: IndexEntry, sent: string) {
+    const session = live.agent?.model as Model<Api> | undefined;
+    if (!session) return;
+    const first = live.sm
       .getBranch()
       .flatMap((e) =>
         e.type === "message" ? [e.message as unknown as { role: string; content?: unknown }] : [],
-      );
-    const asked = contentText(messages.find((m) => m.role === "user")?.content);
-    const reply = contentText(
-      messages.findLast((m) => m.role === "assistant" && contentText(m.content))?.content,
-    );
+      )
+      .find((m) => m.role === "user");
+    const asked = contentText(first?.content) || sent;
     if (!asked.trim()) return;
-    this.naming.add(entry.id);
-    try {
-      const answer = await this.runtime.completeSimple(model as Model<Api>, {
-        messages: [{ role: "user", content: titleRequest(asked, reply), timestamp: Date.now() }],
-      });
-      const title = cleanTitle(contentText(answer.content));
-      if (!title) {
-        throw new Error(answer.errorMessage ?? `the model gave no title (${answer.stopReason})`);
+    let failure = "";
+    for (const model of this.titleModels(session)) {
+      try {
+        const answer = await this.runtime.completeSimple(model, {
+          messages: [{ role: "user", content: titleRequest(asked, ""), timestamp: Date.now() }],
+        });
+        const title = cleanTitle(contentText(answer.content));
+        if (!title) {
+          throw new Error(answer.errorMessage ?? `the model gave no title (${answer.stopReason})`);
+        }
+        // The farmer may have renamed or deleted the conversation while the model was answering.
+        if (this.index.get(entry.id) === entry && !entry.titleSet) {
+          live.sm.appendSessionInfo(title);
+          this.touch(entry.id, { title, titleSet: true });
+        }
+        return;
+      } catch (error) {
+        failure = `${model.provider}/${model.id}: ${String(error)}`;
       }
-      // The farmer may have renamed or deleted the conversation while the model was answering.
-      if (this.index.get(entry.id) === entry && !entry.titleSet) {
-        live.sm.appendSessionInfo(title);
-        this.touch(entry.id, { title, titleSet: true });
-      }
-    } catch (error) {
-      // The opening line stays as the title; the next finished run tries again.
-      process.stderr.write(`orion: naming the conversation failed: ${String(error)}\n`);
-    } finally {
-      this.naming.delete(entry.id);
     }
+    // The opening line stays as the title; the next message in this conversation tries again.
+    process.stderr.write(`orion: naming the conversation failed: ${failure}\n`);
   }
 
   async prompt(id: string, text: string, mode: "prompt" | "steer" | "followUp" = "prompt") {
@@ -750,6 +779,7 @@ export class SessionHub {
       entry.title = text.trim().replace(/\s+/g, " ").slice(0, 60);
     }
     this.touch(id);
+    if (!entry.titleSet) void this.nameSession(live, entry, text);
     agent.prompt(text).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       if (live.agent?.model?.provider !== GATEWAY_PROVIDER || !billingError(message)) {
