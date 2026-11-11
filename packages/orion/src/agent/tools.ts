@@ -1,7 +1,12 @@
 import { join } from "node:path";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { ExtensionToolContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type { AnimalListItem } from "@orbit/protocol";
+import {
+  type AnimalListItem,
+  FEEDBACK_KINDS,
+  MODULE_IDS,
+  SHARED_BUILD_KINDS,
+} from "@orbit/protocol";
 import {
   ANIMAL_SEX,
   ANIMAL_STATUS,
@@ -11,9 +16,12 @@ import {
 } from "@orbit/schema/enums";
 import { type Static, type TSchema, Type } from "typebox";
 import { RepoError, type WearableViolation } from "../db/repo";
+import { AccountError } from "../services/account";
 import type { ConnectorSource } from "../services/connectors";
 import type { FarmService } from "../services/farm";
+import type { FeedbackService } from "../services/feedback";
 import type { LocalUiService } from "../services/local-ui";
+import { describeModules, type ModulesStore } from "../services/modules";
 import type { SkillService } from "../services/skills";
 import { forgetFacts, MEMORY_SCOPES, rememberFact } from "./memory";
 
@@ -70,6 +78,9 @@ function tool<P extends TSchema>(def: Def<P>): ToolDefinition {
             true,
           );
         }
+        if (error instanceof AccountError) {
+          return text(`Not done: ${error.message}`, { code: error.code }, true);
+        }
         throw error;
       }
     },
@@ -105,11 +116,13 @@ export function createFarmTools(
   farm: FarmService,
   localUi: LocalUiService,
   skills: SkillService | null = null,
+  modules: ModulesStore | null = null,
 ): ToolDefinition[] {
   const repo = farm.repo;
   const skillTools = skills ? createSkillTools(farm, skills) : [];
   return [
     ...skillTools,
+    ...(modules ? [createModulesTool(modules)] : []),
     tool({
       name: "herd_query",
       label: "Look up the herd",
@@ -524,6 +537,95 @@ export function createFarmTools(
   ];
 }
 
+export function createFeedbackTools(feedback: FeedbackService): ToolDefinition[] {
+  return [
+    tool({
+      name: "feedback_send",
+      label: "Send feedback",
+      description:
+        "Send a message from the farmer to the Orbit team: a problem with Orbit, something they wish it could do, or any other comment. Show the farmer the exact text first and send only after they say yes. Write it in their words, add what you saw go wrong (the error text, what you tried), and leave out animal records, names, addresses and passwords. Orbit's version and the kind of computer are added automatically.",
+      parameters: Type.Object({
+        kind: Type.Enum([...FEEDBACK_KINDS], {
+          description: "issue = something is broken or confusing; idea = a wish; other = the rest",
+        }),
+        message: Type.String({ minLength: 1, maxLength: 5000 }),
+      }),
+      async run(p) {
+        const { id } = await feedback.send(p);
+        return text(`Sent to the Orbit team (reference ${id.slice(0, 8)}).`, { id });
+      },
+    }),
+    tool({
+      name: "share_build",
+      label: "Share a build",
+      description:
+        'Offer something built on this farm to other farms: a custom page (kind "page", folder pages/<name>), a connector (kind "connector", folder connectors/<name>) or a skill (kind "skill", folder skills/<name>). It goes to the Orbit team for review and reaches other farms only if they approve it. Needs a signed-in Orbit account. Before calling: get the farmer\'s yes, and remove this farm\'s name, animal data, addresses and every password or key from the files (settings belong in the connector configuration, not in code). The tool refuses files that still look like they hold a password or key.',
+      parameters: Type.Object({
+        kind: Type.Enum([...SHARED_BUILD_KINDS]),
+        name: Type.String({ description: "Folder name of the page, connector or skill" }),
+        title: Type.String({ minLength: 1, maxLength: 120, description: "Short name for it" }),
+        description: Type.String({
+          minLength: 1,
+          maxLength: 2000,
+          description: "What it does, which equipment or data it needs, and how to set it up",
+        }),
+      }),
+      async run(p) {
+        const sent = await feedback.share(p);
+        const left = sent.skipped.length > 0 ? `\nLeft out: ${sent.skipped.join(", ")}` : "";
+        return text(
+          `Shared for review (reference ${sent.id.slice(0, 8)}): ${sent.files.length} files.${left}\nThe Orbit team reviews it before other farms can install it; share_status shows where it stands.`,
+          sent,
+        );
+      },
+    }),
+    tool({
+      name: "share_status",
+      label: "Shared builds",
+      description:
+        "List what this account has shared and whether each is pending, approved or rejected.",
+      parameters: Type.Object({}),
+      async run() {
+        const { submissions } = await feedback.shared();
+        if (submissions.length === 0) return text("Nothing has been shared yet.", { submissions });
+        const lines = submissions.map(
+          (s) =>
+            `- ${s.title} (${s.kind} ${s.name}): ${s.status}${s.reviewNote ? `, note: ${s.reviewNote}` : ""}`,
+        );
+        return text(lines.join("\n"), { submissions });
+      },
+    }),
+  ];
+}
+
+function createModulesTool(modules: ModulesStore): ToolDefinition {
+  return tool({
+    name: "orbit_modules",
+    label: "Orbit screens",
+    description:
+      'List, enable or disable Orbit\'s built-in screens: "herd" (animal records), "devices" (sensors and robots), "cameras". Orbit starts with only Home, Chat and Settings; enable a module when the farmer starts using that area. Disabling only hides the screen; no data is deleted.',
+    parameters: Type.Object({
+      action: Type.Enum(["list", "enable", "disable"]),
+      id: Opt(Type.Enum([...MODULE_IDS])),
+    }),
+    run(p) {
+      if (p.action === "list") {
+        const state = modules.list();
+        return text(`Orbit modules:\n${describeModules(state)}`, state);
+      }
+      if (!p.id)
+        return text(`Not done: say which module (id: ${MODULE_IDS.join(", ")}).`, {}, true);
+      const was = modules.enabled(p.id);
+      const state = p.action === "enable" ? modules.enable(p.id, "orion") : modules.disable(p.id);
+      const changed = was !== (p.action === "enable");
+      const head = changed
+        ? `${p.action === "enable" ? "Enabled" : "Disabled"} the ${p.id} module.`
+        : `The ${p.id} module was already ${was ? "on" : "off"}.`;
+      return text(`${head}\nOrbit modules:\n${describeModules(state)}`, state);
+    },
+  });
+}
+
 function createSkillTools(farm: FarmService, skills: SkillService): ToolDefinition[] {
   return [
     tool({
@@ -604,6 +706,7 @@ export const FARM_TOOL_NAMES = [
   "device_bind",
   "observations_query",
   "herd_record_event",
+  "orbit_modules",
   "skill_search",
   "skill_install",
   "page_scaffold",

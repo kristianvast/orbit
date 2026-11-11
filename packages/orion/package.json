@@ -24,6 +24,7 @@
     "@orbit/schema": "workspace:*",
     "@orbit/sync": "workspace:*",
     "drizzle-orm": "^0.45.4",
+    "isomorphic-git": "^1.44.12",
     "onvif": "^0.8.3",
     "typebox": "^1.4.3"
   },

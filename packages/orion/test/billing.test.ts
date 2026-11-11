@@ -5,7 +5,7 @@ import { BillingService } from "../src/services/billing";
 import { connect, removeDir, TOKEN, tempDir } from "./helpers";
 
 const status = {
-  plan: "pen",
+  plan: "cam2",
   interval: "month",
   status: "active",
   currentPeriodEnd: "2026-12-06T00:00:00Z",
@@ -35,10 +35,19 @@ test("billing relay authenticates every request with the stored session and farm
     }
     const path = new URL(String(input)).pathname;
     if (path === "/v1/billing/status" && init?.method === "GET") return Response.json(status);
+    if (path === "/v1/billing/plans" && init?.method === "GET") {
+      return Response.json({
+        currency: "eur",
+        locked: false,
+        trialDays: 30,
+        plans: [],
+        hardware: [],
+      });
+    }
     if (
       path === "/v1/billing/checkout" &&
       init?.method === "POST" &&
-      init.body === '{"plan":"barn","interval":"year"}'
+      init.body === '{"plan":"cam6","interval":"year"}'
     ) {
       return Response.json({ url: "https://checkout.stripe.com/test" });
     }
@@ -48,10 +57,27 @@ test("billing relay authenticates every request with the stored session and farm
     return new Response(null, { status: 400 });
   });
   expect(await billing.status()).toEqual(status);
-  expect(await billing.checkout({ plan: "barn", interval: "year" })).toEqual({
+  expect(await billing.plans()).toEqual({
+    currency: "eur",
+    locked: false,
+    trialDays: 30,
+    plans: [],
+    hardware: [],
+  });
+  expect(await billing.checkout({ plan: "cam6", interval: "year" })).toEqual({
     url: "https://checkout.stripe.com/test",
   });
   expect(await billing.portal()).toEqual({ url: "https://billing.stripe.com/test" });
+});
+
+test("billing plans rejects an invalid Core catalogue", async () => {
+  const billing = new BillingService(account, async () =>
+    Response.json({ currency: "eur", locked: false, plans: [{ id: "orion" }] }),
+  );
+  await expect(billing.plans()).rejects.toMatchObject({
+    code: "not_ready",
+    message: "Orbit cloud returned an invalid billing catalogue.",
+  });
 });
 
 test.each([
@@ -63,7 +89,7 @@ test.each([
     Response.json({ error: { message: "Core refusal" } }, { status: http }),
   );
   try {
-    await billing.checkout({ plan: "pen", interval: "month" });
+    await billing.checkout({ plan: "cam2", interval: "month" });
     throw new Error("checkout should be refused");
   } catch (error) {
     expect(error).toBeInstanceOf(AccountError);

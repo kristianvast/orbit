@@ -2,6 +2,8 @@
 // sync, the cloud model and local role enforcement. Electric and the LLM provider are faked at
 // Core's upstream fetch.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   type CoreDb,
   coreSchema,
@@ -180,7 +182,7 @@ describe("Orion account", () => {
     await db.execute(sql`
       INSERT INTO farm_subscriptions
         (farm_id, plan, interval, status, stripe_subscription_id, current_period_end, cancel_at_period_end)
-      VALUES (${farmId}, 'pen', 'month', 'active', 'sub_test_1', now() + interval '30 days', false)
+      VALUES (${farmId}, 'cam2', 'month', 'active', 'sub_test_1', now() + interval '30 days', false)
     `);
     const settings = await c.request("settings.get", {});
     expect(settings).toMatchObject({ provider: "orbit-gateway", model: "orbit-default" });
@@ -273,7 +275,7 @@ describe("Orion account", () => {
     );
     await db.execute(sql`
       INSERT INTO farm_subscriptions (farm_id, plan, interval, status)
-      VALUES (${farm.id}, 'pen', 'month', 'active')
+      VALUES (${farm.id}, 'cam2', 'month', 'active')
     `);
 
     const c = await boot();
@@ -286,7 +288,7 @@ describe("Orion account", () => {
     });
     expect(status).toMatchObject({ state: "signed_in", farm: { id: localFarmId, role: "owner" } });
     await upToDate;
-    expect(await c.request("billing.status", {})).toMatchObject({ plan: "pen", status: "active" });
+    expect(await c.request("billing.status", {})).toMatchObject({ plan: "cam2", status: "active" });
 
     const { session } = await c.request("sessions.create", {});
     const reply = waitFor(
@@ -382,7 +384,7 @@ describe("Orion account", () => {
     });
     await db.execute(sql`
       INSERT INTO farm_subscriptions (farm_id, plan, interval, status)
-      VALUES (${farmId}, 'pen', 'month', 'active')
+      VALUES (${farmId}, 'cam2', 'month', 'active')
     `);
     const { session } = await c.request("sessions.create", {});
     const reply = waitFor(
@@ -400,6 +402,81 @@ describe("Orion account", () => {
     expect((await settled).reason).toBe("completed");
     expect(followUps).toMatchObject([
       { id: "call-1", extra_content: { google: { thought_signature: "sig-from-gemini" } } },
+    ]);
+  });
+
+  test("a farm on the free month shares a page through Orion, and Core holds it for review", async () => {
+    const reply = (chunks: object[]) =>
+      new Response(
+        new Blob([
+          ...chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`),
+          "data: [DONE]\n\n",
+        ]).stream(),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    scriptedUpstream = (body) => {
+      if (body.messages.some((m) => m.role === "assistant" && m.tool_calls)) {
+        return reply([
+          { id: "s2", choices: [{ index: 0, delta: { role: "assistant", content: "Shared." } }] },
+          { id: "s2", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+        ]);
+      }
+      return reply([
+        {
+          id: "s1",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                role: "assistant",
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call-share",
+                    type: "function",
+                    function: {
+                      name: "share_build",
+                      arguments: JSON.stringify({
+                        kind: "page",
+                        name: "morning-round",
+                        title: "Morning round",
+                        description: "A checklist for the first walk through the barn.",
+                      }),
+                    },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        },
+        { id: "s1", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+      ]);
+    };
+    const c = await boot();
+    await c.request("account.register", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    await verifyEmail("kari@farm.test");
+    await c.request("account.refresh", {});
+    const page = join(dir, "workspace", "pages", "morning-round");
+    mkdirSync(page, { recursive: true });
+    writeFileSync(join(page, "index.html"), "<h1>Morning round</h1>");
+
+    const { session } = await c.request("sessions.create", {});
+    const settled = waitFor(c, "agent.settled", (e) => e.sessionId === session.id, 15_000);
+    await c.request("chat.prompt", { sessionId: session.id, text: "Share the morning round page" });
+    expect((await settled).reason).toBe("completed");
+
+    const { submissions } = await c.request("shared.list", {});
+    expect(submissions).toMatchObject([
+      { kind: "page", name: "morning-round", title: "Morning round", status: "pending" },
+    ]);
+    const stored = (await db.execute(sql`SELECT files FROM submissions`)) as { rows: unknown[] };
+    expect(stored.rows).toEqual([
+      { files: [{ path: "index.html", content: "<h1>Morning round</h1>" }] },
     ]);
   });
 });

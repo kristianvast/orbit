@@ -22,7 +22,7 @@ import { AuthFlows, systemBrowserOpener } from "./agent/auth";
 import { createComputerTool } from "./agent/computer";
 import { GATEWAY_PROVIDER, HubError, SessionHub } from "./agent/hub";
 import { MOCK_MODEL, MOCK_PROVIDER } from "./agent/mock-model";
-import { createFarmTools } from "./agent/tools";
+import { createFarmTools, createFeedbackTools } from "./agent/tools";
 import { Workspace } from "./agent/workspace";
 import type { OrionConfig } from "./config";
 import { openDatabase } from "./db/open";
@@ -38,7 +38,9 @@ import {
   serveCamera,
 } from "./services/camera-proxy";
 import { FarmService } from "./services/farm";
+import { FeedbackService } from "./services/feedback";
 import { LOCAL_UI_PREFIX, LocalUiService } from "./services/local-ui";
+import { liveRowsIn, ModulesStore } from "./services/modules";
 import { listPages, PAGE_SDK, PAGES_DIR, resolvePageFile } from "./services/pages";
 import { Go2rtcRelay } from "./services/relay";
 import { DEFAULT_SKILLS_URL, SkillService } from "./services/skills";
@@ -106,9 +108,6 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
   mkdirSync(config.dataDir, { recursive: true });
   const workspace = new Workspace(join(config.dataDir, "workspace"));
   await workspace.init();
-  if (!workspace.available) {
-    process.stderr.write("orion: git not found; workspace snapshots are unavailable\n");
-  }
 
   const db = openDatabase(config.dataDir, { seed: config.seed });
   const repo = db.repo;
@@ -130,7 +129,14 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       }
     }
   };
-  repo.onChange((table, ids) => emit("db.changed", { table, ids }));
+  const modules = new ModulesStore(config.dataDir, liveRowsIn(repo.db), (state) =>
+    emit("modules.updated", state),
+  );
+  const dbChanged = (table: string, ids: string[]) => {
+    emit("db.changed", { table, ids });
+    modules.noticeChange(table);
+  };
+  repo.onChange(dbChanged);
 
   const resources = materializeResources(config.dataDir);
   const farm = new FarmService(repo, secrets, workspace.dir, resources.connectorTemplateDir);
@@ -146,13 +152,18 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     config.token,
     (status) => emit("localUi.updated", status),
   );
+  const feedback = new FeedbackService(workspace.dir, SERVER_VERSION);
   const hub = await SessionHub.create({
     dataDir: config.dataDir,
     workspace,
     resourcesDir: resources.dir,
     repo,
     settings,
-    tools: [...createFarmTools(farm, localUi, skills), createComputerTool()],
+    tools: [
+      ...createFarmTools(farm, localUi, skills, modules),
+      ...createFeedbackTools(feedback),
+      createComputerTool(),
+    ],
     emit,
     mockModel: config.mockModel,
     gatewayUrl: config.gatewayUrl,
@@ -169,9 +180,10 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     deviceName: `Orbit on ${hostname()}`,
     onStatus: (status) => emit("account.updated", status),
     onSync: (status) => emit("sync.status", status),
-    onRemoteChange: (table, ids) => emit("db.changed", { table, ids }),
+    onRemoteChange: dbChanged,
   });
   farm.guard = (mutation) => account.assertCanMutate(mutation);
+  feedback.account = account;
   await account.start();
   const billing = new BillingService(account);
   const voice = new VoiceSessions({
@@ -303,9 +315,6 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     const workspaceChange = snap.changes.find((c) => c.table === "workspace");
     if (!workspaceChange) return repo.undoDbSnapshot(snapshotId);
     if (snap.undoneAt) throw new RequestError("conflict", "this change was already undone");
-    if (!workspace.available) {
-      throw new RequestError("not_ready", "snapshots are unavailable because git is not installed");
-    }
     let files: string[];
     try {
       files = await workspace.revert(workspaceChange.rowId);
@@ -357,6 +366,12 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
         return localUi.booted();
       case "localUi.disable":
         return localUi.disable();
+      case "modules.list":
+        return modules.list();
+      case "modules.enable":
+        return modules.enable(msg.moduleId, "user");
+      case "modules.disable":
+        return modules.disable(msg.moduleId);
       case "pages.list":
         return { pages: listPages(workspace.dir, config.token) };
       case "settings.get":
@@ -402,10 +417,21 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
         return account.logout();
       case "billing.status":
         return billing.status();
+      case "billing.plans":
+        return billing.plans();
       case "billing.checkout":
         return billing.checkout({ plan: msg.plan, interval: msg.interval });
       case "billing.portal":
         return billing.portal();
+      case "feedback.send":
+        return feedback.send({
+          kind: msg.kind,
+          message: msg.message,
+          contactEmail: msg.contactEmail,
+          locale: msg.locale,
+        });
+      case "shared.list":
+        return feedback.shared();
       case "voice.start":
         hub.summary(msg.sessionId);
         return voice.start(msg.sessionId, owner);

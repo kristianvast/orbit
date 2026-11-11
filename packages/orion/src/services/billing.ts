@@ -1,4 +1,4 @@
-import { BillingStatus, type RequestParams } from "@orbit/protocol";
+import { BillingPlans, BillingStatus, type RequestParams } from "@orbit/protocol";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { AccountError, type AccountService } from "./account";
@@ -22,6 +22,14 @@ export class BillingService {
     const result = await this.call("status");
     if (!Value.Check(BillingStatus, result)) {
       throw new AccountError("not_ready", "Orbit cloud returned an invalid billing status.");
+    }
+    return result;
+  }
+
+  async plans(): Promise<BillingPlans> {
+    const result = await this.call("plans");
+    if (!Value.Check(BillingPlans, result)) {
+      throw new AccountError("not_ready", "Orbit cloud returned an invalid billing catalogue.");
     }
     return result;
   }

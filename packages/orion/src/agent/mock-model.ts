@@ -64,6 +64,12 @@ export const MOCK_TRIGGERS: MockTrigger[] = [
       ].join("\n"),
     },
   },
+  {
+    // "herd" plus one of track / add / set up, in any order (e.g. "Help me track my herd").
+    match: /^(?=[\s\S]*\bherd\b)(?=[\s\S]*\b(?:track|add|set up)\b)/i,
+    tool: "orbit_modules",
+    args: { action: "enable", id: "herd" },
+  },
 ];
 
 function textOf(message: Message | undefined): string {

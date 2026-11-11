@@ -150,6 +150,16 @@ export class AccountService {
     };
   }
 
+  /** For other cloud features. "optional" also works signed out, without credentials. */
+  request(
+    method: string,
+    path: string,
+    body?: unknown,
+    session: "required" | "optional" = "required",
+  ): Promise<unknown> {
+    return this.call(method, path, body, { anonymous: session === "optional" && !this.token });
+  }
+
   assertCanMutate(mutation: string): void {
     const farm = this.token ? this.stored.farm : null;
     const table = MUTATION_TABLE[mutation];
