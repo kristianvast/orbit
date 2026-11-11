@@ -9,6 +9,7 @@ import {
   parseReadyLine,
   validateResult,
 } from "../src/codec";
+import { MODULE_IDS } from "../src/messages";
 
 describe("decodeClientMessage", () => {
   test("accepts valid requests and round-trips encodeRequest", () => {
@@ -124,6 +125,51 @@ describe("decodeServerMessage", () => {
     expect(validateResult("sessions.list", { sessions: [] }).ok).toBe(true);
     expect(validateResult("sessions.list", { sessions: [{ id: 1 }] }).ok).toBe(false);
     expect(validateResult("db.mutate", { ids: ["x"], snapshotId: null }).ok).toBe(true);
+  });
+});
+
+describe("modules contract", () => {
+  const state = {
+    modules: [
+      { id: "herd", enabled: true, enabledAt: "2026-01-01T00:00:00.000Z", enabledBy: "auto" },
+      { id: "devices", enabled: false, enabledAt: null, enabledBy: null },
+      { id: "cameras", enabled: true, enabledAt: "2026-01-02T00:00:00.000Z", enabledBy: "orion" },
+    ],
+  };
+
+  test("requests accept only known module ids", () => {
+    expect(MODULE_IDS).toEqual(["herd", "devices", "cameras"]);
+    expect(decodeClientMessage(encodeRequest("1", "modules.list", {})).ok).toBe(true);
+    expect(decodeClientMessage(encodeRequest("2", "modules.enable", { moduleId: "herd" })).ok).toBe(
+      true,
+    );
+    expect(
+      decodeClientMessage(encodeRequest("3", "modules.disable", { moduleId: "cameras" })).ok,
+    ).toBe(true);
+    expect(
+      decodeClientMessage(JSON.stringify({ id: "4", type: "modules.enable", moduleId: "pages" }))
+        .ok,
+    ).toBe(false);
+    expect(decodeClientMessage(JSON.stringify({ id: "5", type: "modules.enable" })).ok).toBe(false);
+  });
+
+  test("results and modules.updated validate the state shape", () => {
+    expect(validateResult("modules.list", state).ok).toBe(true);
+    expect(validateResult("modules.enable", state).ok).toBe(true);
+    expect(
+      validateResult("modules.list", {
+        modules: [{ id: "settings", enabled: true, enabledAt: null, enabledBy: null }],
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateResult("modules.list", {
+        modules: [{ id: "herd", enabled: true, enabledAt: null, enabledBy: "robot" }],
+      }).ok,
+    ).toBe(false);
+    expect(decodeServerMessage(encodeEvent("modules.updated", state as never))).toMatchObject({
+      ok: true,
+      value: { type: "modules.updated", modules: state.modules },
+    });
   });
 });
 

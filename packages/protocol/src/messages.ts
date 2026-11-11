@@ -5,6 +5,7 @@ import { type Static, type TSchema, Type } from "typebox";
 import { AccountEvents, AccountRequests } from "./account";
 import { BillingRequests } from "./billing";
 import { DbMutateRequest, DbMutateResult, DbQueryRequest } from "./db";
+import { FeedbackRequests } from "./feedback";
 import {
   AssistantItem,
   AuthMethod,
@@ -24,6 +25,35 @@ import {
   UserItem,
 } from "./model";
 import { VoiceEvents, VoiceRequests } from "./voice";
+
+/** Built-in screens that start switched off; Home, Chat, Settings and custom pages are not modules. */
+export const MODULE_IDS = ["herd", "devices", "cameras"] as const;
+export const ModuleId = Type.Union([
+  Type.Literal("herd"),
+  Type.Literal("devices"),
+  Type.Literal("cameras"),
+]);
+export type ModuleId = (typeof MODULE_IDS)[number];
+export const ModuleEnabledBy = Type.Union([
+  Type.Literal("orion"),
+  Type.Literal("user"),
+  Type.Literal("auto"),
+  Type.Null(),
+]);
+export type ModuleEnabledBy = Static<typeof ModuleEnabledBy>;
+export const OrbitModule = Type.Object({
+  id: ModuleId,
+  enabled: Type.Boolean(),
+  /** ISO time it was last switched on; null while off. */
+  enabledAt: Type.Union([Type.String(), Type.Null()]),
+  enabledBy: ModuleEnabledBy,
+});
+export type OrbitModule = Static<typeof OrbitModule>;
+/** Always all of MODULE_IDS, in that order. */
+export const ModulesState = Type.Object({ modules: Type.Array(OrbitModule) });
+export type ModulesState = Static<typeof ModulesState>;
+// Not `id`: request frames are flat and `id` is the request id.
+const ModuleRef = Type.Object({ moduleId: ModuleId });
 
 const SessionRef = Type.Object({ sessionId: Type.String() });
 const Accepted = Type.Object({ accepted: Type.Boolean() });
@@ -92,6 +122,12 @@ export const Requests = {
   "localUi.booted": { params: Empty, result: LocalUiStatus },
   /** Stop using the local build; the shipped UI is used from the next start. */
   "localUi.disable": { params: Empty, result: LocalUiStatus },
+  /** Which built-in modules (herd, devices, cameras) are switched on. */
+  "modules.list": { params: Empty, result: ModulesState },
+  /** The farmer switches a module on (enabledBy "user"). */
+  "modules.enable": { params: ModuleRef, result: ModulesState },
+  /** The farmer switches a module off. */
+  "modules.disable": { params: ModuleRef, result: ModulesState },
   "settings.get": { params: Empty, result: Settings },
   "settings.update": { params: SettingsUpdate, result: Settings },
   /** Model providers Orion can sign in to, with their current status (Pi's /login list). */
@@ -133,6 +169,7 @@ export const Requests = {
   },
   ...AccountRequests,
   ...BillingRequests,
+  ...FeedbackRequests,
   ...VoiceRequests,
 } as const satisfies Record<string, { params: TSchema; result: TSchema }>;
 
@@ -219,6 +256,8 @@ export const Events = {
   "db.changed": Type.Object({ table: Type.String(), ids: Type.Array(Type.String()) }),
   /** A new local UI build passed its checks; a running local UI reloads. */
   "localUi.updated": LocalUiStatus,
+  /** Module state changed (by Orion, the farmer, or data appearing). */
+  "modules.updated": ModulesState,
   "auth.notice": Type.Object({ loginId: Type.String(), notice: AuthNotice }),
   "auth.prompt": Type.Object({
     loginId: Type.String(),

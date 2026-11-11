@@ -3,6 +3,7 @@ export * from "./billing";
 export * from "./client";
 export * from "./codec";
 export * from "./db";
+export * from "./feedback";
 export * from "./messages";
 export * from "./model";
 export * from "./voice";
