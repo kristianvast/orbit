@@ -37,13 +37,23 @@ beforeAll(() => {
   profile = tempDir();
   session = new BrowserSession(profile);
 });
-afterAll(() => {
+afterAll(async () => {
   session.close();
   server.stop(true);
-  // Edge and Chrome keep the profile folder locked until their process is gone, which on
-  // Windows is a moment after it is killed.
   Bun.WebView.closeAll();
-  rmSync(profile, { recursive: true, force: true, maxRetries: 50, retryDelay: 100 });
+  // Edge and Chrome keep the profile folder locked until their process is gone, which on Windows
+  // is a moment after it is killed. Nothing announces that, so the delete is retried while the
+  // folder is still locked, for at most ten seconds.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      rmSync(profile, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as { code?: string }).code ?? "";
+      if (!["EBUSY", "EPERM", "ENOTEMPTY"].includes(code) || attempt >= 100) throw error;
+      await Bun.sleep(100);
+    }
+  }
 });
 
 function shown(result: AgentToolResult<unknown>): string {
