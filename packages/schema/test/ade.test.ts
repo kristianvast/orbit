@@ -24,7 +24,11 @@ addFormats(ajv);
 ajv.addFormat("integer", { type: "number", validate: Number.isInteger });
 for (const glob of ["resources/*.json", "types/*.json", "enums/*.json"])
   for (const rel of new Bun.Glob(glob).scanSync(VENDOR))
-    ajv.addSchema({ ...JSON.parse(readFileSync(join(VENDOR, rel), "utf8")), $id: BASE + rel });
+    ajv.addSchema({
+      ...JSON.parse(readFileSync(join(VENDOR, rel), "utf8")),
+      // Bun.Glob yields backslash paths on Windows; schema ids are URLs.
+      $id: BASE + rel.replaceAll("\\", "/"),
+    });
 
 const validators = new Map<string, ValidateFunction>();
 function expectValid(resourceType: string, doc: unknown) {
