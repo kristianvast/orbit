@@ -34,6 +34,8 @@ jobs:
             rust-target: aarch64-unknown-linux-gnu
             bun-target: bun-linux-arm64
             exe: ""
+            # linuxdeploy cannot build an AppImage on the ARM runner, so ARM Linux ships a .deb.
+            bundles: --bundles deb
           - name: macos-arm64
             os: macos-latest
             rust-target: aarch64-apple-darwin
@@ -165,7 +167,7 @@ jobs:
         with:
           projectPath: apps/orbit
           tauriScript: bunx tauri
-          args: --target ${{ matrix.rust-target }} --config ${{ runner.temp }}/tauri.release.conf.json
+          args: --target ${{ matrix.rust-target }} --config ${{ runner.temp }}/tauri.release.conf.json ${{ matrix.bundles }}
           tagName: ${{ github.ref_name }}
           releaseName: Orbit ${{ github.ref_name }}
           releaseBody: See the assets below to download and install this version.
@@ -178,7 +180,8 @@ jobs:
   publish:
     name: publish
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Runs even when one platform failed: farmers on the others should still get their installer.
+    if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Add stable download names and publish
@@ -188,18 +191,23 @@ jobs:
         run: |
           mkdir assets && cd assets
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --pattern '*-setup.exe' --pattern '*.dmg' --pattern '*.AppImage'
+            --pattern '*-setup.exe' --pattern '*.dmg' --pattern '*.AppImage' --pattern '*.deb'
+          named=()
           stable() {
             local found=( $1 )
-            if [[ ! -f "${found[0]}" ]]; then echo "missing installer: $1"; exit 1; fi
+            if [[ ! -f "${found[0]}" ]]; then
+              echo "::warning::no installer matches $1, so $2 is not in this release"
+              return
+            fi
             cp "${found[0]}" "$2"
+            named+=( "$2" )
           }
           stable '*_x64-setup.exe' Orbit-Windows.exe
           stable '*_aarch64.dmg' Orbit-macOS-Apple-Silicon.dmg
           stable '*_x64.dmg' Orbit-macOS-Intel.dmg
           stable '*_amd64.AppImage' Orbit-Linux-x64.AppImage
-          stable '*_aarch64.AppImage' Orbit-Linux-arm64.AppImage
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-            Orbit-Windows.exe Orbit-macOS-Apple-Silicon.dmg Orbit-macOS-Intel.dmg \
-            Orbit-Linux-x64.AppImage Orbit-Linux-arm64.AppImage
+          stable '*_arm64.deb' Orbit-Linux-arm64.deb
+          # Windows is where most farm PCs are: never publish a release without it.
+          if [[ ! -f Orbit-Windows.exe ]]; then echo "no Windows installer; leaving the release as a draft"; exit 1; fi
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "${named[@]}"
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

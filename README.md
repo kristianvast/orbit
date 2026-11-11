@@ -12,7 +12,6 @@ Installers for Orbit v0.1.0:
 - **macOS (Apple Silicon):** [Orbit-macOS-Apple-Silicon.dmg](https://github.com/kristianvast/orbit/releases/latest/download/Orbit-macOS-Apple-Silicon.dmg)
 - **macOS (Intel):** [Orbit-macOS-Intel.dmg](https://github.com/kristianvast/orbit/releases/latest/download/Orbit-macOS-Intel.dmg)
 - **Linux (x64):** [Orbit-Linux-x64.AppImage](https://github.com/kristianvast/orbit/releases/latest/download/Orbit-Linux-x64.AppImage)
-- **Linux (ARM64):** [Orbit-Linux-arm64.AppImage](https://github.com/kristianvast/orbit/releases/latest/download/Orbit-Linux-arm64.AppImage)
 
 Additional formats (`.msi` for Windows and `.deb` for Debian/Ubuntu) are attached to the [latest GitHub release](https://github.com/kristianvast/orbit/releases/latest). Installed copies download newer releases in the background and offer a one-click restart to update.
 
