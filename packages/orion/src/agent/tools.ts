@@ -117,6 +117,8 @@ export function createFarmTools(
   localUi: LocalUiService,
   skills: SkillService | null = null,
   modules: ModulesStore | null = null,
+  /** Asks for Orion to restart once it is idle; false when nothing will restart it. */
+  restartOrion: () => boolean = () => false,
 ): ToolDefinition[] {
   const repo = farm.repo;
   const skillTools = skills ? createSkillTools(farm, skills) : [];
@@ -468,12 +470,41 @@ export function createFarmTools(
       },
     }),
     tool({
-      name: "local_ui_build",
-      label: "Build your Orbit",
-      description: `Typecheck and build the farm's own copy of the Orbit app from the checkout at ${localUi.checkoutDir} (installs dependencies the first time). Only a build that passes is switched on; Orbit then opens it at startup and a running copy reloads. Read the editing-orbit skill first.`,
+      name: "orbit_source",
+      label: "Get Orbit's source",
+      description: `Make Orbit's own source ready to edit at ${localUi.checkoutDir}: downloads the installed version on its own "farm" branch and installs what it needs. Run it before changing Orbit itself; it returns at once when the source is already there. The first time takes a few minutes and needs the internet, so tell the farmer first. Read the editing-orbit skill first.`,
       parameters: Type.Object({}),
       async run(_p, _origin, signal) {
-        const r = await localUi.build(signal);
+        const r = await localUi.source(signal);
+        if (!r.ok) {
+          const why =
+            r.step === "git"
+              ? "git is not available on this computer"
+              : r.step === "clone"
+                ? "the download failed"
+                : "installing what the source needs failed";
+          return text(`Not done: ${why}.\n${r.output}`, { step: r.step }, true);
+        }
+        return text(
+          [
+            `${r.created ? "Downloaded" : "Already there"}: Orbit's source at ${r.path}, ready to edit.`,
+            "- The app's screens: apps/orbit/src (React). The words on screen: apps/orbit/src/i18n/locales/<language>/.",
+            "- Orion itself (your instructions, tools and skills): packages/orion/src and packages/orion/resources.",
+            "Find the place with grep, edit, then run local_ui_build with a summary of the change.",
+          ].join("\n"),
+          { path: r.path, created: r.created },
+        );
+      },
+    }),
+    tool({
+      name: "local_ui_build",
+      label: "Build your Orbit",
+      description: `Check and build the farm's own copy of Orbit from the source at ${localUi.checkoutDir}, in one step: records your edits, typechecks, builds the app, and, when you changed Orion itself (packages/orion), checks that the new Orion starts. Only a build where every step passes is switched on. The result says what the farmer has to do to see it; pass that on.`,
+      parameters: Type.Object({
+        summary: OptStr("What you changed, in a few plain words; recorded with the edits"),
+      }),
+      async run(p, _origin, signal) {
+        const r = await localUi.build(signal, p.summary);
         if (!r.ok) {
           return text(
             `Not done: the ${r.step} step failed, so Orbit keeps ${r.status.state === "none" ? "the original app" : "the previous build"}.\n${r.output}`,
@@ -481,9 +512,18 @@ export function createFarmTools(
             true,
           );
         }
+        const how = r.reloads
+          ? "The open Orbit window is reloading with the change now; the farmer does not need to do anything."
+          : 'The open Orbit window still shows the old version. Tell the farmer to press "Open new version" in the bar at the top of Orbit (or to close Orbit and open it again) to see the change.';
+        const orion =
+          r.orion === "unchanged"
+            ? ""
+            : restartOrion()
+              ? " Your own change to Orion is checked and switched on: Orion restarts by itself a few seconds after this reply is finished, so finish the reply now and do not start anything else."
+              : " Your own change to Orion is checked and switched on: it is used from the next time Orbit starts.";
         return text(
-          "Built and checked. Orbit opens this version from the next start, and a running copy reloads now. The farmer can switch back in Settings > Your Orbit.",
-          { status: r.status },
+          `Built and checked. ${how}${orion} The farmer can switch back in Settings > Your Orbit.`,
+          { status: r.status, reloads: r.reloads, orion: r.orion },
         );
       },
     }),
@@ -491,7 +531,7 @@ export function createFarmTools(
       name: "local_ui_disable",
       label: "Use the original Orbit",
       description:
-        "Stop using the farm's own build of the Orbit app; the original app is used from the next start. The checkout and its changes stay.",
+        "Stop using the farm's own build of Orbit, the app and Orion alike; the original is used from the next start. The source and its changes stay.",
       parameters: Type.Object({}),
       run() {
         return text("Orbit will start with the original app.", { status: localUi.disable() });
@@ -716,6 +756,7 @@ export const FARM_TOOL_NAMES = [
   "connector_run",
   "camera_discover",
   "camera_add",
+  "orbit_source",
   "local_ui_build",
   "local_ui_disable",
   "memory_remember",

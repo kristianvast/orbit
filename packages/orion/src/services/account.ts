@@ -401,7 +401,8 @@ export class AccountService {
           id: GATEWAY_MODEL,
           name: "Orbit (cloud)",
           reasoning: false,
-          input: ["text"],
+          // Without "image" Pi strips screenshots, and the computer tool would act blind.
+          input: ["text", "image"],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           contextWindow: 128_000,
           maxTokens: 8192,

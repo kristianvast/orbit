@@ -246,7 +246,14 @@ mapped resource against them.
   keep them undoable.
 - **Tools:** farm tools are registered as Pi custom tools (typebox parameters). They call the same
   named query and mutation layer as `db.query` and `db.mutate`. Pi's coding tools (read/write/edit/bash)
-  start in the workspace and can reach the rest of the machine.
+  start in the workspace and can reach the rest of the machine. On Windows Orion also switches on
+  Pi's `powershell` tool, and drops `bash` when no bundled MinGit shell sits next to the sidecar, so
+  a shell always exists. Because a custom system prompt replaces Pi's own tool rules, the prompt in
+  `agent/hub.ts` carries Orion's working rules plus a "This computer" block (`computerPrompt`:
+  system, shell, Orbit version, workspace, data folder, checkout) so Orion never has to probe for them.
+- **Conversation titles:** a new conversation is listed under its opening line; when its first run
+  finishes, `SessionHub.nameSession` asks the session's model for a short title (`agent/title.ts`)
+  and emits `session.updated`. A title the farmer set is never replaced.
 - **Web access:** `web_search` and `web_fetch` (`agent/web.ts`) run on the farm PC with no
   account or key: search goes to DuckDuckGo's HTML endpoint and pages are turned into text with
   `HTMLRewriter`. The `browser` tool (`agent/browser.ts`) drives a headless browser through
@@ -259,7 +266,9 @@ mapped resource against them.
   the operating system's own tools and adds no native dependency: macOS `screencapture`/`sips`/
   `osascript` (needs Screen Recording and Accessibility for Orbit), Windows PowerShell with user32
   and `SendKeys`, Linux X11 `xdotool` plus ImageMagick `import` (Wayland is refused). Each call is
-  one atomic action, so nothing is held between calls and `chat.abort` stops it. Missing
+  one atomic action, so nothing is held between calls and `chat.abort` stops it. `type` and `key`
+  are refused while the focused window belongs to Orbit itself (Orion's parent process), because
+  those keys would land in the chat box and be sent as the farmer's messages. Missing
   permissions or tools come back as `Refused (<code>)` results that tell Orion to stop and ask the
   farmer instead of retrying.
 - **No approval gate:** Orion trusts the model, like the Pi agent itself. Tool calls run
@@ -300,11 +309,21 @@ Orbit starts minimal. **Home**, **Chat** (Ask Orion), **Settings**, and **Your p
   prompt names the Orbit checkout and loads its `AGENTS.md`, so Orion can change the app and itself
   (`apps/orbit/src` hot-reloads, `packages/orion` restarts under `bun --watch`). The Orion dev script
   passes `--app-source ../..`. Installed builds have no checkout and use custom pages instead.
-- **Your Orbit (local UI build):** to change existing screens, Orion edits an Orbit checkout
-  (`--app-source`, else `<data-dir>/app`, cloned at the installed version's tag by the `editing-orbit`
-  skill) and runs `local_ui_build`: install (first time), `bun run typecheck`, `bun run build:local`
-  (`vite build --base ./`). Only a passing build turns on `<data-dir>/local-ui.json` and emits
-  `localUi.updated` (a running local UI reloads). Orion serves `<checkout>/apps/orbit/dist` at
+- **Your Orbit (local build):** to change Orbit itself, Orion runs `orbit_source` (clones the
+  installed version's tag into `<data-dir>/app` on a `farm` branch and installs dependencies; a
+  no-op once it is there; `--app-source` replaces it in dev), edits, and runs `local_ui_build`:
+  commit the edits (`summary`), `bun run typecheck`, `bun run build:local` (`vite build --base ./`).
+- **Orion's own build (`services/local-orion.ts`):** when the checkout's Orion packages differ from
+  the release tag, the same build also typechecks `packages/orion` and starts it once on a throwaway
+  data folder; only then is `<data-dir>/local-orion.json` switched on. Orion is not recompiled: the
+  shipped binary is also a Bun runtime, so at startup `main.ts` runs the checkout's
+  `packages/orion/src/main.ts` in its own place (`LocalOrion.supervise`), passing stdio straight
+  through. A build that never reports ready, or exits non-zero, switches the marker off, and the
+  shipped Orion runs instead (its prompt then tells Orion why). After such a build Orion restarts
+  itself once no conversation is running: it shuts down cleanly and the desktop shell, which
+  restarts Orion whenever it exits, starts the new one. Continuing with the app's part: Only a passing build turns on `<data-dir>/local-ui.json` and emits
+  `localUi.updated` (a running local UI reloads; the shipped UI shows an "Open new version" bar, and
+  the tool result's `reloads` flag tells Orion which of the two to tell the farmer). Orion serves `<checkout>/apps/orbit/dist` at
   `/app/<token>/` with an injected `<base href>` and SPA fallback. At startup the shipped UI (Tauri, or
   web with `VITE_LOCAL_UI_HANDOFF=1`) asks `localUi.status`; on `ready` it calls `localUi.launched` and
   navigates there with `#return=<shipped url>`. The local build derives its endpoint from its own

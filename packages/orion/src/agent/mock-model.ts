@@ -8,6 +8,7 @@ import {
   type ToolCall,
 } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { askedIn, TITLE_INSTRUCTION } from "./title";
 
 export const MOCK_PROVIDER = "orion-mock";
 export const MOCK_MODEL = "mock-1";
@@ -98,6 +99,9 @@ function replyFor(messages: Message[]): { text: string } | { call: ToolCall } {
     };
   }
   const prompt = textOf(last);
+  if (prompt.startsWith(TITLE_INSTRUCTION)) {
+    return { text: `About: ${askedIn(prompt).split(" ").slice(0, 4).join(" ")}` };
+  }
   const trigger = MOCK_TRIGGERS.find((t) => t.match.test(prompt));
   if (trigger) {
     const index = messages.filter((m) => m.role === "assistant").length;

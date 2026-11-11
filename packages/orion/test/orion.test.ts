@@ -186,6 +186,28 @@ describe("mock model", () => {
     expect(tool?.status).toBe("done");
     expect(opened.items.at(-1)).toMatchObject({ kind: "assistant" });
   });
+
+  test("the first finished run names the conversation, and a name the farmer chose is kept", async () => {
+    const { client } = await setup();
+    const { session } = await client.request("sessions.create", {});
+    const named = waitFor(
+      client,
+      "session.updated",
+      (e) => e.sessionId === session.id && e.session.title.startsWith("About: "),
+    );
+    await client.request("chat.prompt", {
+      sessionId: session.id,
+      text: "good morning to my whole herd",
+    });
+    expect((await named).session.title).toBe("About: good morning to my");
+
+    const own = await client.request("sessions.create", { title: "Calving plan" });
+    const settled = waitFor(client, "agent.settled", (e) => e.sessionId === own.session.id);
+    await client.request("chat.prompt", { sessionId: own.session.id, text: "hello" });
+    await settled;
+    const { sessions } = await client.request("sessions.list", {});
+    expect(sessions.find((s) => s.id === own.session.id)?.title).toBe("Calving plan");
+  });
 });
 
 describe("tools run without approval prompts", () => {
@@ -552,9 +574,12 @@ describe("local UI build", () => {
     const { app, client } = await setup(dir);
     const { session } = await client.request("sessions.create", {});
     const updated = waitFor(client, "localUi.updated", () => true);
+    const firstBuild = waitFor(client, "tool.end", (e) => e.sessionId === session.id);
     const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
     await client.request("chat.prompt", { sessionId: session.id, text: "build my orbit" });
     expect(await updated).toMatchObject({ state: "ready", path: `/app/${TOKEN}/` });
+    // The shipped app is still on screen, so the farmer has to switch to the new build.
+    expect((await firstBuild).details).toMatchObject({ reloads: false });
     await settled;
 
     const origin = `http://127.0.0.1:${app.port}`;
@@ -568,6 +593,14 @@ describe("local UI build", () => {
     expect((await client.request("localUi.launched", {})).state).toBe("broken");
     expect((await client.request("localUi.status", {})).state).toBe("broken");
     expect((await client.request("localUi.booted", {})).state).toBe("ready");
+
+    // Once the farm's own build is the one on screen, a rebuild reloads it by itself.
+    const rebuild = waitFor(client, "tool.end", (e) => e.sessionId === session.id);
+    const resettled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
+    await client.request("chat.prompt", { sessionId: session.id, text: "build my orbit" });
+    expect((await rebuild).details).toMatchObject({ reloads: true });
+    await resettled;
+
     expect((await client.request("localUi.disable", {})).state).toBe("none");
     expect((await fetch(`${origin}/app/${TOKEN}/`)).status).toBe(404);
   });

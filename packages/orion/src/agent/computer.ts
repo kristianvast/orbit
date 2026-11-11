@@ -284,6 +284,8 @@ export interface Screenshot {
 interface Backend {
   screenshot(signal?: AbortSignal): Promise<Screenshot>;
   act(a: ComputerAction, signal?: AbortSignal): Promise<string>;
+  /** Process id that owns the window holding the keyboard, or null when no window has it. */
+  focusedPid(signal?: AbortSignal): Promise<number | null>;
 }
 
 function withTempFile<T>(fn: (file: string) => Promise<T>): Promise<T> {
@@ -430,11 +432,22 @@ const macBackend: Backend = {
     }
     return described(a);
   },
+  async focusedPid(signal) {
+    const out = await exec(
+      [
+        "osascript",
+        "-e",
+        'tell application "System Events" to get unix id of first application process whose frontmost is true',
+      ],
+      signal,
+    );
+    return Number(out) || null;
+  },
 };
 
 const PS_PRELUDE = [
   "$ErrorActionPreference='Stop'",
-  `Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class OrionInput{[DllImport("user32.dll")]public static extern bool SetProcessDPIAware();[DllImport("user32.dll")]public static extern bool SetCursorPos(int x,int y);[DllImport("user32.dll")]public static extern void mouse_event(uint f,int dx,int dy,int d,UIntPtr e);}'`,
+  `Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class OrionInput{[DllImport("user32.dll")]public static extern bool SetProcessDPIAware();[DllImport("user32.dll")]public static extern bool SetCursorPos(int x,int y);[DllImport("user32.dll")]public static extern void mouse_event(uint f,int dx,int dy,int d,UIntPtr e);[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();[DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);}'`,
   "[void][OrionInput]::SetProcessDPIAware()",
   "Add-Type -AssemblyName System.Windows.Forms,System.Drawing",
   "function Btn($f){[OrionInput]::mouse_event($f,0,0,0,[UIntPtr]::Zero)}",
@@ -511,6 +524,15 @@ const windowsBackend: Backend = {
     }
     return described(a);
   },
+  async focusedPid(signal) {
+    const out = await exec(
+      powershell(
+        '$p=[uint32]0;[void][OrionInput]::GetWindowThreadProcessId([OrionInput]::GetForegroundWindow(),[ref]$p);"$p"',
+      ),
+      signal,
+    );
+    return Number(out) || null;
+  },
 };
 
 export function xdotoolArgs(a: ComputerAction): string[] {
@@ -582,6 +604,13 @@ const linuxBackend: Backend = {
     }
     return described(a);
   },
+  async focusedPid(signal) {
+    // xdotool exits non-zero when no window is active or the window names no process.
+    const out = await exec([linuxTool("xdotool"), "getactivewindow", "getwindowpid"], signal).catch(
+      () => "",
+    );
+    return Number(out) || null;
+  },
 };
 
 function backendFor(platform: NodeJS.Platform): Backend {
@@ -597,11 +626,15 @@ function backendFor(platform: NodeJS.Platform): Backend {
   }
 }
 
-/** Runs one computer action; exported so tests and QA can drive the real backend directly. */
+/**
+ * Runs one computer action; exported so tests and QA can drive the real backend directly.
+ * `orbitPid` is the process that owns Orbit's window: Orion is its child, so the parent pid.
+ */
 export async function runComputerAction(
   a: ComputerAction,
   signal?: AbortSignal,
   platform: NodeJS.Platform = process.platform,
+  orbitPid: number = process.ppid,
 ): Promise<AgentToolResult<unknown>> {
   switch (a.action) {
     case "move":
@@ -638,6 +671,15 @@ export async function runComputerAction(
       details: { width: shot.width, height: shot.height },
     };
   }
+  if (
+    (a.action === "type" || a.action === "key") &&
+    (await backend.focusedPid(signal)) === orbitPid
+  ) {
+    throw new ComputerRefusal(
+      "unavailable",
+      "Orbit's own window has the keyboard, so these keys would land in this chat as if the farmer had written them. Never use the computer tool to run commands or to operate Orbit: run commands with the shell tool and change Orbit with its own tools. To type into another program, click inside that program's window first.",
+    );
+  }
   const done = await backend.act(a, signal);
   return { content: [{ type: "text", text: done }], details: { action: a.action } };
 }
@@ -648,7 +690,8 @@ export function createComputerTool(): ToolDefinition {
     label: "Use the computer",
     description: [
       "See and operate other programs on this computer: take a screenshot of the main screen, move and click the mouse, drag, scroll, type text and press keys.",
-      "Use it when no farm tool or connector covers the job, for example reading figures from a vendor herd-management or milking-robot program.",
+      "Use it only for another program that has no other way in, for example reading figures from a vendor herd-management or milking-robot program.",
+      "Never use it to run commands, open a terminal, read or write files, or operate Orbit itself: the shell and file tools do that directly, faster, and show you the result.",
       "Start with a screenshot and use its pixel coordinates; take another screenshot after acting to check the result.",
       "Before anything that changes data in another program or cannot be undone (saving, sending, deleting, paying, closing unsaved work), say what you will click or type and wait for the farmer's yes. Screenshots and pointer moves need no permission.",
       "If the result says Refused, stop, tell the farmer what is needed, and do not retry until they confirm.",

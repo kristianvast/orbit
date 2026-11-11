@@ -20,6 +20,8 @@ export interface OrionConfig {
   skillsUrl?: string | null;
   /** Exit when stdin closes (--parent-watch): the desktop shell holds the pipe, so a killed shell never leaves Orion orphaned. */
   parentWatch?: boolean;
+  /** Shuts Orion down cleanly so its parent starts it again; set only when a parent will. */
+  restart?: () => void;
 }
 
 /** OS application-data directory for Orbit (Windows %APPDATA%, macOS Application Support, XDG on Linux). */

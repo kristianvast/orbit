@@ -49,7 +49,7 @@ import { DEFAULT_SKILLS_URL, SkillService } from "./services/skills";
 import { maskKey, SettingsStore } from "./settings";
 import { VoiceSessions } from "./voice/session";
 
-export const SERVER_VERSION = "0.1.2";
+export const SERVER_VERSION = "0.1.3";
 
 const EXAMPLE_VIEWS_SKILL = "farm-views";
 
@@ -153,9 +153,12 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     config.appSource ?? join(config.dataDir, "app"),
     config.token,
     (status) => emit("localUi.updated", status),
+    { version: SERVER_VERSION },
   );
   const feedback = new FeedbackService(workspace.dir, SERVER_VERSION);
   const browser = createBrowserTool(config.dataDir);
+  // The tools are created before the hub they ask to restart.
+  let restartOrion: () => boolean = () => false;
   const hub = await SessionHub.create({
     dataDir: config.dataDir,
     workspace,
@@ -163,7 +166,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     repo,
     settings,
     tools: [
-      ...createFarmTools(farm, localUi, skills, modules),
+      ...createFarmTools(farm, localUi, skills, modules, () => restartOrion()),
       ...createFeedbackTools(feedback),
       ...createWebTools(),
       browser.tool,
@@ -173,7 +176,12 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     mockModel: config.mockModel,
     gatewayUrl: config.gatewayUrl,
     appSource: config.appSource,
+    version: SERVER_VERSION,
+    checkoutDir: localUi.checkoutDir,
+    localOrionError: () => localUi.orion.status().lastError,
+    ...(config.restart ? { restart: config.restart } : {}),
   });
+  restartOrion = () => hub.restartWhenIdle();
 
   const account = new AccountService({
     dataDir: config.dataDir,
