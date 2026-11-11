@@ -23,6 +23,7 @@ describe("embedded resources", () => {
     expect(out.dir).toBe(join(dir, "resources"));
     expect(out.connectorTemplateDir).toBe(join(dir, "resources", "connector-template"));
     expect(Object.keys(EMBEDDED_RESOURCES)).toContain("skills/herd-data/SKILL.md");
+    expect(Object.keys(EMBEDDED_RESOURCES)).toContain("skills/ui-design/SKILL.md");
     expect(Object.keys(EMBEDDED_RESOURCES)).toContain("connector-template/index.ts");
     for (const [rel, content] of Object.entries(EMBEDDED_RESOURCES)) {
       expect(readFileSync(join(out.dir, rel), "utf8")).toBe(content);
@@ -59,5 +60,6 @@ describe("embedded resources", () => {
     expect(agentsText).toBe(EMBEDDED_RESOURCES["AGENTS.md"]?.trim() as string);
     expect(prompt).toContain(agentsText);
     expect(prompt).toContain("herd-data");
+    expect(prompt).toContain("ui-design");
   });
 });

@@ -378,7 +378,7 @@ export function createFarmTools(
       name: "connector_configure",
       label: "Configure a connector",
       description:
-        "Save non-secret settings of a connector (host, port, user name, time zone...); they are merged into its config. Never pass passwords or keys: the farmer enters those in Sensors & Robots > Connections > Password, which stores them in the OS keychain.",
+        "Save non-secret settings of a connector (host, port, user name, time zone...); they are merged into its config. Never pass passwords or keys: the farmer enters those in Connections > Password, which stores them in the OS keychain.",
       parameters: Type.Object({
         id: Type.String(),
         config: Type.Record(Type.String(), Type.Unknown(), {
@@ -390,7 +390,7 @@ export function createFarmTools(
         const secretKeys = Object.keys(p.config).filter((k) => SECRET_KEY.test(k));
         if (secretKeys.length > 0) {
           return text(
-            `Not done: ${secretKeys.join(", ")} look like secrets. Ask the farmer to enter the password in Sensors & Robots > Connections instead.`,
+            `Not done: ${secretKeys.join(", ")} look like secrets. Ask the farmer to enter the password in Connections > Password instead.`,
             { secretKeys },
             true,
           );
@@ -599,7 +599,7 @@ export function createFeedbackTools(feedback: FeedbackService): ToolDefinition[]
       name: "share_build",
       label: "Share a build",
       description:
-        'Offer something built on this farm to other farms: a custom page (kind "page", folder pages/<name>), a connector (kind "connector", folder connectors/<name>) or a skill (kind "skill", folder skills/<name>). It goes to the Orbit team for review and reaches other farms only if they approve it. Needs a signed-in Orbit account. Before calling: get the farmer\'s yes, and remove this farm\'s name, animal data, addresses and every password or key from the files (settings belong in the connector configuration, not in code). The tool refuses files that still look like they hold a password or key.',
+        'Submit a working farm build for the Orbit marketplace: a custom page (kind "page", folder pages/<name>), a connector (kind "connector", folder connectors/<name>) or a skill (kind "skill", folder skills/<name>). Package other software as a self-contained skill with SKILL.md, source and run instructions first, and test that copy. Only text files in that folder are included (60 files, 512 KB maximum); hidden, generated and binary files are skipped. It goes to the Orbit team for review and reaches other farms only if they approve it. Needs a signed-in Orbit account. Before calling: get the farmer\'s yes, and remove this farm\'s name, animal data, addresses and every password or key from the files (settings belong in the connector configuration, not in code). The tool refuses files that still look like they hold a password or key.',
       parameters: Type.Object({
         kind: Type.Enum([...SHARED_BUILD_KINDS]),
         name: Type.String({ description: "Folder name of the page, connector or skill" }),
@@ -643,7 +643,7 @@ function createModulesTool(modules: ModulesStore): ToolDefinition {
     name: "orbit_modules",
     label: "Orbit screens",
     description:
-      'List, enable or disable Orbit\'s built-in screens: "herd" (animal records), "devices" (sensors and robots), "cameras". Orbit starts with only Home, Chat and Settings; enable a module when the farmer starts using that area. Disabling only hides the screen; no data is deleted.',
+      'List, enable or disable Orbit\'s built-in screens: "herd" (animal records), "devices" (Connections, existing connectors only), "cameras". Orbit starts with only Home, Chat and Settings; enable a module when the farmer starts using that area. There is no sensor setup screen. Disabling only hides the screen; no data is deleted.',
     parameters: Type.Object({
       action: Type.Enum(["list", "enable", "disable"]),
       id: Opt(Type.Enum([...MODULE_IDS])),

@@ -21,7 +21,7 @@ network. This skill's connector reads it with a read-only login and never writes
 3. `connector_configure` with the connector id and
    `{ "host": "...", "port": 1433, "database": "DDM", "user": "...", "timezone": "..." }`.
    Never put the password in config or files.
-4. Ask the farmer to open Sensors & Robots > Connections, enter the SQL password with Password on the
+4. Ask the farmer to open Connections > Password on the
    DelPro card, and switch the connector on.
 5. `connector_run` once and report what was imported. The first run brings in the herd, the
    milking history and 120 days of daily weights and temperatures; later runs only fetch what is new.

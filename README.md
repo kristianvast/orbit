@@ -2,6 +2,8 @@
 
 Orbit is an open-source desktop app for cattle (dairy and beef) and horse farms. You install it on your own computer on the farm, talk to Orion, its built-in AI assistant, and Orbit grows the screens and connections your farm needs. Records live on your PC first, work offline, and every change Orion makes can be undone with one click.
 
+Orion's core job is to build what your farm needs, including tools, automations and software for hardware you are working on, then offer to publish the working build as a marketplace skill with your yes and Orbit team review.
+
 **Status:** Early release. Interfaces, database tables, and cloud endpoints may still change.
 
 ## Download
@@ -22,7 +24,7 @@ A fresh install starts almost empty. The sidebar shows only **Home**, **Ask Orio
 
 1. **Switch Orion on:** When you first open Orbit and no AI model is set up yet, Home shows a setup card. You can create a free Orbit account (which includes 30 days of Orion at no cost, no card needed), sign in to an existing account, or bring your own AI provider key or subscription in Settings.
 2. **Tell Orion about your farm:** Type or speak to Orion from Home or **Ask Orion**. Tell it whether you keep dairy cattle, beef cattle, or horses, and what you want to see first.
-3. **Add only the screens you use:** Built-in screens for **Cattle** or **Horses** (`herd`), **Sensors & Robots** (`devices`), and **Cameras** (`cameras`) start turned off. They appear only when Orion switches them on, when data for that area first arrives, or when you toggle them in Settings. Disabling a module only hides the screen; your data stays intact.
+3. **Add only the screens you use:** Optional screens for **Cattle** or **Horses** (`herd`), **Connections** (`devices`, existing connectors only), and **Cameras** (`cameras`) start turned off; hiding one keeps its data. Orbit ships no ready sensor connection: Orion builds connections for unvalidated equipment with you and tests them against the real device before showing their data or controls; validated catalog connectors follow their setup skill.
 
 ## What Orion can do for a farm
 
@@ -51,6 +53,7 @@ If you sign in to an Orbit account, Orion syncs your farm tables (`farms`, `anim
 You can send bug reports, ideas, or questions straight to the Orbit team from **Settings > Feedback** (or the **Send feedback** link in the sidebar), or by asking Orion in the chat (`feedback_send`). Orion shows you the exact message first and sends it only after you say yes. Your Orbit version and operating system are included; your animal records and passwords are never attached.
 
 If you and Orion build a custom page, connector, or skill that could help other farms, you can ask Orion to share it (`share_build`). Before sending, Orion scans every file and refuses to upload anything that looks like a password, secret, or API key. Shared builds go to the Orbit team for review (`share_status` shows whether a submission is pending, approved, or rejected) and reach other farms only after approval through the [`skills/`](skills) catalog.
+Other workspace software is shared as a self-contained `skills/<name>/` package with instructions and source, tested before submission; sharing accepts text files, not binaries or arbitrary workspace folders.
 
 ## Plans and using your own AI key
 

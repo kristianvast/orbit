@@ -6,6 +6,8 @@ description: Add a new screen to the Orbit app (a dashboard, checklist, report, 
 
 # Custom pages
 
+Read and follow `ui-design` before building or changing a screen or Home card.
+
 A custom page is a folder `pages/<id>/` in the farm workspace (your working directory). Orbit lists
 every folder with an `index.html` in its menu under "Your pages" and shows it inside the app.
 

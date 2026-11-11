@@ -226,6 +226,8 @@ mapped resource against them.
   any `reviewNote`) via `GET /v1/submissions` (`shared.list` in the UI and `share_status` for
   Orion). Approved builds reach other farms only after the Orbit team reviews them and adds them to
   the `skills/` catalog in git.
+  Other workspace software is packaged and tested as a self-contained `skills/<name>/` folder
+  with `SKILL.md`, source and run instructions; arbitrary folders and binaries cannot be shared.
 - **Admin review:** Core serves admin endpoints under `/v1/admin/feedback` and
   `/v1/admin/submissions` (list, inspect files, and `PATCH` status/review notes) plus a browser
   review page at `/admin`, all gated by `CORE_ADMIN_TOKEN` (returned as 404 when unset).
@@ -280,6 +282,10 @@ mapped resource against them.
 ### Minimal-first modules
 
 Orbit starts minimal. **Home**, **Chat** (Ask Orion), **Settings**, and **Your pages** (custom pages) are always present and are not modules. Built-in domain screens are optional modules that start disabled on a fresh install:
+
+The `devices` module is called **Connections** and lists only existing connectors. Orbit ships no
+ready sensor connection: Orion builds unvalidated connections with the farmer and tests them
+against the real device before showing their data or controls; validated catalog skills supply their own setup.
 
 - **Protocol contract (`@orbit/protocol`):** `MODULE_IDS = ["herd", "devices", "cameras"] as const` (`ModuleId` is the union of those three literals). Each `OrbitModule` has `{ id: ModuleId, enabled: boolean, enabledAt: string | null, enabledBy: "orion" | "user" | "auto" | null }` (`enabledAt` is an ISO timestamp). `ModulesState` is `{ modules: OrbitModule[] }`, always containing all three IDs in `MODULE_IDS` order.
 - **Wire messages:** `modules.list` (empty params) returns `ModulesState`; `modules.enable` and `modules.disable` take `{ id: ModuleId }` and return `ModulesState`. Orion emits `modules.updated` with body `ModulesState` on every change from any cause.

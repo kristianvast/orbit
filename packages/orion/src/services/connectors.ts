@@ -188,7 +188,7 @@ export class ConnectorService {
     if (!connector.enabled) {
       throw new RepoError(
         "conflict",
-        `connector "${connector.name ?? connector.vendor}" is switched off; turn it on in Settings > Connectors first`,
+        `connector "${connector.name ?? connector.vendor}" is switched off; turn it on in Connections first`,
       );
     }
     const logs: string[] = [];

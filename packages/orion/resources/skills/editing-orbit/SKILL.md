@@ -6,6 +6,8 @@ description: Change Orbit itself (an existing screen, the menu, the words on scr
 
 # Editing Orbit
 
+Read and follow `ui-design` before changing anything with a screen.
+
 Orbit's installed app is a fixed build. To change it you edit a copy of its source and build it.
 Two tools do all the heavy work, so the whole job is three steps:
 
