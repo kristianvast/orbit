@@ -61,14 +61,18 @@ export const users = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").notNull(),
     name: text("name"),
-    passwordHash: text("password_hash").notNull(),
+    passwordHash: text("password_hash"),
+    googleSub: text("google_sub"),
     createdAt: ts("created_at").notNull().defaultNow(),
     emailVerifiedAt: ts("email_verified_at"),
     termsVersion: text("terms_version"),
     termsAcceptedAt: ts("terms_accepted_at"),
     dataConsentAt: ts("data_consent_at"),
   },
-  (t) => [uniqueIndex("users_email_unique").on(t.email)],
+  (t) => [
+    uniqueIndex("users_email_unique").on(t.email),
+    uniqueIndex("users_google_sub_unique").on(t.googleSub),
+  ],
 );
 
 /** Single-use email links (verify address, reset password). Only the SHA-256 of the code is stored. */
@@ -160,7 +164,7 @@ export const billingCustomers = pgTable("billing_customers", {
 
 export const farmSubscriptions = pgTable("farm_subscriptions", {
   farmId: uuid("farm_id").primaryKey(),
-  plan: text("plan", { enum: ["free", "pen", "barn"] }).notNull(),
+  plan: text("plan", { enum: ["free", "orion", "cam2", "cam4", "cam6"] }).notNull(),
   interval: text("interval", { enum: ["month", "year"] }),
   status: text("status").notNull(),
   stripeSubscriptionId: text("stripe_subscription_id").unique(),
@@ -203,6 +207,74 @@ export const voiceUsage = pgTable(
   (t) => [index("voice_usage_farm_created_idx").on(t.farmId, t.createdAt)],
 );
 
+/**
+ * Website voice demo calls, one row per minted ElevenLabs credential. `visitor` is an HMAC of the
+ * client IP (IPv6 by /64), never the raw address. `charged_seconds` stays null until the real call
+ * length is known; until then the call counts as `reserved_seconds`.
+ */
+export const voiceDemoSessions = pgTable(
+  "voice_demo_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    visitor: text("visitor").notNull(),
+    conversationId: text("conversation_id"),
+    reservedSeconds: integer("reserved_seconds").notNull(),
+    chargedSeconds: integer("charged_seconds"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("voice_demo_sessions_visitor_created_idx").on(t.visitor, t.createdAt),
+    index("voice_demo_sessions_created_idx").on(t.createdAt),
+  ],
+);
+
+export const feedback = pgTable("feedback", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id"),
+  farmId: uuid("farm_id"),
+  kind: text("kind").notNull(),
+  message: text("message").notNull(),
+  contactEmail: text("contact_email"),
+  appVersion: text("app_version"),
+  os: text("os"),
+  locale: text("locale"),
+  diagnostics: text("diagnostics"),
+  status: text("status").notNull().default("new"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const submissions = pgTable(
+  "submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    farmId: uuid("farm_id"),
+    kind: text("kind").notNull(),
+    name: text("name").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    appVersion: text("app_version"),
+    files: jsonb("files").$type<{ path: string; content: string }[]>().notNull(),
+    bytes: integer("bytes").notNull(),
+    status: text("status").notNull().default("pending"),
+    reviewNote: text("review_note"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    reviewedAt: ts("reviewed_at"),
+  },
+  (t) => [index("submissions_user_created_idx").on(t.userId, t.createdAt)],
+);
+
+/** Rolling feedback limits survive restarts; no raw anonymous IP is retained. */
+export const feedbackRateEvents = pgTable(
+  "feedback_rate_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    identity: text("identity").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("feedback_rate_events_identity_created_idx").on(t.identity, t.createdAt)],
+);
+
 export const coreSchema = {
   ...pg.pgSchema,
   apiTokens,
@@ -220,6 +292,10 @@ export const coreSchema = {
   stripeEvents,
   hardwareOrders,
   voiceUsage,
+  voiceDemoSessions,
+  feedback,
+  submissions,
+  feedbackRateEvents,
 };
 
 /** Any Drizzle Postgres database (bun-sql in production, PGlite in tests) over coreSchema. */

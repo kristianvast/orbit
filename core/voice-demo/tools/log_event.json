@@ -1,0 +1,77 @@
+{
+  "access_info": {
+    "access_source": "creator",
+    "anonymous_access_level_override": null,
+    "creator_email": "kristian@agrointel.no",
+    "creator_name": "Kristian Vastveit",
+    "is_creator": true,
+    "role": "admin"
+  },
+  "id": "tool_4201m70d2rdqfh4bx80rykw9rb4k",
+  "response_mocks": null,
+  "tool_config": {
+    "assignments": [],
+    "description": "Record something on a cow's record when the farmer asks you to log, note or record it: a treatment, a note, a vet visit, a heat or an insemination. Returns JSON { ok, event_id, cow_id, date, summary }.",
+    "disable_interruptions": false,
+    "dynamic_variables": {
+      "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "expects_response": true,
+    "force_pre_tool_speech": false,
+    "interruption_mode": "allow",
+    "name": "log_event",
+    "parameters": {
+      "description": "",
+      "dynamic_variable": "",
+      "is_omitted": false,
+      "properties": {
+        "cow_id": {
+          "allowed_values": null,
+          "allowed_values_dynamic_variable": "",
+          "constant_value": "",
+          "description": "Ear tag of the cow, e.g. \"0613\".",
+          "dynamic_variable": "",
+          "enum": null,
+          "is_omitted": false,
+          "is_system_provided": false,
+          "type": "string"
+        },
+        "kind": {
+          "allowed_values": null,
+          "allowed_values_dynamic_variable": "",
+          "constant_value": "",
+          "description": "What kind of record this is.",
+          "dynamic_variable": "",
+          "enum": ["treatment", "note", "vet_visit", "heat", "insemination"],
+          "is_omitted": false,
+          "is_system_provided": false,
+          "type": "string"
+        },
+        "text": {
+          "allowed_values": null,
+          "allowed_values_dynamic_variable": "",
+          "constant_value": "",
+          "description": "What to record, in the farmer's words, e.g. \"treated left hind with spray\".",
+          "dynamic_variable": "",
+          "enum": null,
+          "is_omitted": false,
+          "is_system_provided": false,
+          "type": "string"
+        }
+      },
+      "required": ["cow_id", "kind", "text"],
+      "type": "object"
+    },
+    "pre_tool_speech": "auto",
+    "response_timeout_secs": 10,
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "tool_error_handling_mode": "auto",
+    "type": "client"
+  },
+  "usage_stats": {
+    "avg_latency_secs": 0,
+    "total_calls": 0
+  }
+}

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import type { webcrypto } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { pg } from "@orbit/schema";
 import { eq, sql } from "drizzle-orm";
@@ -177,6 +178,25 @@ async function push(
 }
 
 describe("registration and sign-in", () => {
+  test("eight-character passwords register; seven characters fail weak_password", async () => {
+    const a = app();
+    const accepted = await call(a, "POST", "/v1/auth/register", {
+      email: "eight@farm.test",
+      password: "12345678",
+      acceptTerms: true,
+    });
+    expect(accepted.status).toBe(201);
+    const rejected = await call(a, "POST", "/v1/auth/register", {
+      email: "seven@farm.test",
+      password: "1234567",
+      acceptTerms: true,
+    });
+    expect(rejected).toMatchObject({
+      status: 400,
+      body: { error: { code: "weak_password" } },
+    });
+  });
+
   test("register signs in, stores only an argon2id hash and a hashed session token", async () => {
     const a = app();
     const r = await call(a, "POST", "/v1/auth/register", {
@@ -189,7 +209,7 @@ describe("registration and sign-in", () => {
     expect(r.body.user).toMatchObject({ email: "kari@farm.test", name: "Kari" });
     const token = r.body.session.token as string;
     const [stored] = await db.select().from(users);
-    expect(stored?.passwordHash.startsWith("$argon2id$")).toBe(true);
+    expect(stored?.passwordHash?.startsWith("$argon2id$")).toBe(true);
     const sessions = await db.select().from(userSessions);
     expect(sessions.map((s) => s.tokenHash)).not.toContain(token);
     const me = await call(a, "GET", "/v1/me", undefined, as(token));
@@ -262,6 +282,258 @@ describe("registration and sign-in", () => {
     expect((await call(a, "GET", "/v1/me", undefined, as(login.body.session.token))).status).toBe(
       401,
     );
+  });
+});
+
+describe("Google sign-in", () => {
+  const clientId = "website.apps.googleusercontent.com";
+  let signingKey: CryptoKey;
+  let jwk: webcrypto.JsonWebKey;
+  let fetches = 0;
+
+  beforeAll(async () => {
+    const pair = await crypto.subtle.generateKey(
+      {
+        name: "RSASSA-PKCS1-v1_5",
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256",
+      },
+      true,
+      ["sign", "verify"],
+    );
+    signingKey = pair.privateKey;
+    jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  });
+
+  function googleApp(extra: Partial<AppOptions> = {}) {
+    fetches = 0;
+    return app({
+      googleClientIds: [clientId, "desktop.apps.googleusercontent.com"],
+      corsOrigins: ["https://pecorva.com"],
+      fetch: async (input) => {
+        expect(String(input)).toBe("https://www.googleapis.com/oauth2/v3/certs");
+        fetches++;
+        return Response.json(
+          { keys: [{ ...jwk, kid: "test-key", alg: "RS256", use: "sig" }] },
+          { headers: { "cache-control": "public, max-age=120" } },
+        );
+      },
+      ...extra,
+    });
+  }
+
+  async function credential(claims: Record<string, unknown> = {}, key = signingKey) {
+    const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+    const unsigned = `${encode({ alg: "RS256", kid: "test-key" })}.${encode({
+      iss: "https://accounts.google.com",
+      aud: clientId,
+      sub: "google-person-1",
+      email: "Google@Farm.Test",
+      email_verified: true,
+      name: "Google Farmer",
+      iat: Math.floor(clock / 1000),
+      exp: Math.floor(clock / 1000) + 3600,
+      ...claims,
+    })}`;
+    const signature = await crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      new TextEncoder().encode(unsigned),
+    );
+    return `${unsigned}.${Buffer.from(signature).toString("base64url")}`;
+  }
+
+  const signIn = async (a: App, claims: Record<string, unknown> = {}, fields = {}) =>
+    call(a, "POST", "/v1/auth/google", {
+      credential: await credential(claims),
+      acceptTerms: true,
+      ...fields,
+    });
+
+  test("creates a verified passwordless user, consent and device session without email", async () => {
+    const a = googleApp();
+    const r = await signIn(a, {}, { dataConsent: true, deviceName: "Website" });
+    expect(r).toMatchObject({
+      status: 201,
+      body: {
+        created: true,
+        user: { email: "google@farm.test", emailVerified: true, name: "Google Farmer" },
+      },
+    });
+    const [user] = await db.select().from(users);
+    expect(user).toMatchObject({
+      googleSub: "google-person-1",
+      passwordHash: null,
+      termsVersion: "2026-11",
+    });
+    expect(user?.emailVerifiedAt).not.toBeNull();
+    expect(user?.termsAcceptedAt).not.toBeNull();
+    expect(user?.dataConsentAt).not.toBeNull();
+    expect(mail.sent).toHaveLength(0);
+    const me = await call(a, "GET", "/v1/me", undefined, as(r.body.session.token));
+    expect(me.body.user).toEqual(r.body.user);
+    expect(await db.select().from(userSessions)).toMatchObject([{ deviceName: "Website" }]);
+  });
+
+  test("returning subjects sign in without terms even when their Google email changes", async () => {
+    const a = googleApp();
+    const first = await signIn(a);
+    const again = await signIn(a, { email: "changed@farm.test" }, { acceptTerms: false });
+    expect(again.status).toBe(200);
+    expect(again.body.created).toBe(false);
+    expect(again.body.user.id).toBe(first.body.user.id);
+    expect(again.body.user.email).toBe("google@farm.test");
+    expect(again.body.session.token).not.toBe(first.body.session.token);
+    expect(await db.select().from(users)).toHaveLength(1);
+    expect(fetches).toBe(1);
+    clock += 121_000;
+    expect((await signIn(a)).status).toBe(200);
+    expect(fetches).toBe(2);
+  });
+
+  test("links an existing password account by lowercase email and verifies it", async () => {
+    const a = googleApp();
+    const registered = await call(a, "POST", "/v1/auth/register", {
+      email: "google@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    const linked = await signIn(a, {}, { acceptTerms: false });
+    expect(linked).toMatchObject({
+      status: 200,
+      body: { created: false, user: { id: registered.body.user.id, emailVerified: true } },
+    });
+    const [user] = await db.select().from(users);
+    expect(user?.googleSub).toBe("google-person-1");
+    expect(await Bun.password.verify(PASSWORD, user?.passwordHash ?? "")).toBe(true);
+    expect(
+      (await call(a, "POST", "/v1/auth/login", { email: "google@farm.test", password: PASSWORD }))
+        .status,
+    ).toBe(200);
+    expect((await signIn(a, { sub: "different-subject" })).status).toBe(401);
+  });
+
+  test.each([
+    ["wrong audience", { aud: "untrusted-client" }],
+    ["expired", { exp: Math.floor(Date.parse("2026-11-05T12:00:00Z") / 1000) - 61 }],
+    ["future issued", { iat: Math.floor(Date.parse("2026-11-05T12:00:00Z") / 1000) + 61 }],
+    ["wrong issuer", { iss: "https://attacker.test" }],
+    ["missing subject", { sub: "" }],
+  ])("rejects %s tokens", async (_label, claims) => {
+    expect(await signIn(googleApp(), claims)).toMatchObject({
+      status: 401,
+      body: { error: { code: "invalid_google_token" } },
+    });
+    expect(await db.select().from(users)).toHaveLength(0);
+  });
+
+  test("rejects a bad signature and malformed credentials", async () => {
+    const a = googleApp();
+    const pair = await crypto.subtle.generateKey(
+      {
+        name: "RSASSA-PKCS1-v1_5",
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256",
+      },
+      false,
+      ["sign", "verify"],
+    );
+    for (const token of [await credential({}, pair.privateKey), "bad.token", null]) {
+      expect(await call(a, "POST", "/v1/auth/google", { credential: token })).toMatchObject({
+        status: 401,
+        body: { error: { code: "invalid_google_token" } },
+      });
+    }
+  });
+
+  test.each([{ email_verified: false }, { email_verified: "true" }, { email: null }])(
+    "requires a verified email: %j",
+    async (claims) => {
+      expect(await signIn(googleApp(), claims)).toMatchObject({
+        status: 400,
+        body: { error: { code: "google_email_unverified" } },
+      });
+    },
+  );
+
+  test("new users must accept terms and missing configuration disables sign-in", async () => {
+    const a = googleApp();
+    expect(
+      await call(a, "POST", "/v1/auth/google", { credential: await credential() }),
+    ).toMatchObject({
+      status: 400,
+      body: { error: { code: "terms_required" } },
+    });
+    expect(await db.select().from(users)).toHaveLength(0);
+    expect(await signIn(app())).toMatchObject({
+      status: 503,
+      body: { error: { code: "google_disabled" } },
+    });
+  });
+
+  test("passwordless login and change fail cleanly; reset can set an eight-character password", async () => {
+    const a = googleApp();
+    const google = await signIn(a);
+    for (const password of [PASSWORD, "orbit-dummy-password"]) {
+      expect(
+        await call(a, "POST", "/v1/auth/login", { email: "google@farm.test", password }),
+      ).toMatchObject({ status: 401, body: { error: { code: "invalid_credentials" } } });
+    }
+    expect(
+      await call(
+        a,
+        "POST",
+        "/v1/me/password",
+        { currentPassword: "orbit-dummy-password", newPassword: PASSWORD },
+        as(google.body.session.token),
+      ),
+    ).toMatchObject({ status: 401, body: { error: { code: "invalid_credentials" } } });
+    await call(a, "POST", "/v1/auth/password-reset", { email: "google@farm.test" });
+    expect(
+      (
+        await call(a, "POST", "/v1/auth/password-reset/confirm", {
+          token: codeFrom("google@farm.test", "password_reset"),
+          password: "12345678",
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await call(a, "POST", "/v1/auth/login", {
+          email: "google@farm.test",
+          password: "12345678",
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  test("permits the Pecorva website CORS preflight and response", async () => {
+    const a = googleApp();
+    const preflight = await a.request("/v1/auth/google", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://pecorva.com",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("https://pecorva.com");
+    const response = await a.request("/v1/auth/google", {
+      method: "POST",
+      headers: { origin: "https://pecorva.com", "content-type": "application/json" },
+      body: JSON.stringify({
+        credential: await credential({
+          iss: "accounts.google.com",
+          aud: "desktop.apps.googleusercontent.com",
+        }),
+        acceptTerms: true,
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://pecorva.com");
   });
 });
 
@@ -516,7 +788,7 @@ describe("farm data with user sessions", () => {
     const viewer = await memberWith(a, owner.token, "v@farm.test", "viewer");
     await db
       .insert(farmSubscriptions)
-      .values({ farmId: FARM, plan: "pen", interval: "month", status: "active" });
+      .values({ farmId: FARM, plan: "cam2", interval: "month", status: "active" });
     const r = await call(
       a,
       "POST",
@@ -668,11 +940,11 @@ describe("account lifecycle", () => {
     await call(a, "POST", "/v1/farms", { id: FARM, name: "Hill farm" }, as(kari.token));
     await db
       .insert(farmSubscriptions)
-      .values({ farmId: FARM, plan: "pen", interval: "month", status: "active" });
+      .values({ farmId: FARM, plan: "cam2", interval: "month", status: "active" });
     const exported = await call(a, "GET", "/v1/me/export", undefined, as(kari.token));
     expect(exported.body).toMatchObject({
       profile: { email: "kari@farm.test", termsVersion: "2026-11" },
-      memberships: [{ farmId: FARM, role: "owner", plan: "pen" }],
+      memberships: [{ farmId: FARM, role: "owner", plan: "cam2" }],
     });
     const wrong = await call(a, "DELETE", "/v1/me", { password: "not it at all" }, as(kari.token));
     expect(wrong.status).toBe(401);
@@ -696,9 +968,9 @@ describe("account lifecycle", () => {
     const websiteFarm = bought.body.farm.id as string;
     await db
       .insert(farmSubscriptions)
-      .values({ farmId: websiteFarm, plan: "pen", interval: "year", status: "active" });
+      .values({ farmId: websiteFarm, plan: "cam2", interval: "year", status: "active" });
     expect((await call(a, "GET", "/v1/me", undefined, as(kari.token))).body.farms).toMatchObject([
-      { farmId: websiteFarm, plan: "pen" },
+      { farmId: websiteFarm, plan: "cam2" },
     ]);
     const stranger = await register(a, "who@farm.test");
     const theft = await call(
@@ -718,11 +990,11 @@ describe("account lifecycle", () => {
     );
     expect(adopted).toMatchObject({ status: 201, body: { farm: { id: FARM, role: "owner" } } });
     expect((await call(a, "GET", "/v1/me", undefined, as(kari.token))).body.farms).toMatchObject([
-      { farmId: FARM, role: "owner", plan: "pen" },
+      { farmId: FARM, role: "owner", plan: "cam2" },
     ]);
     expect(await db.select().from(pg.farms).where(eq(pg.farms.id, websiteFarm))).toEqual([]);
     const status = await call(a, "GET", "/v1/billing/status", undefined, as(kari.token, FARM));
-    expect(status.body).toMatchObject({ plan: "pen", status: "active" });
+    expect(status.body).toMatchObject({ plan: "cam2", status: "active" });
   });
 
   test("a cloud farm that already holds data is never adopted", async () => {

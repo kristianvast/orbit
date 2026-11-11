@@ -1,0 +1,75 @@
+{
+  "access_info": {
+    "access_source": "creator",
+    "anonymous_access_level_override": null,
+    "creator_email": "kristian@agrointel.no",
+    "creator_name": "Kristian Vastveit",
+    "is_creator": true,
+    "role": "admin"
+  },
+  "id": "tool_4201m706kh4qeyftmxvp7wa47e84",
+  "response_mocks": null,
+  "tool_config": {
+    "assignments": [],
+    "description": "Answer a herd-wide question from the farm database and show the result on screen. Topics: overview (counts per group, lactating cows, average milk today, alerts, who is calving now), calving_soon, fresh_cows, heat, health, lameness, not_at_feed (no feed fence visits today), milk_trend (14-day average milk per cow and change vs last week). Optional group filters by group name (Fresh, Milking, Dry, Close-up, Heifers). Returns JSON { topic, group, answer_facts, data_source }.",
+    "disable_interruptions": false,
+    "dynamic_variables": {
+      "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "expects_response": true,
+    "force_pre_tool_speech": false,
+    "interruption_mode": "allow",
+    "name": "query_herd",
+    "parameters": {
+      "description": "",
+      "dynamic_variable": "",
+      "is_omitted": false,
+      "properties": {
+        "group": {
+          "allowed_values": null,
+          "allowed_values_dynamic_variable": "",
+          "constant_value": "",
+          "description": "Optional group name: Fresh, Milking, Dry, Close-up or Heifers.",
+          "dynamic_variable": "",
+          "enum": null,
+          "is_omitted": false,
+          "is_system_provided": false,
+          "type": "string"
+        },
+        "topic": {
+          "allowed_values": null,
+          "allowed_values_dynamic_variable": "",
+          "constant_value": "",
+          "description": "Which herd question to answer.",
+          "dynamic_variable": "",
+          "enum": [
+            "overview",
+            "calving_soon",
+            "fresh_cows",
+            "heat",
+            "health",
+            "lameness",
+            "not_at_feed",
+            "milk_trend"
+          ],
+          "is_omitted": false,
+          "is_system_provided": false,
+          "type": "string"
+        }
+      },
+      "required": ["topic"],
+      "type": "object"
+    },
+    "pre_tool_speech": "auto",
+    "response_timeout_secs": 10,
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "tool_error_handling_mode": "auto",
+    "type": "client"
+  },
+  "usage_stats": {
+    "avg_latency_secs": 0.12,
+    "total_calls": 1
+  }
+}

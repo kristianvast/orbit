@@ -1,0 +1,77 @@
+{
+  "access_info": {
+    "access_source": "creator",
+    "anonymous_access_level_override": null,
+    "creator_email": "kristian@agrointel.no",
+    "creator_name": "Kristian Vastveit",
+    "is_creator": true,
+    "role": "admin"
+  },
+  "id": "tool_9301m706kgrnf3qvxh1930z5gccb",
+  "response_mocks": null,
+  "tool_config": {
+    "assignments": [],
+    "description": "Arm a calving alert for one cow so the farmer is notified before she calves. Call it when the farmer asks to be told, warned or alerted about a calving. Returns JSON { ok, alert_id, cow_id, lead_hours, channel, summary }.",
+    "disable_interruptions": false,
+    "dynamic_variables": {
+      "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "expects_response": true,
+    "force_pre_tool_speech": false,
+    "interruption_mode": "allow",
+    "name": "set_calving_alert",
+    "parameters": {
+      "description": "",
+      "dynamic_variable": "",
+      "is_omitted": false,
+      "properties": {
+        "channel": {
+          "allowed_values": null,
+          "allowed_values_dynamic_variable": "",
+          "constant_value": "",
+          "description": "Where to send the alert. Default \"phone\".",
+          "dynamic_variable": "",
+          "enum": ["phone", "sms", "app"],
+          "is_omitted": false,
+          "is_system_provided": false,
+          "type": "string"
+        },
+        "cow_id": {
+          "allowed_values": null,
+          "allowed_values_dynamic_variable": "",
+          "constant_value": "",
+          "description": "The cow ID, e.g. \"0427\".",
+          "dynamic_variable": "",
+          "enum": null,
+          "is_omitted": false,
+          "is_system_provided": false,
+          "type": "string"
+        },
+        "lead_hours": {
+          "allowed_values": null,
+          "allowed_values_dynamic_variable": "",
+          "constant_value": "",
+          "description": "Hours before the expected calving to alert. Default 2.",
+          "dynamic_variable": "",
+          "enum": null,
+          "is_omitted": false,
+          "is_system_provided": false,
+          "type": "number"
+        }
+      },
+      "required": ["cow_id"],
+      "type": "object"
+    },
+    "pre_tool_speech": "auto",
+    "response_timeout_secs": 10,
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "tool_error_handling_mode": "auto",
+    "type": "client"
+  },
+  "usage_stats": {
+    "avg_latency_secs": 0,
+    "total_calls": 0
+  }
+}

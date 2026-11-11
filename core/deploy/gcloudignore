@@ -3,6 +3,7 @@
 !/package.json
 !/bun.lock
 !/tsconfig.base.json
+!/patches/
 !/packages/
 /packages/*
 !/packages/schema/

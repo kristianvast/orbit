@@ -3,6 +3,8 @@ FROM oven/bun:1 AS base
 WORKDIR /app
 COPY package.json bun.lock* ./
 COPY tsconfig.base.json ./
+# Root package.json patchedDependencies: bun install fails when a listed patch file is missing.
+COPY patches patches
 COPY packages/schema packages/schema
 COPY core/api core/api
 RUN bun install --production --filter '@core/api'

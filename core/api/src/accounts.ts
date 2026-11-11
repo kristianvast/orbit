@@ -1,5 +1,6 @@
 // Accounts, farm membership and invites:
-//   POST /v1/auth/register | /v1/auth/login | /v1/auth/logout, GET /v1/me, POST /v1/farms,
+//   POST /v1/auth/register | /v1/auth/login | /v1/auth/google | /v1/auth/logout,
+//   GET /v1/me, POST /v1/farms,
 //   GET|PATCH|DELETE /v1/farms/:farmId/members[/:userId],
 //   GET|POST|DELETE /v1/farms/:farmId/invites[/:inviteId], POST /v1/invites/accept.
 // Passwords are argon2id hashes (Bun.password); session tokens and invite codes are stored only as
@@ -42,7 +43,9 @@ import {
   users,
   voiceUsage,
 } from "./db";
+import { createGoogleIdentityVerifier, type GoogleIdentity } from "./google-sign-in";
 import { type EmailLinks, type EmailMessage, emails, type Mailer } from "./mailer";
+import type { FetchLike } from "./shape";
 
 export const INVITE_PREFIX = "orb_i_";
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -53,7 +56,7 @@ const RESEND_COOLDOWN_MS = 60 * 1000;
 const RESETS_PER_HOUR = 3;
 export const TERMS_VERSION = "2026-11";
 const PAID_STATUSES = ["active", "trialing"];
-export const PASSWORD_MIN = 10;
+export const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 256;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,6 +70,8 @@ export interface AccountOptions {
   mailer: Mailer;
   links: EmailLinks;
   termsVersion?: string;
+  googleClientIds?: readonly string[];
+  fetch?: FetchLike;
 }
 
 type AccountEnv = { Variables: { user: SessionUser; sessionToken: string } };
@@ -74,7 +79,7 @@ type Ctx = Context<AccountEnv>;
 
 class ApiError extends Error {
   constructor(
-    readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 429,
+    readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 429 | 503,
     readonly code: string,
     message: string,
   ) {
@@ -140,11 +145,21 @@ function farmIdParam(c: Ctx): string {
 // password (no account enumeration through login timing).
 const DUMMY_HASH = Bun.password.hash("orbit-dummy-password", { algorithm: "argon2id" });
 
+async function verifyPassword(password: string, hash: string | null | undefined) {
+  const valid = await Bun.password.verify(
+    password.slice(0, PASSWORD_MAX),
+    hash ?? (await DUMMY_HASH),
+  );
+  return hash != null && valid;
+}
+
 export function registerAccountRoutes(app: Hono, db: CoreDb, options: AccountOptions) {
   const { now, mailer, links } = options;
   const termsVersion = options.termsVersion ?? TERMS_VERSION;
   const throttle = options.loginThrottle ?? { maxFailures: 10, windowMs: 15 * 60 * 1000 };
   const routes = app as unknown as Hono<AccountEnv>;
+  const googleClientIds = options.googleClientIds ?? [];
+  const verifyGoogle = createGoogleIdentityVerifier(googleClientIds, now, options.fetch);
 
   const userView = (u: SessionUser) => ({
     id: u.id,
@@ -281,10 +296,7 @@ export function registerAccountRoutes(app: Hono, db: CoreDb, options: AccountOpt
         throw new ApiError(429, "too_many_attempts", "too many failed sign-ins; try again later");
       }
       const [user] = await db.select().from(users).where(eq(users.email, address)).limit(1);
-      const ok = await Bun.password.verify(
-        password.slice(0, PASSWORD_MAX),
-        user?.passwordHash ?? (await DUMMY_HASH),
-      );
+      const ok = await verifyPassword(password, user?.passwordHash);
       if (!user || !ok) {
         await db
           .delete(loginFailures)
@@ -299,6 +311,95 @@ export function registerAccountRoutes(app: Hono, db: CoreDb, options: AccountOpt
         user: userView({ ...user, emailVerified: user.emailVerifiedAt !== null }),
         session,
       });
+    }),
+  );
+
+  routes.post(
+    "/v1/auth/google",
+    wrap(async (c) => {
+      if (googleClientIds.length === 0) {
+        throw new ApiError(503, "google_disabled", "Google sign-in is not configured");
+      }
+      const b = await body(c);
+      let identity: GoogleIdentity;
+      try {
+        identity = await verifyGoogle(b.credential);
+      } catch {
+        throw new ApiError(401, "invalid_google_token", "invalid Google sign-in token");
+      }
+      if (
+        identity.email_verified !== true ||
+        typeof identity.email !== "string" ||
+        identity.email.length > 200 ||
+        !EMAIL.test(identity.email)
+      ) {
+        throw new ApiError(400, "google_email_unverified", "Google email must be verified");
+      }
+      const address = identity.email.toLowerCase();
+      const deviceName = str(b.deviceName, "deviceName", { optional: true });
+      const ts = now().toISOString();
+      const result = await db.transaction(async (tx) => {
+        const bySub = () =>
+          tx.select().from(users).where(eq(users.googleSub, identity.sub)).limit(1).for("update");
+        let [user] = await bySub();
+        let created = false;
+        if (!user) {
+          [user] = await tx
+            .select()
+            .from(users)
+            .where(eq(users.email, address))
+            .limit(1)
+            .for("update");
+          if (!user) {
+            if (b.acceptTerms !== true) {
+              throw new ApiError(400, "terms_required", "accept the terms of service to sign up");
+            }
+            [user] = await tx
+              .insert(users)
+              .values({
+                email: address,
+                googleSub: identity.sub,
+                name: typeof identity.name === "string" ? identity.name.slice(0, 200) : null,
+                emailVerifiedAt: ts,
+                termsVersion,
+                termsAcceptedAt: ts,
+                dataConsentAt: b.dataConsent === true ? ts : null,
+              })
+              .onConflictDoNothing()
+              .returning();
+            created = !!user;
+            if (!user) {
+              [user] = await bySub();
+              if (!user) {
+                [user] = await tx
+                  .select()
+                  .from(users)
+                  .where(eq(users.email, address))
+                  .limit(1)
+                  .for("update");
+              }
+            }
+          }
+          if (!user || (user.googleSub !== null && user.googleSub !== identity.sub)) {
+            throw new ApiError(401, "invalid_google_token", "invalid Google sign-in token");
+          }
+          if (user.googleSub === null) {
+            [user] = await tx
+              .update(users)
+              .set({ googleSub: identity.sub, emailVerifiedAt: user.emailVerifiedAt ?? ts })
+              .where(eq(users.id, user.id))
+              .returning();
+          }
+        }
+        if (!user) throw new Error("Google account was not saved");
+        const session = await createSession(tx, user.id, deviceName, now());
+        return {
+          user: userView({ ...user, emailVerified: user.emailVerifiedAt !== null }),
+          session,
+          created,
+        };
+      });
+      return c.json(result, result.created ? 201 : 200);
     }),
   );
 
@@ -459,7 +560,7 @@ export function registerAccountRoutes(app: Hono, db: CoreDb, options: AccountOpt
       const user = c.get("user");
       const [row] = await db.select().from(users).where(eq(users.id, user.id));
       const current = typeof b.currentPassword === "string" ? b.currentPassword : "";
-      if (!row || !(await Bun.password.verify(current.slice(0, PASSWORD_MAX), row.passwordHash))) {
+      if (!(await verifyPassword(current, row?.passwordHash))) {
         throw new ApiError(401, "invalid_credentials", "current password is wrong");
       }
       const passwordHash = await Bun.password.hash(newPassword(b.newPassword), {
@@ -609,7 +710,7 @@ export function registerAccountRoutes(app: Hono, db: CoreDb, options: AccountOpt
       const user = c.get("user");
       const [row] = await db.select().from(users).where(eq(users.id, user.id));
       const password = typeof b.password === "string" ? b.password : "";
-      if (!row || !(await Bun.password.verify(password.slice(0, PASSWORD_MAX), row.passwordHash))) {
+      if (!(await verifyPassword(password, row?.passwordHash))) {
         throw new ApiError(401, "invalid_credentials", "password is wrong");
       }
       await db.transaction(async (tx) => {

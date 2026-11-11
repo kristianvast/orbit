@@ -1,41 +1,21 @@
-import { canManageMembers } from "@orbit/schema";
-import { eq } from "drizzle-orm";
+import { canManageMembers, createHlc, pg } from "@orbit/schema";
+import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { type Principal, resolveSession } from "./auth";
+import type { Principal } from "./auth";
+import {
+  addHardware,
+  addTaxFields,
+  hardwareCheckout,
+  hardwareSelection,
+  redirectUrl,
+} from "./billing-checkout";
 import { billingWebhook } from "./billing-webhook";
-import { billingCustomers, type CoreDb, users } from "./db";
+import { billingCustomers, type CoreDb, farmMembers, users } from "./db";
 import { entitlements, usageThisMonth } from "./entitlements";
-import { currency, hardware, lookupKey, plans } from "./plans";
+import { currency, hardware, isPaidPlan, lookupKey, plans, trialDays } from "./plans";
 import { BillingError, object, priceFor, type StripeOptions, string, stripeClient } from "./stripe";
 
 export type FarmEnv = { Variables: { principal: Principal } };
-
-function redirectUrl(value: unknown, fallback: string | undefined): string {
-  const text = string(value ?? fallback, "redirect URL");
-  let url: URL;
-  try {
-    url = new URL(text);
-  } catch (error) {
-    if (error instanceof TypeError)
-      throw new BillingError(400, "bad_request", "Invalid redirect URL");
-    throw error;
-  }
-  if (
-    url.protocol !== "https:" &&
-    !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))
-  ) {
-    throw new BillingError(400, "bad_request", "Redirect URL must use HTTPS");
-  }
-  return url.href;
-}
-
-/** Stripe Tax, VAT number collection and a billing address on every Checkout Session. */
-function addTaxFields(form: URLSearchParams, options: StripeOptions) {
-  if (!options.automaticTax) return;
-  form.set("automatic_tax[enabled]", "true");
-  form.set("tax_id_collection[enabled]", "true");
-  form.set("billing_address_collection", "required");
-}
 
 export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: StripeOptions) {
   const routes = new Hono<FarmEnv>();
@@ -50,101 +30,14 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
   routes.get("/plans", (c) =>
     c.json({
       currency,
+      locked: false,
+      trialDays,
       plans,
       hardware: hardware.map(({ id, name, price }) => ({ id, name, price })),
     }),
   );
   routes.post("/webhook", (c) => billingWebhook(db, c.req.raw, options));
-  routes.post("/hardware-checkout", async (c) => {
-    const body = object(await c.req.json());
-    const boxes = body.box ?? 0;
-    const cameras = body.cameras ?? 0;
-    if (
-      typeof boxes !== "number" ||
-      typeof cameras !== "number" ||
-      !Number.isSafeInteger(boxes) ||
-      !Number.isSafeInteger(cameras) ||
-      boxes < 0 ||
-      cameras < 0 ||
-      boxes + cameras === 0
-    ) {
-      throw new BillingError(400, "bad_request", "Choose a positive number of boxes or cameras");
-    }
-    const bearer = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "")?.[1]?.trim();
-    const buyer = bearer ? await resolveSession(db, bearer, options.now()) : null;
-    const form = new URLSearchParams({
-      mode: "payment",
-      currency,
-      success_url: redirectUrl(undefined, options.successUrl),
-      cancel_url: redirectUrl(undefined, options.cancelUrl),
-      customer_creation: "always",
-      "invoice_creation[enabled]": "true",
-      "metadata[box]": String(boxes),
-      "metadata[cameras]": String(cameras),
-    });
-    if (buyer) {
-      form.set("metadata[user_id]", buyer.id);
-      form.set("customer_email", buyer.email);
-    }
-    addTaxFields(form, options);
-    for (const [index, country] of [
-      "AT",
-      "BE",
-      "BG",
-      "HR",
-      "CY",
-      "CZ",
-      "DK",
-      "EE",
-      "FI",
-      "FR",
-      "DE",
-      "GR",
-      "HU",
-      "IE",
-      "IT",
-      "LV",
-      "LT",
-      "LU",
-      "MT",
-      "NL",
-      "PL",
-      "PT",
-      "RO",
-      "SK",
-      "SI",
-      "ES",
-      "SE",
-      "NO",
-      "IS",
-      "CH",
-      "GB",
-      "US",
-      "CA",
-      "AU",
-      "NZ",
-    ].entries()) {
-      form.set(`shipping_address_collection[allowed_countries][${index}]`, country);
-    }
-    if (body.email !== undefined && !buyer) {
-      const email = string(body.email, "email");
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-        throw new BillingError(400, "bad_request", "Invalid email");
-      form.set("customer_email", email);
-    }
-    let index = 0;
-    for (const [quantity, key] of [
-      [boxes, "pecorva_box"],
-      [cameras, "pecorva_camera"],
-    ] as const) {
-      if (quantity === 0) continue;
-      form.set(`line_items[${index}][price]`, await priceFor(stripe, key));
-      form.set(`line_items[${index}][quantity]`, String(quantity));
-      index++;
-    }
-    const session = await stripe("checkout/sessions", form);
-    return c.json({ url: string(session.url, "checkout URL") });
-  });
+  routes.post("/hardware-checkout", (c) => hardwareCheckout(db, c.req.raw, options));
   routes.use("*", async (c, next) => {
     if (["/checkout", "/portal", "/status"].some((suffix) => c.req.path.endsWith(suffix))) {
       const principal = c.get("principal");
@@ -164,12 +57,12 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
   });
   routes.get("/status", async (c) => {
     const farmId = c.get("principal").farmId;
-    const { subscription, plan, tokenAllowance, voiceSecondsAllowance } = await entitlements(
-      db,
-      farmId,
-    );
+    const now = options.now();
+    const { subscription, plan, tokenAllowance, voiceSecondsAllowance, trialEndsAt, usageStart } =
+      await entitlements(db, farmId, now);
     return c.json({
       plan: plan.id,
+      trialEndsAt,
       interval: subscription?.interval ?? null,
       status: subscription?.status ?? "free",
       currentPeriodEnd: subscription?.currentPeriodEnd
@@ -177,7 +70,7 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
         : null,
       cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd ?? false,
       usage: {
-        ...(await usageThisMonth(db, farmId, options.now())),
+        ...(await usageThisMonth(db, farmId, usageStart)),
         tokenAllowance,
         voiceSecondsAllowance,
       },
@@ -186,9 +79,52 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
   routes.post("/checkout", async (c) => {
     const body = object(await c.req.json());
     const { plan, interval } = body;
-    if ((plan !== "pen" && plan !== "barn") || (interval !== "month" && interval !== "year"))
-      throw new BillingError(400, "bad_request", "Choose pen or barn and month or year");
-    const farmId = c.get("principal").farmId;
+    if (!isPaidPlan(plan) || (interval !== "month" && interval !== "year"))
+      throw new BillingError(
+        400,
+        "bad_request",
+        "Choose an Orion or camera plan and month or year",
+      );
+    const selection = hardwareSelection(body);
+    let farmId = c.get("principal").farmId;
+    const userId = c.get("principal").userId as string;
+    if (!farmId) {
+      const existing = await db
+        .select({ farmId: farmMembers.farmId, role: farmMembers.role })
+        .from(farmMembers)
+        .where(eq(farmMembers.userId, userId))
+        .orderBy(asc(farmMembers.createdAt));
+      const manageable = existing.find((m) => canManageMembers(m.role));
+      if (manageable) {
+        farmId = manageable.farmId;
+      } else if (existing.length > 0) {
+        throw new BillingError(403, "forbidden", "Only owners and managers manage billing");
+      } else {
+        const [buyer] = await db
+          .select({ name: users.name })
+          .from(users)
+          .where(eq(users.id, userId));
+        const trimmedName = buyer?.name?.trim();
+        const farmName = trimmedName ? `${trimmedName}'s farm` : "My farm";
+        const newFarmId = crypto.randomUUID();
+        const ts = options.now().toISOString();
+        const hlc = createHlc("cloud").tick();
+        await db.transaction(async (tx) => {
+          await tx.insert(pg.farms).values({
+            id: newFarmId,
+            name: farmName,
+            timezone: "UTC",
+            farmId: newFarmId,
+            createdAt: ts,
+            updatedAt: ts,
+            hlc,
+            originDevice: "cloud",
+          });
+          await tx.insert(farmMembers).values({ farmId: newFarmId, userId, role: "owner" });
+        });
+        farmId = newFarmId;
+      }
+    }
     let [customer] = await db
       .select()
       .from(billingCustomers)
@@ -217,15 +153,15 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
       customer: customer.stripeCustomerId,
       "line_items[0][price]": await priceFor(stripe, lookupKey(plan, interval)),
       "line_items[0][quantity]": "1",
-      success_url: redirectUrl(body.successUrl, options.successUrl),
-      cancel_url: redirectUrl(body.cancelUrl, options.cancelUrl),
+      success_url: redirectUrl(body.successUrl, options.successUrl, options),
+      cancel_url: redirectUrl(body.cancelUrl, options.cancelUrl, options),
     });
     addTaxFields(form, options);
+    await addHardware(form, selection, stripe);
     if (options.automaticTax) {
       form.set("customer_update[address]", "auto");
       form.set("customer_update[name]", "auto");
     }
-    const userId = c.get("principal").userId as string;
     for (const [key, value] of Object.entries({
       farm_id: farmId,
       plan,
@@ -249,7 +185,7 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
       "billing_portal/sessions",
       new URLSearchParams({
         customer: customer.stripeCustomerId,
-        return_url: redirectUrl(body.returnUrl, options.successUrl),
+        return_url: redirectUrl(body.returnUrl, options.successUrl, options),
       }),
     );
     return c.json({ url: string(session.url, "portal URL") });

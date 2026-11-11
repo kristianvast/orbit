@@ -30,6 +30,8 @@ export interface StripeOptions {
   readonly webhookSecret?: string;
   readonly successUrl?: string;
   readonly cancelUrl?: string;
+  /** Website origins a client-supplied redirect may point at, besides the two URLs above. */
+  readonly redirectOrigins?: readonly string[];
   /** Stripe Tax must be activated (origin address, registrations) before turning this on. */
   readonly automaticTax?: boolean;
   readonly mailer?: Mailer;

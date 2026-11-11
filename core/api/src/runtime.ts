@@ -4,6 +4,7 @@ import type { CoreDb } from "./db";
 import { createGoogleTokenProvider } from "./google-auth";
 import { createMailer } from "./mailer";
 import { createVoiceGateway, type VoiceConnection } from "./voice";
+import { VOICE_DEMO_DEFAULTS } from "./voice-demo";
 
 export function serveCore(db: CoreDb, defaultPort: number) {
   const google = process.env.LLM_UPSTREAM_AUTH === "google";
@@ -40,6 +41,11 @@ export function serveCore(db: CoreDb, defaultPort: number) {
       ...(process.env.ORBIT_DOWNLOAD_URL ? { downloadUrl: process.env.ORBIT_DOWNLOAD_URL } : {}),
     },
     termsVersion: process.env.TERMS_VERSION || undefined,
+    adminToken: process.env.CORE_ADMIN_TOKEN || undefined,
+    feedbackEmail: process.env.CORE_FEEDBACK_EMAIL || undefined,
+    googleClientIds: process.env.GOOGLE_CLIENT_IDS?.split(",")
+      .map((id) => id.trim())
+      .filter(Boolean),
     llm: {
       upstreamUrl,
       upstreamApiKey: process.env.LLM_UPSTREAM_API_KEY,
@@ -51,6 +57,22 @@ export function serveCore(db: CoreDb, defaultPort: number) {
       defaultMonthlyTokenBudget: Number(process.env.LLM_MONTHLY_TOKEN_BUDGET ?? 2_000_000),
     },
     version: process.env.CORE_VERSION,
+    voiceDemo: {
+      apiKey: process.env.ELEVENLABS_API_KEY || undefined,
+      agentId: process.env.ELEVENLABS_AGENT_ID || undefined,
+      voices: {
+        female: {
+          id: process.env.ELEVENLABS_VOICE_FEMALE || VOICE_DEMO_DEFAULTS.voices.female.id,
+          name: process.env.ELEVENLABS_VOICE_FEMALE_NAME || VOICE_DEMO_DEFAULTS.voices.female.name,
+        },
+        male: {
+          id: process.env.ELEVENLABS_VOICE_MALE || VOICE_DEMO_DEFAULTS.voices.male.id,
+          name: process.env.ELEVENLABS_VOICE_MALE_NAME || VOICE_DEMO_DEFAULTS.voices.male.name,
+        },
+      },
+      perIp: Number(process.env.VOICE_DEMO_PER_IP) || VOICE_DEMO_DEFAULTS.perIp,
+      daily: Number(process.env.VOICE_DEMO_DAILY) || VOICE_DEMO_DEFAULTS.daily,
+    },
   });
   const voice = createVoiceGateway(db, {
     project,

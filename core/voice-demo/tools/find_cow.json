@@ -1,0 +1,55 @@
+{
+  "access_info": {
+    "access_source": "creator",
+    "anonymous_access_level_override": null,
+    "creator_email": "kristian@agrointel.no",
+    "creator_name": "Kristian Vastveit",
+    "is_creator": true,
+    "role": "admin"
+  },
+  "id": "tool_3301m706kgdmfwrsynrr2e8btf2e",
+  "response_mocks": null,
+  "tool_config": {
+    "assignments": [],
+    "description": "Look up one cow on the farm and open her card on the farmer's screen. Call it whenever the farmer names or describes a cow: an ear tag like \"0613\" (any number they say), a name, or a description like \"the one limping\". The cow returned is the one in the calving pen right now; her card shows the live calving-pen camera with her ID. Returns JSON { found, cow:{id,name,breed,age_years,parity,group,status,dim,last_calving,expected_calving,repro,lameness_score,series_14d:{milk_kg,rumination_min,activity_idx,temp_c,feed_visits},events,calving:{stage,next,startedMinAgo,camera,pen}}, candidates }. Never state cow facts without calling this first.",
+    "disable_interruptions": false,
+    "dynamic_variables": {
+      "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "expects_response": true,
+    "force_pre_tool_speech": false,
+    "interruption_mode": "allow",
+    "name": "find_cow",
+    "parameters": {
+      "description": "",
+      "dynamic_variable": "",
+      "is_omitted": false,
+      "properties": {
+        "query": {
+          "allowed_values": null,
+          "allowed_values_dynamic_variable": "",
+          "constant_value": "",
+          "description": "Ear tag digits exactly as the farmer said them (e.g. \"0613\" or \"613\"), a cow name, or a description such as \"the one limping\".",
+          "dynamic_variable": "",
+          "enum": null,
+          "is_omitted": false,
+          "is_system_provided": false,
+          "type": "string"
+        }
+      },
+      "required": ["query"],
+      "type": "object"
+    },
+    "pre_tool_speech": "auto",
+    "response_timeout_secs": 10,
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "tool_error_handling_mode": "auto",
+    "type": "client"
+  },
+  "usage_stats": {
+    "avg_latency_secs": 0.15,
+    "total_calls": 2
+  }
+}

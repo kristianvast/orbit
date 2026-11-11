@@ -11,10 +11,12 @@ import {
   MAX_CHANGES_PER_REQUEST,
 } from "./changes";
 import type { CoreDb } from "./db";
+import { createFeedbackRoutes } from "./feedback";
 import { handleLlm, type LlmGatewayOptions } from "./llm";
 import { createLogMailer, type EmailLinks, type Mailer } from "./mailer";
 import { type FetchLike, proxyShape } from "./shape";
 import type { StripeOptions } from "./stripe";
+import { registerVoiceDemoRoutes, VOICE_DEMO_DEFAULTS, type VoiceDemoOptions } from "./voice-demo";
 
 export interface AppOptions {
   db: CoreDb;
@@ -34,6 +36,10 @@ export interface AppOptions {
   mailer?: Mailer;
   links?: Partial<EmailLinks>;
   termsVersion?: string;
+  googleClientIds?: readonly string[];
+  adminToken?: string;
+  feedbackEmail?: string;
+  voiceDemo?: Partial<Omit<VoiceDemoOptions, "db" | "fetch" | "now">>;
 }
 
 export const DEFAULT_LINKS: EmailLinks = {
@@ -64,10 +70,12 @@ export function createApp(options: AppOptions) {
     fetch: doFetch,
     now,
   };
+  const websiteOrigins = [...(options.corsOrigins ?? ["http://localhost:3000"])];
   const websiteCors = cors({
-    origin: [...(options.corsOrigins ?? ["http://localhost:3000"])],
+    origin: websiteOrigins,
     allowHeaders: ["authorization", "content-type", "x-orbit-farm"],
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    exposeHeaders: ["Retry-After"],
   });
   for (const path of [
     "/v1/auth/*",
@@ -76,6 +84,9 @@ export function createApp(options: AppOptions) {
     "/v1/farms",
     "/v1/farms/*",
     "/v1/billing/*",
+    "/v1/voice/demo/*",
+    "/v1/feedback",
+    "/v1/submissions",
   ])
     app.use(path, websiteCors);
 
@@ -91,12 +102,32 @@ export function createApp(options: AppOptions) {
   // Cloud Run's front end reserves paths ending in "z", so /healthz never reaches the service there.
   app.get("/health", health);
 
+  app.route(
+    "/",
+    createFeedbackRoutes(options.db, {
+      adminToken: options.adminToken,
+      notificationEmail: options.feedbackEmail,
+      mailer,
+      now,
+    }),
+  );
+
   registerAccountRoutes(app as unknown as Hono, options.db, {
     now,
     loginThrottle: options.loginThrottle,
     mailer,
     links,
     termsVersion: options.termsVersion,
+    googleClientIds: options.googleClientIds,
+    fetch: doFetch,
+  });
+
+  registerVoiceDemoRoutes(app as unknown as Hono, {
+    ...VOICE_DEMO_DEFAULTS,
+    ...options.voiceDemo,
+    db: options.db,
+    fetch: doFetch,
+    now,
   });
 
   // Farm-scoped routes accept a user session (+ x-orbit-farm, membership required) or a legacy
@@ -108,6 +139,10 @@ export function createApp(options: AppOptions) {
     const user = token ? await resolveSession(options.db, token, now()) : null;
     if (user) {
       if (!wanted) {
+        if (c.req.path.endsWith("/billing/checkout")) {
+          c.set("principal", { farmId: "", role: "owner", userId: user.id });
+          return next();
+        }
         return c.json(
           { error: { code: "bad_request", message: `${FARM_HEADER} header is required` } },
           400,
@@ -138,6 +173,7 @@ export function createApp(options: AppOptions) {
   }
   registerBillingRoutes(app, options.db, {
     ...options.billing,
+    redirectOrigins: websiteOrigins,
     mailer,
     links,
     fetch: doFetch,

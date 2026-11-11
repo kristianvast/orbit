@@ -1,9 +1,9 @@
 // POST /v1/llm/*: metered LLM gateway. Forwards the request to the configured upstream provider
-// with Core's API key, refuses farms over their monthly token budget, and records one llm_usage
-// row per request (token counts parsed from JSON or SSE responses). Billing is not built yet.
+// with Core's API key, enforces the current paid or free-month token allowance, and records one
+// llm_usage row per request (token counts parsed from JSON or SSE responses).
 import { and, eq, gte, sql } from "drizzle-orm";
 import { type CoreDb, farmBudgets, llmUsage } from "./db";
-import { entitlements, PLAN_REQUIRED } from "./entitlements";
+import { entitlements, planRequired } from "./entitlements";
 import type { FetchLike } from "./shape";
 
 export interface LlmGatewayOptions {
@@ -56,11 +56,16 @@ export function monthStart(now: Date): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }
 
-export async function usedThisMonth(db: CoreDb, farmId: string, now: Date): Promise<number> {
+export async function usedThisMonth(
+  db: CoreDb,
+  farmId: string,
+  window: Date | string,
+): Promise<number> {
+  const since = typeof window === "string" ? window : monthStart(window);
   const [row] = await db
     .select({ used: sql<string | number | null>`coalesce(sum(${llmUsage.totalTokens}), 0)` })
     .from(llmUsage)
-    .where(and(eq(llmUsage.farmId, farmId), gte(llmUsage.createdAt, monthStart(now))));
+    .where(and(eq(llmUsage.farmId, farmId), gte(llmUsage.createdAt, since)));
   return Number(row?.used ?? 0);
 }
 
@@ -110,9 +115,15 @@ export async function handleLlm(
   path: string,
   options: LlmGatewayOptions,
 ): Promise<Response> {
-  const entitlement = options.sessionPrincipal ? await entitlements(db, farmId) : null;
-  if (entitlement && entitlement.plan.id === "free") {
-    return Response.json(PLAN_REQUIRED, { status: 402 });
+  const now = options.now();
+  const entitlement = options.sessionPrincipal ? await entitlements(db, farmId, now) : null;
+  if (
+    entitlement &&
+    entitlement.plan.id === "free" &&
+    !entitlement.trialEndsAt &&
+    entitlement.tokenAllowance === 0
+  ) {
+    return Response.json(planRequired(entitlement), { status: 402 });
   }
   if (!options.upstreamUrl || (!options.upstreamApiKey && !options.accessToken)) {
     return Response.json(
@@ -120,9 +131,8 @@ export async function handleLlm(
       { status: 503 },
     );
   }
-  const now = options.now();
   const [used, budget] = await Promise.all([
-    usedThisMonth(db, farmId, now),
+    usedThisMonth(db, farmId, entitlement?.usageStart ?? now),
     entitlement
       ? Promise.resolve(entitlement.tokenAllowance)
       : budgetFor(db, farmId, options.defaultMonthlyTokenBudget),

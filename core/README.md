@@ -22,8 +22,8 @@ Orbit install (@orbit/sync)                       Core
 ## Endpoints
 
 Farm routes accept a user session with `x-orbit-farm` (membership required), or a legacy farm
-token. Billing management and voice require user sessions. Registration, login, plans,
-hardware checkout and signed Stripe webhooks are public.
+token. Billing management, hardware checkout and voice require user sessions. Registration,
+login, the price-gated plan catalog and signed Stripe webhooks are public.
 
 | Route                                                                   | Purpose                                                                                                                                                                                       |
 | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -52,6 +52,10 @@ For API development without Docker, use `bun run --filter '@core/api' dev`. It l
 port 8787 (override `PORT`) and migrates PGlite persisted in `core/api/.dev-data/`, which is
 gitignored. Export configuration first, or use `bun --env-file=core/.env core/api/src/dev.ts`.
 Electric is optional for this runner; shape requests still need a real Electric instance.
+For local accounts, run `MAIL_PROVIDER=log bun run --filter '@core/api' dev` from the repository
+root. No database or mail credentials are needed. Verification messages appear in that terminal
+as `[mail:verify_email]`, including `/account/?verify=<code>`. Open the link on the local website,
+or POST `{"token":"<code>"}` to `http://localhost:8787/v1/auth/verify-email`.
 
 ## Accounts and email
 
@@ -59,6 +63,17 @@ Sign-up (`POST /v1/auth/register`) requires `acceptTerms: true` and records the 
 (`TERMS_VERSION`) and the optional `dataConsent` choice. Core emails a verify link to
 `PUBLIC_SITE_URL/account/?verify=<code>`; plan checkout and invite acceptance need a confirmed
 address. Email links are single-use, stored as SHA-256 hashes, and expire (verify 48 h, reset 1 h).
+Passwords must be 8 to 256 characters for registration, reset and password changes.
+
+`POST /v1/auth/google` accepts `{credential, acceptTerms?, dataConsent?, deviceName?}`, where
+`credential` is the Google Identity Services ID token. Core verifies its RS256 signature,
+issuer, configured client audience and timestamps (60 seconds of clock skew), and requires
+a verified email. Existing Google subjects sign in first; otherwise a matching lowercase email
+links the account. New accounts require `acceptTerms: true`, record the consent choice, and have
+no password or verification email. Password reset can add a password later. Returns
+`{user, session, created}` with 201 for a new account and 200 otherwise, using the same user and
+session fields as password login. Errors include 503 `google_disabled`, 401 `invalid_google_token`,
+400 `google_email_unverified`, and 400 `terms_required`.
 
 | Route                                                     | Purpose                                                                                                                                                                  |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -78,26 +93,91 @@ instances. `MAIL_PROVIDER` is `resend`, `postmark` or `log` (prints messages, fo
 farm invite, plan active (Orbit download and sign-in steps), hardware order receipt, and an
 order notice to `ORDERS_EMAIL`.
 
+## Feedback and shared builds
+
+`POST /v1/feedback` accepts an optional user session and
+`{kind:"issue"|"idea"|"other",message,contactEmail?,appVersion?,os?,locale?,diagnostics?}`.
+Messages are 1 to 5000 characters; diagnostics are at most 20000. It returns `201 {id}`.
+Each user, or client IP for anonymous requests, can send 20 messages per rolling 24 hours
+(429 `rate_limited` thereafter). The client IP follows the Cloud Run convention: the last
+`X-Forwarded-For` hop. Without that header, anonymous callers share the `unknown` bucket.
+`feedback_rate_events` stores hashed anonymous identities and timestamps; an advisory transaction
+lock makes the check and insert atomic across instances. Expired events for an identity are pruned
+when it next submits. No raw IP is retained.
+
+`POST /v1/submissions` requires a user session and accepts
+`{kind:"page"|"connector"|"skill",name,title,description,appVersion?,files:[{path,content}]}`.
+Names match `^[a-z0-9][a-z0-9-]{0,47}$`; titles are 1 to 120 characters and descriptions
+1 to 2000. Include 1 to 60 UTF-8 text files, at most 512 KiB of content combined
+(oversize returns 413). Paths are at most 200 characters, relative, without `..`, and each
+segment matches `^[A-Za-z0-9_][A-Za-z0-9._-]*$`. Returns `201 {id,status:"pending"}`.
+For either POST, `x-orbit-farm` is recorded only when the signed-in user is a member.
+`GET /v1/submissions` requires a session and returns the caller's own builds, newest first:
+`{submissions:[{id,kind,name,title,status,reviewNote,createdAt,reviewedAt}]}`.
+
+Set `CORE_FEEDBACK_EMAIL` to receive `feedback_received` and `submission_received` emails
+through the configured mailer. Submission notices contain paths, never file bodies.
+Mail failures are logged after the database write and do not fail either request.
+
+Set the secret `CORE_ADMIN_TOKEN` to enable the owner inbox at `/admin` and these bearer-token
+routes (all return 404 while disabled; wrong tokens return 401):
+
+| Route                               | Body / response                               |
+| ----------------------------------- | --------------------------------------------- |
+| `GET /v1/admin/feedback?status=`    | `{feedback:[...]}` with full feedback rows    |
+| `PATCH /v1/admin/feedback/:id`      | `{status:"new"                                | "read"     | "done"}`; returns updated row              |
+| `GET /v1/admin/submissions?status=` | `{submissions:[...]}` with metadata, no files |
+| `GET /v1/admin/submissions/:id`     | Full submission row including `files`         |
+| `PATCH /v1/admin/submissions/:id`   | `{status:"pending"                            | "approved" | "rejected",reviewNote?}`; updated metadata |
+
+Response fields use camelCase and ISO-8601 timestamps. Reviewing sets `reviewedAt`; returning to
+pending clears it. Omitting `reviewNote` preserves it; an empty string clears it. The standalone
+admin page keeps the token in `sessionStorage` until forgotten or the tab closes. Farmer text
+is displayed as text, including file content; builds are never executed or published.
+
+For Cloud Run provisioning, pass `SECRET_CORE_ADMIN_TOKEN=<strong token>` and optionally
+`CORE_FEEDBACK_EMAIL=<address>`. The admin secret is mounted only when a real value exists;
+the provisioning placeholder never enables the admin routes.
+
 ## Billing and Gemini
 
-`GET /v1/billing/plans` publishes EUR prices: Free, Pen (49/month or 490/year), Barn
-(189/month or 1890/year); the box is 920 and a tested camera is 150 once. API prices are
-euros; Stripe amounts are cents. Pen includes 3 million Orion tokens and 60 voice minutes
-per UTC calendar month; Barn includes 15 million and 300 minutes. Free users bring their
-own provider key in Orbit Settings.
+`GET /v1/billing/plans` returns `{currency:"eur",locked:false,trialDays:30,plans,hardware}` publicly:
+
+| Plan               | Cameras | EUR/month | EUR/year | Orion tokens/month | Voice minutes/month |
+| ------------------ | ------- | --------- | -------- | ------------------ | ------------------- |
+| Free (`free`)      | 0       | 0         | 0        | 0                  | 0                   |
+| Orion (`orion`)    | 0       | 20        | 200      | 2,000,000          | 30                  |
+| 2 cameras (`cam2`) | 2       | 49        | 490      | 3,000,000          | 60                  |
+| 4 cameras (`cam4`) | 4       | 75        | 750      | 5,000,000          | 100                 |
+| 6 cameras (`cam6`) | 6       | 95        | 950      | 8,000,000          | 150                 |
+
+The Pecorva box is EUR 920 and a Tested camera is EUR 150 once. API prices are euros;
+Stripe amounts are cents. Paid allowances reset at the UTC calendar month start.
+Each farm gets one free Orion pool (2 million tokens and 30 voice minutes) for 30 days from
+the earliest account creation date among its owners. During this month its plan remains `free`
+and usage counts from that date, across calendar month boundaries. The month is granted only once
+that owner's email address is confirmed; until then the gateway answers 402 `plan_required` with
+a confirm-your-email message. Farms without an owner have no free month. A paid active or
+trialing subscription supersedes it.
 
 Set `STRIPE_SECRET_KEY` and run `bun run --filter '@core/api' stripe:setup` once per Stripe
 account. It idempotently creates products and EUR lookup prices. Configure Stripe to send
 `checkout.session.completed`, `customer.subscription.created|updated|deleted`, and
-`invoice.payment_failed` to `POST /v1/billing/webhook`, then set `STRIPE_WEBHOOK_SECRET`.
+`checkout.session.async_payment_succeeded|failed`, and `invoice.payment_failed` to
+`POST /v1/billing/webhook`, then set `STRIPE_WEBHOOK_SECRET`.
 Signatures expire after five minutes; event claims and subscription effects commit together.
 
 Session routes take `Authorization: Bearer <session>` and `x-orbit-farm`:
 
-- `POST /v1/billing/checkout`: `{plan:"pen"|"barn",interval:"month"|"year",successUrl?,cancelUrl?}`.
+- `POST /v1/billing/checkout`: `{plan:"orion"|"cam2"|"cam4"|"cam6",interval:"month"|"year",box?,cameras?,successUrl?,cancelUrl?}`.
+  Hardware quantities are whole numbers (`box` 0–20, `cameras` 0–64). Nonzero quantities add
+  one-time hardware to the same subscription Checkout Session and collect shipping.
 - `POST /v1/billing/portal`: `{returnUrl?}`. Checkout and portal require owner or manager.
 - `GET /v1/billing/status`: subscription state plus token and voice usage for any member.
-- Public `POST /v1/billing/hardware-checkout`: `{box:0,cameras:1,email?}` with shipping collection.
+  `trialEndsAt` is an ISO timestamp during the free month, otherwise null.
+- `POST /v1/billing/hardware-checkout`: `{box:0,cameras:1,successUrl?,cancelUrl?}` with shipping
+  collection. Requires a user session, with no farm header. Buyer email comes from the session.
+  Paid hardware orders and receipts are recorded once for either session mode.
 
 Redirect defaults are `BILLING_SUCCESS_URL` and `BILLING_CANCEL_URL`. Browser access uses
 `CORE_CORS_ORIGINS`, a comma-separated list (dev default `http://localhost:3000`).
@@ -110,7 +190,8 @@ until 60 seconds before expiration. Auth uses GCP metadata on Cloud Run, then a
 `gcloud auth application-default print-access-token`.
 
 Active or trialing paid subscriptions supply token allowances; `farm_budgets` overrides
-the token allowance. No paid plan returns 402 `plan_required`; a consumed allowance
+the token allowance. After the free month, no paid plan returns 402 `plan_required`; the farmer
+can subscribe to Orion or a camera plan, or use their own provider key. A consumed allowance
 returns 429 `budget_exceeded`. Legacy API-token principals keep the historical
 `LLM_MONTHLY_TOKEN_BUDGET` fallback and farm override behavior for existing installs.
 
@@ -118,13 +199,13 @@ returns 429 `budget_exceeded`. Legacy API-token principals keep the historical
 frames. Core forces `VOICE_MODEL=gemini-3.8-live` and `VOICE_LOCATION=us-central1`; clients
 send BidiGenerateContent setup, audio and tool-response frames. OAuth stays in the upstream
 authorization header. Connected seconds persist to `voice_usage` every second and on close;
-concurrent connections share the allowance. Reaching it closes with 4402. An unpaid farm
-receives HTTP 402 before upgrade. Upstream disconnection ends the client connection.
+concurrent connections share the allowance, including the free month's single pool.
+Reaching it closes with 4402. A farm without a paid plan or free month receives HTTP 402
+before upgrade. Upstream disconnection ends the client connection.
 
 The remaining local-stack instructions below apply to a server or CI machine.
 
-Docker is for a server or CI, not the developer Mac (compute rule). The tests need no Docker,
-because they run Postgres in-process through PGlite:
+The tests need no Docker, because they run Postgres in-process through PGlite:
 
 ```sh
 bun run --filter '@core/api' test
@@ -143,7 +224,7 @@ The API runs migrations on start: first the `@orbit/schema` Postgres migrations,
 
 ```sh
 bun core/api/src/cli.ts migrate
-bun core/api/src/cli.ts issue-token <farm-uuid> "Barn PC"   # prints the token once; only its SHA-256 is stored
+bun core/api/src/cli.ts issue-token <farm-uuid> "Farm PC"   # prints the token once; only its SHA-256 is stored
 bun core/api/src/cli.ts set-budget <farm-uuid> 5000000
 ```
 
@@ -158,6 +239,8 @@ Paste the token into Orbit's sync settings. Orion then passes it to
 | `ELECTRIC_URL`             | api           | Internal Electric URL, e.g. `http://electric:3000`.                                                               |
 | `ELECTRIC_SECRET`          | api, electric | Shared secret; Electric rejects shape requests that lack it. **Secret.**                                          |
 | `CORE_STATIC_TOKENS`       | api           | Development only: `token:farm-uuid,...`. Leave empty in production.                                               |
+| `CORE_ADMIN_TOKEN`         | api           | Optional owner review token. Empty disables `/admin` and `/v1/admin/*`. **Secret.**                               |
+| `CORE_FEEDBACK_EMAIL`      | api           | Optional address for feedback and shared-build notices through `MAIL_PROVIDER`.                                   |
 | `LLM_UPSTREAM_URL`         | api           | e.g. `https://api.openai.com` or `https://api.anthropic.com`. Without it `/v1/llm/*` returns 503.                 |
 | `LLM_UPSTREAM_API_KEY`     | api           | Core's provider key. **Secret.**                                                                                  |
 | `LLM_UPSTREAM_AUTH`        | api           | `google` (Vertex OAuth), `authorization` (Bearer), or `x-api-key`.                                                |
@@ -173,10 +256,11 @@ Paste the token into Orbit's sync settings. Orion then passes it to
 | `MAIL_PROVIDER`            | api           | `resend`; needs `MAIL_API_KEY` (**secret**) and `MAIL_FROM`.                                                      |
 | `PUBLIC_SITE_URL`          | api           | Site linked from mails. `ORBIT_DOWNLOAD_URL` is the download link; `ORDERS_EMAIL` gets hardware orders.           |
 | `TERMS_VERSION`            | api           | Current terms version.                                                                                            |
+| `GOOGLE_CLIENT_IDS`        | api           | Comma-separated Google OAuth client IDs accepted by `/v1/auth/google`; unset disables it (503).                   |
 | `GCP_PROJECT`              | api           | With `LLM_UPSTREAM_AUTH=google`: Vertex project. Also `LLM_DEFAULT_MODEL`, `VOICE_MODEL`, `VOICE_LOCATION`.       |
 
 Keep these in Secret Manager: the Postgres password (inside `DATABASE_URL`), `ELECTRIC_SECRET`,
-the Stripe secrets, `MAIL_API_KEY` and `LLM_UPSTREAM_API_KEY`.
+the Stripe secrets, `MAIL_API_KEY`, `CORE_ADMIN_TOKEN` and `LLM_UPSTREAM_API_KEY`.
 
 ## Deploy to GCP (Cloud Run + Cloud SQL)
 

@@ -6,7 +6,8 @@ const stripe = stripeClient({
   fetch: (input, init) => fetch(input, init),
   now: () => new Date(),
 });
-for (const item of [...plans.filter((plan) => plan.id !== "free"), ...hardware]) {
+for (const item of [...plans, ...hardware]) {
+  if (item.id === "free") continue;
   const productId = `pecorva_${item.id}`;
   const products = await stripe(`products?${new URLSearchParams({ limit: "100" })}`);
   const exists =

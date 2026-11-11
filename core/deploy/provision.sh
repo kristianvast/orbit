@@ -51,13 +51,18 @@ production)
 esac
 
 # Non-secret API configuration (override any of these from the environment).
-CORE_CORS_ORIGINS="${CORE_CORS_ORIGINS:-http://localhost:3000}"
+CORE_CORS_ORIGINS="${CORE_CORS_ORIGINS:-http://localhost:3000,https://pecorva.com,https://www.pecorva.com,http://127.0.0.1:3000,http://localhost:4317}"
+# Public website voice demo (src/voice-demo.ts). The API key is the project-level secret
+# ELEVENLABS_API_KEY, mounted only when it exists; without it the endpoint answers 503.
+ELEVENLABS_AGENT_ID="${ELEVENLABS_AGENT_ID:-agent_4301m706m15yez7vmk8k0vc8ebea}"
+ELEVENLABS_VOICE_MALE="${ELEVENLABS_VOICE_MALE:-iP95p4xoKVk53GoZ742B}"
 BILLING_SUCCESS_URL="${BILLING_SUCCESS_URL:-http://localhost:3000/account/?checkout=success}"
 BILLING_CANCEL_URL="${BILLING_CANCEL_URL:-http://localhost:3000/account/?checkout=cancel}"
 PUBLIC_SITE_URL="${PUBLIC_SITE_URL:-http://localhost:3000}"
 MAIL_FROM="${MAIL_FROM:-Pecorva <no-reply@agrointel.no>}"
 ORBIT_DOWNLOAD_URL="${ORBIT_DOWNLOAD_URL:-https://github.com/kristianvast/orbit/releases/latest}"
 ORDERS_EMAIL="${ORDERS_EMAIL:-kristian@agrointel.no}"
+CORE_FEEDBACK_EMAIL="${CORE_FEEDBACK_EMAIL:-}"
 STRIPE_AUTOMATIC_TAX="${STRIPE_AUTOMATIC_TAX:-false}"
 TERMS_VERSION="${TERMS_VERSION:-2026-11}"
 ELECTRIC_IMAGE="${ELECTRIC_IMAGE:-electricsql/electric:1.8.1}"
@@ -166,7 +171,7 @@ quiet g sql databases describe "$DB_NAME" --instance="$SQL_INSTANCE" ||
 
 log "secrets"
 for name in DB_PASSWORD DATABASE_URL ELECTRIC_DATABASE_URL ELECTRIC_SECRET \
-  STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET MAIL_API_KEY; do
+  STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET MAIL_API_KEY CORE_ADMIN_TOKEN; do
   secret_ensure "$name"
 done
 
@@ -320,11 +325,22 @@ ENV_VARS+="|CORE_CORS_ORIGINS=$CORE_CORS_ORIGINS|BILLING_SUCCESS_URL=$BILLING_SU
 ENV_VARS+="|BILLING_CANCEL_URL=$BILLING_CANCEL_URL|MAIL_PROVIDER=resend|MAIL_FROM=$MAIL_FROM"
 ENV_VARS+="|PUBLIC_SITE_URL=$PUBLIC_SITE_URL|ORBIT_DOWNLOAD_URL=$ORBIT_DOWNLOAD_URL"
 ENV_VARS+="|ORDERS_EMAIL=$ORDERS_EMAIL|STRIPE_AUTOMATIC_TAX=$STRIPE_AUTOMATIC_TAX"
+ENV_VARS+="|CORE_FEEDBACK_EMAIL=$CORE_FEEDBACK_EMAIL"
 ENV_VARS+="|TERMS_VERSION=$TERMS_VERSION|CORE_VERSION=${CORE_VERSION:-unknown}"
+ENV_VARS+="|ELEVENLABS_AGENT_ID=$ELEVENLABS_AGENT_ID|ELEVENLABS_VOICE_MALE=$ELEVENLABS_VOICE_MALE"
 SECRETS=""
 for name in DATABASE_URL ELECTRIC_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET MAIL_API_KEY; do
   SECRETS+="${SECRETS:+,}$name=$(secret_id "$name"):latest"
 done
+if quiet g secrets describe ELEVENLABS_API_KEY; then
+  SECRETS+=",ELEVENLABS_API_KEY=ELEVENLABS_API_KEY:latest"
+fi
+if [[ -n "${SECRET_CORE_ADMIN_TOKEN:-}" ]]; then
+  secret_set CORE_ADMIN_TOKEN "$SECRET_CORE_ADMIN_TOKEN"
+fi
+if secret_has_real_value CORE_ADMIN_TOKEN; then
+  SECRETS+=",CORE_ADMIN_TOKEN=$(secret_id CORE_ADMIN_TOKEN):latest"
+fi
 g run deploy "$API_SERVICE" --region="$REGION" --image="$IMAGE" \
   --service-account="$RUNTIME_SA" --allow-unauthenticated --port=8080 \
   --add-cloudsql-instances="$SQL_CONN" \

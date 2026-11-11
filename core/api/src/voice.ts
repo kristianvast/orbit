@@ -2,10 +2,11 @@ import type { Server, ServerWebSocket } from "bun";
 import { eq } from "drizzle-orm";
 import { memberRole, resolveSession } from "./auth";
 import { type CoreDb, voiceUsage } from "./db";
-import { entitlements, PLAN_REQUIRED, usageThisMonth } from "./entitlements";
+import { entitlements, planRequired, usageThisMonth } from "./entitlements";
 import { object } from "./stripe";
 
 export interface VoiceOptions {
+  readonly now?: () => Date;
   readonly project?: string;
   readonly model?: string;
   readonly location?: string;
@@ -25,10 +26,11 @@ export interface VoiceConnection {
 }
 
 export function createVoiceGateway(db: CoreDb, options: VoiceOptions) {
+  const now = options.now ?? (() => new Date());
   const persist = (data: VoiceConnection) =>
     db
       .update(voiceUsage)
-      .set({ seconds: Math.ceil((Date.now() - data.startedAt) / 1000) })
+      .set({ seconds: Math.ceil((now().getTime() - data.startedAt) / 1000) })
       .where(eq(voiceUsage.id, data.id));
   return {
     async upgrade(
@@ -36,7 +38,7 @@ export function createVoiceGateway(db: CoreDb, options: VoiceOptions) {
       server: Server<VoiceConnection>,
     ): Promise<Response | undefined> {
       const token = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "")?.[1] ?? "";
-      const user = await resolveSession(db, token, new Date());
+      const user = await resolveSession(db, token, now());
       if (!user)
         return Response.json(
           { error: { code: "unauthorized", message: "Sign in first" } },
@@ -50,10 +52,10 @@ export function createVoiceGateway(db: CoreDb, options: VoiceOptions) {
         );
       if (!(await memberRole(db, farmId, user.id)))
         return Response.json({ error: { code: "forbidden" } }, { status: 403 });
-      const entitlement = await entitlements(db, farmId);
+      const entitlement = await entitlements(db, farmId, now());
       if (entitlement.voiceSecondsAllowance === 0)
-        return Response.json(PLAN_REQUIRED, { status: 402 });
-      const usage = await usageThisMonth(db, farmId, new Date());
+        return Response.json(planRequired(entitlement), { status: 402 });
+      const usage = await usageThisMonth(db, farmId, entitlement.usageStart);
       if (usage.voiceSecondsUsed >= entitlement.voiceSecondsAllowance)
         return Response.json({ error: { code: "budget_exceeded" } }, { status: 429 });
       if (request.headers.get("upgrade")?.toLowerCase() !== "websocket")
@@ -75,13 +77,15 @@ export function createVoiceGateway(db: CoreDb, options: VoiceOptions) {
         farmId,
         model,
         allowance: entitlement.voiceSecondsAllowance,
-        startedAt: Date.now(),
+        startedAt: now().getTime(),
         upstream,
         closed: false,
         ticking: false,
       };
       // Register the usage row before upgrade, so simultaneous sessions share one allowance.
-      await db.insert(voiceUsage).values({ id: data.id, farmId, model, seconds: 0 });
+      await db
+        .insert(voiceUsage)
+        .values({ id: data.id, farmId, model, seconds: 0, createdAt: now().toISOString() });
       if (server.upgrade(request, { data })) return undefined;
       upstream.close();
       return new Response("WebSocket upgrade failed", { status: 400 });
@@ -102,10 +106,8 @@ export function createVoiceGateway(db: CoreDb, options: VoiceOptions) {
           data.ticking = true;
           try {
             await persist(data);
-            const [{ voiceSecondsUsed }, current] = await Promise.all([
-              usageThisMonth(db, data.farmId, new Date()),
-              entitlements(db, data.farmId),
-            ]);
+            const current = await entitlements(db, data.farmId, now());
+            const { voiceSecondsUsed } = await usageThisMonth(db, data.farmId, current.usageStart);
             if (voiceSecondsUsed >= current.voiceSecondsAllowance)
               ws.close(4402, "Voice allowance used up");
           } catch (error) {

@@ -1,5 +1,7 @@
 // Transactional email: verification, password reset, invites, purchase receipts.
 // `log` (the default outside production) prints each message instead of sending it.
+
+import { planFor } from "./plans";
 import type { FetchLike } from "./shape";
 
 export interface EmailMessage {
@@ -145,11 +147,12 @@ export const emails = {
     };
   },
   planActive(links: EmailLinks, to: string, plan: string, interval: string): EmailMessage {
+    const name = planFor(plan).name;
     return {
       to,
       template: "plan_active",
-      subject: `Your Pecorva ${plan} plan is active`,
-      text: `Thanks! Your ${plan} plan (${interval === "year" ? "yearly" : "monthly"}) is active and Orion is ready on Pecorva's cloud.\n\nNext steps:\n1. Install Orbit on the farm PC: ${links.downloadUrl}\n2. Open Settings > Account and sign in with ${to}.\n3. Ask Orion anything about your herd. Your monthly Orion allowance is included in the plan.\n\nManage or cancel your plan any time: ${accountLink(links, {})}`,
+      subject: `Your Pecorva ${name} plan is active`,
+      text: `Thanks! Your ${name} plan (${interval === "year" ? "yearly" : "monthly"}) is active and Orion is ready on Pecorva's cloud.\n\nNext steps:\n1. Install Orbit on the farm PC: ${links.downloadUrl}\n2. Open Settings > Account and sign in with ${to}.\n3. Ask Orion anything about your herd. Your monthly Orion allowance is included in the plan.\n\nManage or cancel your plan any time: ${accountLink(links, {})}`,
     };
   },
   hardwareOrder(links: EmailLinks, to: string, boxes: number, cameras: number): EmailMessage {
