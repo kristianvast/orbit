@@ -10,6 +10,7 @@ import CustomPageView from "../features/pages";
 import SettingsPage from "../features/settings";
 import { type MessageKey, useT } from "../i18n";
 import { type ModuleId, useModules } from "../lib/modules";
+import { useFarmSpecies } from "../lib/species";
 import { HomePage } from "./HomePage";
 import { useTheme } from "./providers";
 import { AppShell } from "./shell";
@@ -50,6 +51,7 @@ export interface ModuleRouteProps {
 
 export function ModuleRoute({ moduleId, children }: ModuleRouteProps) {
   const { loading, isEnabled, enableModule } = useModules();
+  const { species } = useFarmSpecies();
   const navigate = useNavigate();
   const t = useT();
   const [enabling, setEnabling] = useState(false);
@@ -69,7 +71,25 @@ export function ModuleRoute({ moduleId, children }: ModuleRouteProps) {
 
   const meta = MODULE_META[moduleId];
   const Icon = meta.icon;
-  const prompt = t(meta.promptKey);
+  const titleKey: MessageKey =
+    moduleId === "herd"
+      ? species === "horse"
+        ? "shell.module.disabled.herd.title.horse"
+        : "shell.module.disabled.herd.title.cattle"
+      : meta.titleKey;
+  const descKey: MessageKey =
+    moduleId === "herd"
+      ? species === "horse"
+        ? "shell.module.disabled.herd.description.horse"
+        : "shell.module.disabled.herd.description.cattle"
+      : meta.descKey;
+  const promptKey: MessageKey =
+    moduleId === "herd"
+      ? species === "horse"
+        ? "shell.module.disabled.herd.prompt.horse"
+        : "shell.module.disabled.herd.prompt.cattle"
+      : meta.promptKey;
+  const prompt = t(promptKey);
 
   const handleAskOrion = () => {
     navigate(`/chat?prompt=${encodeURIComponent(prompt)}&send=1`, {
@@ -90,8 +110,8 @@ export function ModuleRoute({ moduleId, children }: ModuleRouteProps) {
     <div className="orbit-container" data-testid={`module-disabled-${moduleId}`}>
       <EmptyState
         icon={<Icon size={24} />}
-        title={t(meta.titleKey)}
-        description={t(meta.descKey)}
+        title={t(titleKey)}
+        description={t(descKey)}
         action={
           <div
             style={{

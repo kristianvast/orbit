@@ -1,4 +1,5 @@
 import type { OrionClient } from "@orbit/protocol";
+import type { Species } from "@orbit/schema";
 import {
   createContext,
   type ReactNode,
@@ -11,6 +12,7 @@ import {
 import { ToastProvider } from "../design";
 import { I18nProvider, type Locale } from "../i18n";
 import { type OrionEndpoint, OrionProvider } from "../lib/orion";
+import { FarmSpeciesProvider } from "../lib/species";
 
 export type ThemeMode = "light" | "dark";
 
@@ -83,6 +85,7 @@ export interface AppProvidersProps {
   defaultTheme?: ThemeMode;
   /** Forces a UI language (tests, previews); otherwise stored choice or OS language. */
   initialLocale?: Locale;
+  initialSpecies?: Species;
 }
 
 export function AppProviders({
@@ -91,13 +94,14 @@ export function AppProviders({
   initialEndpoint,
   defaultTheme = "light",
   initialLocale,
+  initialSpecies,
 }: AppProvidersProps) {
   return (
     <I18nProvider initialLocale={initialLocale}>
       <ThemeProvider defaultTheme={defaultTheme}>
         <ToastProvider>
           <OrionProvider initialClient={initialClient} initialEndpoint={initialEndpoint}>
-            {children}
+            <FarmSpeciesProvider initialSpecies={initialSpecies}>{children}</FarmSpeciesProvider>
           </OrionProvider>
         </ToastProvider>
       </ThemeProvider>

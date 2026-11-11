@@ -126,6 +126,7 @@ export const Settings = Type.Object({
   thinkingLevel: ThinkingLevel,
   /** Share anonymised footage and outcomes to improve the models. On by default; opt out in settings. */
   shareAnonymousData: Type.Boolean(),
+  species: Type.Optional(Type.Enum([...SPECIES])),
   /** Per provider: whether a key is stored (in the OS keychain) and a masked hint. Never the key. */
   apiKeys: Type.Record(
     Type.String(),
@@ -142,6 +143,7 @@ export const SettingsUpdate = Type.Object({
   model: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   thinkingLevel: Type.Optional(ThinkingLevel),
   shareAnonymousData: Type.Optional(Type.Boolean()),
+  species: Type.Optional(Type.Enum([...SPECIES])),
   /** key null removes the stored key. */
   apiKey: Type.Optional(
     Type.Object({ provider: Type.String(), key: Type.Union([Type.String(), Type.Null()]) }),

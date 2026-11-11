@@ -290,6 +290,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       model: useMock ? MOCK_MODEL : s.model,
       thinkingLevel: s.thinkingLevel,
       shareAnonymousData: s.shareAnonymousData,
+      ...(s.species ? { species: s.species } : {}),
       apiKeys,
       availableModels: hub.availableModels(),
     };
@@ -313,6 +314,7 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
       ...(u.model !== undefined ? { model: u.model } : {}),
       ...(u.thinkingLevel ? { thinkingLevel: u.thinkingLevel } : {}),
       ...(u.shareAnonymousData !== undefined ? { shareAnonymousData: u.shareAnonymousData } : {}),
+      ...(u.species ? { species: u.species } : {}),
     });
     return settingsView();
   };

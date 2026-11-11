@@ -533,6 +533,32 @@ export class Repository {
     return { ids: [id], snapshotId: result.snapshotId };
   }
 
+  updateFarm(
+    input: DbMutationParams<"farm.update">,
+    origin?: Partial<WriteOrigin>,
+  ): DbMutateResult {
+    const farm = this.ensureFarm();
+    const patch: Row = {};
+    if (input.name !== undefined) {
+      const trimmed = input.name.trim();
+      if (!trimmed) throw new RepoError("bad_request", "farm name must not be empty");
+      patch.name = trimmed;
+    }
+    if (input.timezone !== undefined) {
+      const trimmed = input.timezone.trim();
+      if (!trimmed) throw new RepoError("bad_request", "timezone must not be empty");
+      patch.timezone = trimmed;
+    }
+    if (Object.keys(patch).length === 0) {
+      return { ids: [farm.id], snapshotId: null };
+    }
+    const result = this.write("farms", farm.id, patch, {
+      description: `Updated farm ${typeof patch.name === "string" ? patch.name : farm.name}`,
+      ...origin,
+    });
+    return { ids: [farm.id], snapshotId: result.snapshotId };
+  }
+
   upsertAnimal(input: AnimalInput, origin?: Partial<WriteOrigin>): DbMutateResult {
     const { id: givenId, ...fields } = input;
     const existing = givenId ? this.getRow("animals", givenId) : null;

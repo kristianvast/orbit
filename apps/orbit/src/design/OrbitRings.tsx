@@ -21,7 +21,6 @@ type DefaultSatellite = Omit<OrbitSatellite, "label"> & { labelKey: MessageKey }
 
 const DEFAULT_SATELLITES: readonly DefaultSatellite[] = [
   { id: "cattle", labelKey: "design.orbit.cattle", ring: 1, angleDeg: -38, tone: "ok", count: 24 },
-  { id: "horses", labelKey: "design.orbit.horses", ring: 1, angleDeg: 142, tone: "ok", count: 4 },
   {
     id: "sensors",
     labelKey: "design.orbit.sensors",
@@ -142,14 +141,14 @@ export function OrbitRings({
       />
       <text
         x={cx}
-        y={cy - 3}
+        y={cy - 2}
         textAnchor="middle"
         fill="var(--text-primary)"
         style={{
           fontFamily: "var(--font-display)",
-          fontSize: "12px",
-          fontWeight: 700,
-          letterSpacing: "0.06em",
+          fontSize: "14px",
+          fontWeight: 400,
+          letterSpacing: "0.05em",
         }}
       >
         {centerLabel}

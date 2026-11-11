@@ -79,6 +79,10 @@ export const DbMutations = {
   "cameras.upsert": Type.Object({ camera: CameraInput }),
   /** Replaces the farm's barn-map layout. */
   "cameraLayout.save": Type.Object({ layout: CameraMapLayout }),
+  "farm.update": Type.Object({
+    name: Type.Optional(Type.String({ minLength: 1 })),
+    timezone: Type.Optional(Type.String({ minLength: 1 })),
+  }),
 } as const;
 export type DbMutationName = keyof typeof DbMutations;
 export const DB_MUTATION_NAMES = Object.keys(DbMutations) as DbMutationName[];

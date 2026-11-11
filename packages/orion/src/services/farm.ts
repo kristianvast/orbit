@@ -44,6 +44,8 @@ export class FarmService {
         return this.cameras.upsert(req.params.camera, origin);
       case "cameraLayout.save":
         return this.repo.saveCameraLayout(req.params.layout, origin);
+      case "farm.update":
+        return this.repo.updateFarm(req.params, origin);
     }
   }
 

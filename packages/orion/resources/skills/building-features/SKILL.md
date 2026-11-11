@@ -8,7 +8,7 @@ description: Build small features for the farmer in the farm workspace (reports,
 
 Orbit starts minimal. When the farmer wants a screen or capability, follow this decision order:
 
-1. **Enable a built-in module** with `orbit_modules` (`herd`, `devices`, or `cameras`) if the request is covered by Cows & Horses, Sensors & Robots, or Cameras.
+1. **Enable a built-in module** with `orbit_modules` (`herd`, `devices`, or `cameras`) if the request is covered by Cattle / Horses (`herd`), Sensors & Robots, or Cameras.
 2. **Build a custom page** (`pages/<id>/index.html`, see the `custom-pages` skill) for any new farm screen, dashboard, calculator, checklist, or report. For a herd list, a calendar or a camera wall, first `skill_search` the catalog: the `farm-views` skill has tested pages (each with a Home card) to copy with `page_scaffold` and tune to this farmer.
 3. **Edit the local Orbit UI build** (`local_ui_build`, see the `editing-orbit` skill) only when the farmer wants to change how an existing Orbit screen or menu works.
 

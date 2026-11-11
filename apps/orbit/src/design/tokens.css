@@ -400,13 +400,29 @@ a {
   background: var(--bg-elevated);
 }
 
+.orbit-rail__status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+
 .orbit-rail__status {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.orbit-rail__status-sub {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding-inline-start: calc(0.5rem + var(--space-2));
 }
 
 .orbit-status-dot {
@@ -556,6 +572,10 @@ a {
 
 .orbit-nav-count--alert {
   color: var(--status-danger);
+  background-color: var(--status-danger-bg);
+  padding-inline: 0.4rem;
+  padding-block: 0.0625rem;
+  border-radius: var(--radius-sm);
 }
 
 .orbit-btn {
@@ -972,7 +992,7 @@ a {
 
   .orbit-brand,
   .orbit-rail__feedback,
-  .orbit-rail__status {
+  .orbit-rail__status-card {
     display: none;
   }
 

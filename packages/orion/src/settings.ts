@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ThinkingLevel } from "@orbit/protocol";
+import type { Species } from "@orbit/schema/enums";
 
 export interface StoredSettings {
   provider: string | null;
@@ -8,6 +9,7 @@ export interface StoredSettings {
   thinkingLevel: ThinkingLevel;
   /** Anonymised footage and outcomes may be shared to improve the models; on unless turned off. */
   shareAnonymousData: boolean;
+  species?: Species;
   /** Masked hints only ("…abcd"); keys live in Pi's credential store (<data-dir>/pi/auth.json). */
   keyHints: Record<string, string>;
 }

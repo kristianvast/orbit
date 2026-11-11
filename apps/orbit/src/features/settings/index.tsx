@@ -11,16 +11,26 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router";
-import { Badge, Button, Card, EmptyState, Select, Skeleton, useToast } from "../../design";
+import {
+  Badge,
+  BrandMark,
+  Button,
+  Card,
+  EmptyState,
+  Select,
+  Skeleton,
+  useToast,
+} from "../../design";
 import { isLocale, LOCALE_NAMES, LOCALES, type MessageKey, useI18n } from "../../i18n";
 import { useOrion, useOrionEvent } from "../../lib/orion";
 import { AccountCard, AccountSection, BillingSection } from "./AccountCard";
+import { FarmProfileCard } from "./FarmProfileCard";
 import { FeedbackCard } from "./FeedbackCard";
 import { OrbitModulesCard } from "./OrbitModulesCard";
 import { ProvidersCard } from "./ProvidersCard";
 import { YourOrbitCard } from "./YourOrbitCard";
 
-export { AccountCard, AccountSection, BillingSection, OrbitModulesCard };
+export { AccountCard, AccountSection, BillingSection, FarmProfileCard, OrbitModulesCard };
 
 const THINKING_OPTIONS: { value: ThinkingLevel; labelKey: MessageKey }[] = [
   { value: "off", labelKey: "settings.thinking.off" },
@@ -31,7 +41,7 @@ const THINKING_OPTIONS: { value: ThinkingLevel; labelKey: MessageKey }[] = [
   { value: "xhigh", labelKey: "settings.thinking.xhigh" },
 ];
 
-const COMMON_PROVIDERS = ["anthropic", "openai", "google", "orbit-gateway", "orion-mock"];
+const COMMON_PROVIDERS = ["orbit-gateway", "anthropic", "openai", "google"];
 
 const SNAPSHOT_TIME_FORMAT: Intl.DateTimeFormatOptions = {
   month: "short",
@@ -88,7 +98,7 @@ export default function SettingsPage() {
       setSnapshots(loadedSnapshots.snapshots);
 
       const initialProvider =
-        loadedSettings.provider ?? loadedSettings.availableModels[0]?.provider ?? "orion-mock";
+        loadedSettings.provider ?? loadedSettings.availableModels[0]?.provider ?? "orbit-gateway";
       const initialModel =
         loadedSettings.model ??
         loadedSettings.availableModels.find((m) => m.provider === initialProvider)?.id ??
@@ -254,7 +264,7 @@ export default function SettingsPage() {
               margin: 0,
               fontFamily: "var(--font-display)",
               fontSize: "var(--text-h1)",
-              fontWeight: 700,
+              fontWeight: 400,
               lineHeight: "var(--leading-tight)",
               letterSpacing: "var(--tracking-display)",
             }}
@@ -282,6 +292,8 @@ export default function SettingsPage() {
           {t("settings.refresh")}
         </Button>
       </header>
+
+      <FarmProfileCard />
 
       <AccountSection />
 
@@ -366,8 +378,8 @@ export default function SettingsPage() {
                       }))
                     : [
                         {
-                          value: selectedModel || "mock-1",
-                          label: selectedModel || "mock-1",
+                          value: selectedModel || "",
+                          label: selectedModel || t("settings.model.noModels"),
                         },
                       ]
                 }
@@ -621,7 +633,7 @@ export default function SettingsPage() {
               <div>
                 <strong>{t("settings.data.serverVersion")}</strong>{" "}
                 <code style={{ fontFamily: "var(--font-mono)" }}>
-                  {client?.server?.serverVersion ?? "0.1.0"}
+                  {client?.server?.serverVersion ?? "0.1.2"}
                 </code>
               </div>
             </div>
@@ -647,10 +659,22 @@ export default function SettingsPage() {
             }}
             data-testid="settings-license-card"
           >
-            <p style={{ margin: 0, color: "var(--text-primary)" }}>
-              <strong>Orbit &amp; Orion</strong> {t("settings.about.licenseBefore")}{" "}
-              <strong>GNU Affero General Public License v3.0 (AGPL-3.0-only)</strong>{" "}
-              {t("settings.about.licenseAfter")}
+            <p
+              style={{
+                margin: 0,
+                color: "var(--text-primary)",
+                display: "flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "var(--space-2)",
+              }}
+            >
+              <BrandMark size={18} />
+              <span>
+                <strong>Orbit &amp; Orion</strong> {t("settings.about.licenseBefore")}{" "}
+                <strong>GNU Affero General Public License v3.0 (AGPL-3.0-only)</strong>{" "}
+                {t("settings.about.licenseAfter")}
+              </span>
             </p>
             <p style={{ margin: 0 }}>{t("settings.about.ownData")}</p>
             <div

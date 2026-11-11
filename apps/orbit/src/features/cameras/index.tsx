@@ -157,6 +157,7 @@ export function CamerasPage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
+              flexWrap: "wrap",
               gap: "var(--space-4)",
             }}
           >
@@ -192,7 +193,7 @@ export function CamerasPage() {
           title={t("cameras.empty.title")}
           description={t("cameras.empty.description")}
           action={
-            <div style={{ display: "flex", gap: "var(--space-3)" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)" }}>
               <Button variant="secondary" icon={<Radar size={16} />} onClick={findCamerasOnNetwork}>
                 {t("cameras.page.findOnNetwork")}
               </Button>

@@ -17,7 +17,7 @@ export const chat = {
   "starter.milkYield.category": "Herd & milking",
   "starter.listCows.label": "List cows in my herd and their sensors",
   "starter.listCows.prompt": "List cows in my herd",
-  "starter.listCows.category": "Cows & horses",
+  "starter.listCows.category": "Herd",
   "starter.findCameras.label": "Find cameras on my network",
   "starter.findCameras.prompt": "Find cameras on my network",
   "starter.findCameras.category": "Barn cameras",

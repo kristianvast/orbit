@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Badge, Button, Card, useToast } from "../../design";
 import { type MessageKey, useI18n } from "../../i18n";
 import { MODULE_IDS, type ModuleId, type OrbitModule, useModules } from "../../lib/modules";
+import { useFarmSpecies } from "../../lib/species";
 
 const MODULE_META: Record<
   ModuleId,
@@ -40,6 +41,7 @@ export function OrbitModulesCard() {
   const { t, formatDate } = useI18n();
   const { pushToast } = useToast();
   const { modules, enableModule, disableModule } = useModules();
+  const { species } = useFarmSpecies();
   const [busyId, setBusyId] = useState<ModuleId | null>(null);
 
   const byId = new Map<ModuleId, OrbitModule>(modules.map((m) => [m.id, m]));
@@ -106,6 +108,12 @@ export function OrbitModulesCard() {
       >
         {MODULE_IDS.map((id, idx) => {
           const meta = MODULE_META[id];
+          const labelKey: MessageKey =
+            id === "herd"
+              ? species === "horse"
+                ? "settings.modules.herd.label.horse"
+                : "settings.modules.herd.label.cattle"
+              : meta.labelKey;
           const Icon = meta.icon;
           const mod = byId.get(id);
           const enabled = mod?.enabled === true;
@@ -171,7 +179,7 @@ export function OrbitModulesCard() {
                         color: "var(--text-primary)",
                       }}
                     >
-                      {t(meta.labelKey)}
+                      {t(labelKey)}
                     </span>
                     <Badge
                       variant={enabled ? "ok" : "neutral"}
@@ -221,7 +229,7 @@ export function OrbitModulesCard() {
                 size="sm"
                 role="switch"
                 aria-checked={enabled}
-                aria-label={`${t(meta.labelKey)}: ${
+                aria-label={`${t(labelKey)}: ${
                   enabled ? t("settings.modules.disable") : t("settings.modules.enable")
                 }`}
                 loading={busyId === id}

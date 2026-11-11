@@ -31,6 +31,7 @@ import {
 } from "../../design";
 import { type TranslateFn, useI18n, useT } from "../../i18n";
 import { useOrion, useOrionQuery } from "../../lib/orion";
+import { useFarmSpecies } from "../../lib/species";
 
 export type HealthOrbitStatus = "healthy" | "watch" | "alert";
 export type HerdSortField =
@@ -1026,15 +1027,23 @@ interface AnimalFormDialogProps {
   open: boolean;
   onClose: () => void;
   editingAnimal: Animal | null;
+  defaultSpecies: Species;
   onSaved: (savedId: string) => Promise<void>;
 }
 
-function AnimalFormDialog({ open, onClose, editingAnimal, onSaved }: AnimalFormDialogProps) {
+function AnimalFormDialog({
+  open,
+  onClose,
+  editingAnimal,
+  defaultSpecies,
+  onSaved,
+}: AnimalFormDialogProps) {
   const { client } = useOrion();
   const { pushToast } = useToast();
   const t = useT();
 
-  const [species, setSpecies] = useState<Species>(editingAnimal?.species ?? "cattle");
+  const initialSpecies = editingAnimal?.species ?? defaultSpecies;
+  const [species, setSpecies] = useState<Species>(initialSpecies);
   const [name, setName] = useState(editingAnimal?.name ?? "");
   const [earTagNumber, setEarTagNumber] = useState(editingAnimal?.earTagNumber ?? "");
   const [nationalId, setNationalId] = useState(editingAnimal?.nationalId ?? "");
@@ -1042,7 +1051,12 @@ function AnimalFormDialog({ open, onClose, editingAnimal, onSaved }: AnimalFormD
   const [sex, setSex] = useState<AnimalSex>(editingAnimal?.sex ?? "female");
   const [birthDate, setBirthDate] = useState(editingAnimal?.birthDate ?? "");
   const [groupName, setGroupName] = useState(
-    editingAnimal?.groupName ?? t("herd.form.defaultGroup.cattle"),
+    editingAnimal?.groupName ??
+      t(
+        initialSpecies === "horse"
+          ? "herd.form.defaultGroup.horse"
+          : "herd.form.defaultGroup.cattle",
+      ),
   );
   const [status, setStatus] = useState<AnimalStatus>(editingAnimal?.status ?? "active");
   const [notes, setNotes] = useState(editingAnimal?.notes ?? "");
@@ -1099,7 +1113,7 @@ function AnimalFormDialog({ open, onClose, editingAnimal, onSaved }: AnimalFormD
               animal:
                 editingAnimal.name ?? editingAnimal.earTagNumber ?? t("herd.animal.fallbackLower"),
             })
-          : t("herd.form.title.add")
+          : t(species === "horse" ? "herd.form.title.add.horse" : "herd.form.title.add.cattle")
       }
       description={t("herd.form.description")}
       footer={
@@ -1205,9 +1219,20 @@ function AnimalFormDialog({ open, onClose, editingAnimal, onSaved }: AnimalFormD
           value={sex}
           onChange={(e) => setSex(e.target.value as AnimalSex)}
           options={[
-            { value: "female", label: t("herd.form.sex.female") },
-            { value: "male", label: t("herd.form.sex.male") },
-            { value: "castrated", label: t("herd.form.sex.castrated") },
+            {
+              value: "female",
+              label: t(species === "horse" ? "herd.form.sex.female.horse" : "herd.form.sex.female"),
+            },
+            {
+              value: "male",
+              label: t(species === "horse" ? "herd.form.sex.male.horse" : "herd.form.sex.male"),
+            },
+            {
+              value: "castrated",
+              label: t(
+                species === "horse" ? "herd.form.sex.castrated.horse" : "herd.form.sex.castrated",
+              ),
+            },
             { value: "unknown", label: t("herd.form.sex.unknown") },
           ]}
         />
@@ -1260,6 +1285,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
   const { client } = useOrion();
   const { pushToast } = useToast();
   const { t, formatNumber } = useI18n();
+  const { species: farmSpecies } = useFarmSpecies();
 
   const [viewMode, setViewMode] = useState<"orbit" | "table">(initialViewMode);
   const [speciesFilter, setSpeciesFilter] = useState<string>("all");
@@ -1431,6 +1457,22 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
     );
   };
 
+  const isHorseFarm = farmSpecies === "horse";
+  const hasCattle = enrichedAnimals.some((a) => a.species === "cattle");
+  const hasHorses = enrichedAnimals.some((a) => a.species === "horse");
+  const hasBothSpecies = hasCattle && hasHorses;
+  const showMilkingColumn = !isHorseFarm || hasCattle;
+
+  const visibleColumns: readonly HerdSortField[] = [
+    "earTagNumber",
+    "name",
+    "groupName",
+    ...(hasBothSpecies ? (["species"] as const) : []),
+    "wearable",
+    ...(showMilkingColumn ? (["lastMilking"] as const) : []),
+    "status",
+  ];
+
   return (
     <div className="orbit-container" data-testid="herd-page">
       <header
@@ -1449,12 +1491,12 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
                 margin: 0,
                 fontFamily: "var(--font-display)",
                 fontSize: "var(--text-h1)",
-                fontWeight: 750,
+                fontWeight: 400,
                 lineHeight: "var(--leading-tight)",
                 letterSpacing: "var(--tracking-display)",
               }}
             >
-              {t("herd.page.title")}
+              {t(isHorseFarm ? "herd.page.title.horse" : "herd.page.title.cattle")}
             </h1>
             <Badge variant="neutral" className="tabular-nums">
               {t("herd.page.shown", { count: filteredAnimals.length })}
@@ -1468,7 +1510,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
               maxInlineSize: "68ch",
             }}
           >
-            {t("herd.page.description")}
+            {t(isHorseFarm ? "herd.page.description.horse" : "herd.page.description")}
           </p>
         </div>
 
@@ -1517,7 +1559,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
               setAnimalFormOpen(true);
             }}
           >
-            {t("herd.page.addAnimal")}
+            {t(isHorseFarm ? "herd.page.addAnimal.horse" : "herd.page.addAnimal.cattle")}
           </Button>
         </div>
       </header>
@@ -1539,17 +1581,19 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
 
-          <Select
-            label={t("herd.filter.species")}
-            data-testid="herd-filter-species"
-            value={speciesFilter}
-            onChange={(e) => setSpeciesFilter(e.target.value)}
-            options={[
-              { value: "all", label: t("herd.filter.species.all") },
-              { value: "cattle", label: t("herd.filter.species.cattle") },
-              { value: "horse", label: t("herd.filter.species.horse") },
-            ]}
-          />
+          {hasBothSpecies && (
+            <Select
+              label={t("herd.filter.species")}
+              data-testid="herd-filter-species"
+              value={speciesFilter}
+              onChange={(e) => setSpeciesFilter(e.target.value)}
+              options={[
+                { value: "all", label: t("herd.filter.species.all") },
+                { value: "cattle", label: t("herd.filter.species.cattle") },
+                { value: "horse", label: t("herd.filter.species.horse") },
+              ]}
+            />
+          )}
 
           <Select
             label={t("herd.filter.group")}
@@ -1617,10 +1661,12 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
       ) : sortedAnimals.length === 0 ? (
         <EmptyState
           data-testid="herd-empty-state"
-          title={t("herd.empty.title")}
-          description={t("herd.empty.description")}
+          title={t(isHorseFarm ? "herd.empty.title.horse" : "herd.empty.title.cattle")}
+          description={t(
+            isHorseFarm ? "herd.empty.description.horse" : "herd.empty.description.cattle",
+          )}
           action={
-            <div style={{ display: "flex", gap: "var(--space-3)" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)" }}>
               {(searchQuery || speciesFilter !== "all" || groupFilter !== "all") && (
                 <Button
                   variant="secondary"
@@ -1643,7 +1689,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
                   setAnimalFormOpen(true);
                 }}
               >
-                {t("herd.page.addAnimal")}
+                {t(isHorseFarm ? "herd.page.addAnimal.horse" : "herd.page.addAnimal.cattle")}
               </Button>
             </div>
           }
@@ -1675,17 +1721,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
                     color: "var(--text-secondary)",
                   }}
                 >
-                  {(
-                    [
-                      "earTagNumber",
-                      "name",
-                      "groupName",
-                      "species",
-                      "wearable",
-                      "lastMilking",
-                      "status",
-                    ] as const
-                  )
+                  {visibleColumns
                     .map((key) => ({ key, label: t(`herd.table.col.${key}`) }))
                     .map((col) => (
                       <th
@@ -1768,15 +1804,17 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
                       <td style={{ padding: "var(--space-3)", color: "var(--text-secondary)" }}>
                         {animal.groupName ?? "—"}
                       </td>
-                      <td style={{ padding: "var(--space-3)", textTransform: "capitalize" }}>
-                        {animal.species === "cattle"
-                          ? t("herd.table.species.cattle", {
-                              breed: animal.breed ?? t("herd.table.breedFallback.cattle"),
-                            })
-                          : t("herd.table.species.horse", {
-                              breed: animal.breed ?? t("herd.table.breedFallback.horse"),
-                            })}
-                      </td>
+                      {hasBothSpecies && (
+                        <td style={{ padding: "var(--space-3)", textTransform: "capitalize" }}>
+                          {animal.species === "cattle"
+                            ? t("herd.table.species.cattle", {
+                                breed: animal.breed ?? t("herd.table.breedFallback.cattle"),
+                              })
+                            : t("herd.table.species.horse", {
+                                breed: animal.breed ?? t("herd.table.breedFallback.horse"),
+                              })}
+                        </td>
+                      )}
                       <td style={{ padding: "var(--space-3)" }}>
                         {animal.wearable ? (
                           <div
@@ -1804,21 +1842,23 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
                           </span>
                         )}
                       </td>
-                      <td
-                        className="tabular-nums"
-                        style={{
-                          padding: "var(--space-3)",
-                          fontFamily: "var(--font-mono)",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        {animal.lastMilkingKg !== null
-                          ? t("herd.value.withUnit", {
-                              value: formatNumber(animal.lastMilkingKg, PLAIN_NUMBER),
-                              unit: t("herd.unit.kg"),
-                            })
-                          : "—"}
-                      </td>
+                      {showMilkingColumn && (
+                        <td
+                          className="tabular-nums"
+                          style={{
+                            padding: "var(--space-3)",
+                            fontFamily: "var(--font-mono)",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {animal.lastMilkingKg !== null
+                            ? t("herd.value.withUnit", {
+                                value: formatNumber(animal.lastMilkingKg, PLAIN_NUMBER),
+                                unit: t("herd.unit.kg"),
+                              })
+                            : "—"}
+                        </td>
+                      )}
                       <td style={{ padding: "var(--space-3)" }}>
                         <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
                       </td>
@@ -2114,9 +2154,9 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
               <h3
                 style={{
                   margin: "0 0 var(--space-3) 0",
-                  fontFamily: "var(--font-display)",
+                  fontFamily: "var(--font-sans)",
                   fontSize: "var(--text-base)",
-                  fontWeight: 700,
+                  fontWeight: 600,
                 }}
               >
                 {t("herd.drawer.observationsHeading")}
@@ -2125,7 +2165,6 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
                 <div
                   style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}
                 >
-                  <Skeleton height="5.5rem" />
                   <Skeleton height="5.5rem" />
                   <Skeleton height="5.5rem" />
                   <Skeleton height="5.5rem" />
@@ -2138,13 +2177,15 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
                     gap: "var(--space-3)",
                   }}
                 >
-                  <SparklineCard
-                    title={t("herd.sparkline.milking")}
-                    unit={t("herd.unit.kg")}
-                    observations={detailObservations.filter((o) => o.kind === "milking")}
-                    color="var(--accent-primary)"
-                    testId="sparkline-milking"
-                  />
+                  {selectedAnimal.species !== "horse" && (
+                    <SparklineCard
+                      title={t("herd.sparkline.milking")}
+                      unit={t("herd.unit.kg")}
+                      observations={detailObservations.filter((o) => o.kind === "milking")}
+                      color="var(--accent-primary)"
+                      testId="sparkline-milking"
+                    />
+                  )}
                   <SparklineCard
                     title={t("herd.sparkline.activity")}
                     unit={t("herd.unit.activity")}
@@ -2198,6 +2239,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
           open={animalFormOpen}
           onClose={() => setAnimalFormOpen(false)}
           editingAnimal={editingAnimal}
+          defaultSpecies={farmSpecies}
           onSaved={async (savedId) => {
             await refetchAnimals();
             if (savedId) {

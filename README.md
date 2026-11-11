@@ -22,7 +22,7 @@ A fresh install starts almost empty. The sidebar shows only **Home**, **Ask Orio
 
 1. **Switch Orion on:** When you first open Orbit and no AI model is set up yet, Home shows a setup card. You can create a free Orbit account (which includes 30 days of Orion at no cost, no card needed), sign in to an existing account, or bring your own AI provider key or subscription in Settings.
 2. **Tell Orion about your farm:** Type or speak to Orion from Home or **Ask Orion**. Tell it whether you keep dairy cattle, beef cattle, or horses, and what you want to see first.
-3. **Add only the screens you use:** Built-in screens for **Cows & Horses** (`herd`), **Sensors & Robots** (`devices`), and **Cameras** (`cameras`) start turned off. They appear only when Orion switches them on, when data for that area first arrives, or when you toggle them in Settings. Disabling a module only hides the screen; your data stays intact.
+3. **Add only the screens you use:** Built-in screens for **Cattle** or **Horses** (`herd`), **Sensors & Robots** (`devices`), and **Cameras** (`cameras`) start turned off. They appear only when Orion switches them on, when data for that area first arrives, or when you toggle them in Settings. Disabling a module only hides the screen; your data stays intact.
 
 ## What Orion can do for a farm
 

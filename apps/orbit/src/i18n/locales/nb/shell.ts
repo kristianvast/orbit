@@ -4,7 +4,9 @@ import type { shell as en } from "../en/shell";
 export const shell: Catalog<typeof en> = {
   "nav.home": "Hjem",
   "nav.chat": "Spør Orion",
-  "nav.herd": "Kyr og hester",
+  "nav.herd": "Storfe",
+  "nav.herd.cattle": "Storfe",
+  "nav.herd.horse": "Hester",
   "nav.devices": "Sensorer og roboter",
   "nav.cameras": "Kameraer",
   "nav.settings": "Innstillinger",
@@ -15,10 +17,18 @@ export const shell: Catalog<typeof en> = {
   "nav.feedback": "Send tilbakemelding",
   "update.ready": "En ny versjon av Orbit er klar.",
   "update.restart": "Start på nytt for å oppdatere",
-  "module.disabled.herd.title": "Kyr og hester er ikke lagt til ennå",
+  "module.disabled.herd.title": "Storfe er ikke lagt til ennå",
+  "module.disabled.herd.title.cattle": "Storfe er ikke lagt til ennå",
+  "module.disabled.herd.title.horse": "Hester er ikke lagt til ennå",
   "module.disabled.herd.description":
-    "Orion legger til dyreregisteret når du begynner å registrere storfe eller hester.",
+    "Orion legger til dyreregisteret når du begynner å registrere storfe.",
+  "module.disabled.herd.description.cattle":
+    "Orion legger til dyreregisteret når du begynner å registrere storfe.",
+  "module.disabled.herd.description.horse":
+    "Orion legger til stallregisteret når du begynner å registrere hester.",
   "module.disabled.herd.prompt": "Hjelp meg å føre oversikt over besetningen",
+  "module.disabled.herd.prompt.cattle": "Hjelp meg å føre oversikt over besetningen",
+  "module.disabled.herd.prompt.horse": "Hjelp meg å føre oversikt over hestene",
   "module.disabled.devices.title": "Sensorer og roboter er ikke lagt til ennå",
   "module.disabled.devices.description":
     "Orion legger til denne skjermen når du kobler til en melkerobot, et halsbånd, en bolus, en øremerkesensor eller en vekt.",
@@ -34,6 +44,7 @@ export const shell: Catalog<typeof en> = {
   "sync.error": "Synkroniseringsfeil",
   "sync.savedLocally": "Lagret på denne PC-en",
   "sync.synced": "Synkronisert",
+  "sync.outOfSync": "Ute av synk",
   "orion.online": "Orion tilkoblet",
   "orion.connecting": "Orion kobler til",
   "orion.reconnecting": "Orion kobler til på nytt",

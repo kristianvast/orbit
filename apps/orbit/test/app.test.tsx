@@ -10,6 +10,11 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { AppProviders, AppRoutes } from "../src/app";
 import { Badge, Button, Dialog, OrbitRings, Tabs } from "../src/design";
+import {
+  calmAccountSyncState,
+  OUT_OF_SYNC_THRESHOLD_MS,
+  resolveSyncNotice,
+} from "../src/lib/orion";
 
 function createFakeOrionClient(options?: {
   state?: ConnectionState;
@@ -159,14 +164,15 @@ describe("@orbit/app UI shell and design system", () => {
 
     const nav = screen.getByRole("navigation", { name: "Main" });
     expect(nav).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Cows & Horses/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Cattle/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Cows & Horses/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Sensors & Robots/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Cameras/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Settings/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("link", { name: /Cows & Horses/i }));
+    fireEvent.click(screen.getByRole("link", { name: /Cattle/i }));
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Cows & Horses" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Cattle" })).toBeInTheDocument();
     });
   });
 
@@ -182,10 +188,109 @@ describe("@orbit/app UI shell and design system", () => {
     );
 
     expect(await screen.findByRole("navigation", { name: "Hovedmeny" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Kyr og hester/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Storfe/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Spør Orion/ })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Cows & Horses/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Kyr og hester/ })).not.toBeInTheDocument();
     expect(document.documentElement.lang).toBe("nb");
+  });
+
+  it("switches navigation, Home counts, and Herd screen to Horses on a horse operation", async () => {
+    const { client } = createFakeOrionClient({
+      summary: {
+        farm: {
+          id: "00000000-0000-4000-8000-00000000f002",
+          farmId: "00000000-0000-4000-8000-00000000f002",
+          name: "Nordic Equine Stable",
+          timezone: "Europe/Oslo",
+          createdAt: "2026-11-01T00:00:00.000Z",
+          updatedAt: "2026-11-01T00:00:00.000Z",
+          deletedAt: null,
+          hlc: "0001762128000000:000001:seed",
+          originDevice: "seed",
+        },
+        counts: {
+          cattle: 0,
+          horses: 6,
+          devices: 4,
+          devicesOffline: 0,
+          cameras: 2,
+          camerasOnline: 2,
+          connectors: 1,
+          connectorsWithErrors: 0,
+        },
+        recentAlerts: [],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProviders initialClient={client}>
+          <AppRoutes />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("home-herd-counts")).toHaveTextContent("6 horses");
+    expect(screen.getByRole("link", { name: /Horses/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Cattle/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the sync badge silent during normal sync cycles and brief blips, surfacing only after minutes offline", () => {
+    const t0 = 1_700_000_000_000;
+    const syncedIso = new Date(t0 - 10_000).toISOString();
+
+    expect(
+      resolveSyncNotice(
+        "open",
+        { state: "up_to_date", pendingOutbox: 0, lastSyncedAt: syncedIso, unhealthySinceMs: null },
+        t0,
+      ),
+    ).toBeNull();
+    expect(
+      resolveSyncNotice(
+        "open",
+        { state: "syncing", pendingOutbox: 2, lastSyncedAt: syncedIso, unhealthySinceMs: null },
+        t0,
+      ),
+    ).toBeNull();
+    expect(
+      resolveSyncNotice(
+        "open",
+        {
+          state: "offline",
+          pendingOutbox: 1,
+          lastSyncedAt: syncedIso,
+          unhealthySinceMs: t0 - 60_000,
+        },
+        t0,
+      ),
+    ).toBeNull();
+    expect(
+      resolveSyncNotice(
+        "open",
+        {
+          state: "offline",
+          pendingOutbox: 1,
+          lastSyncedAt: syncedIso,
+          unhealthySinceMs: t0 - OUT_OF_SYNC_THRESHOLD_MS,
+        },
+        t0,
+      ),
+    ).toBe("out_of_sync");
+    expect(
+      resolveSyncNotice(
+        "open",
+        { state: "error", pendingOutbox: 1, lastSyncedAt: syncedIso, unhealthySinceMs: t0 },
+        t0,
+      ),
+    ).toBe("sync_error");
+
+    expect(
+      calmAccountSyncState(
+        { state: "syncing", pendingOutbox: 0, lastSyncedAt: syncedIso, unhealthySinceMs: null },
+        t0,
+      ),
+    ).toBe("up_to_date");
   });
 
   it("shows a friendly connection banner when Orion is reconnecting", async () => {

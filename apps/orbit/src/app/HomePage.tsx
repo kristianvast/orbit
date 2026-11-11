@@ -1,4 +1,4 @@
-import type { Observation } from "@orbit/schema";
+import type { Observation, WearableKind } from "@orbit/schema";
 import {
   Activity,
   AlertTriangle,
@@ -7,16 +7,18 @@ import {
   ChevronRight,
   Flame,
   HeartPulse,
+  Mic,
   ShieldCheck,
 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Badge, Button, EmptyState, OrbitRings, type OrbitSatellite, Skeleton } from "../design";
 import { PageCards, useCustomPages } from "../features/pages";
-import { type MessageKey, type TranslateFn, useT } from "../i18n";
+import { type MessageKey, type TranslateFn, useI18n } from "../i18n";
 import { type ModuleId, useModules } from "../lib/modules";
 import { useOrion, useOrionQuery } from "../lib/orion";
 import { useNeedsSetup } from "../lib/setup";
+import { formatPrimaryAnimalCount, useFarmSpecies } from "../lib/species";
 import { useTheme } from "./providers";
 import "./home.css";
 
@@ -77,38 +79,18 @@ function formatRelativeTime(iso: string, t: TranslateFn): string {
   return t("home.time.days", { count: days });
 }
 
-const SUGGESTED_QUESTIONS: readonly MessageKey[] = [
-  "home.suggest.alerts",
-  "home.suggest.calving",
-  "home.suggest.battery",
-];
-
-const MINIMAL_STARTERS: ReadonlyArray<{
-  id: string;
-  labelKey: MessageKey;
-  promptKey: MessageKey;
-}> = [
-  {
-    id: "herd",
-    labelKey: "home.minimal.starter.herd.label",
-    promptKey: "home.minimal.starter.herd.prompt",
-  },
-  {
-    id: "devices",
-    labelKey: "home.minimal.starter.devices.label",
-    promptKey: "home.minimal.starter.devices.prompt",
-  },
-  {
-    id: "cameras",
-    labelKey: "home.minimal.starter.cameras.label",
-    promptKey: "home.minimal.starter.cameras.prompt",
-  },
-  {
-    id: "page",
-    labelKey: "home.minimal.starter.page.label",
-    promptKey: "home.minimal.starter.page.prompt",
-  },
-];
+function formatWearableChip(kind: WearableKind, batteryPct: number | null, t: TranslateFn): string {
+  const label =
+    kind === "collar"
+      ? t("herd.wearable.collar")
+      : kind === "bolus"
+        ? t("herd.wearable.bolus")
+        : t("herd.wearable.ear_tag_sensor");
+  if (batteryPct !== null && Number.isFinite(batteryPct)) {
+    return `${label} · ${Math.round(batteryPct)}%`;
+  }
+  return label;
+}
 
 interface Instrument {
   id: string;
@@ -121,11 +103,19 @@ interface Instrument {
   testId?: string;
 }
 
+const GROUP_PALETTE = [
+  "var(--accent-secondary)",
+  "var(--accent-primary)",
+  "var(--border-control)",
+  "var(--status-info)",
+] as const;
+
 export function HomePage() {
   const navigate = useNavigate();
-  const t = useT();
+  const { t } = useI18n();
   const [question, setQuestion] = useState("");
   const { loading: modulesLoading, isEnabled, anyEnabled } = useModules();
+  const { species } = useFarmSpecies();
   const customPages = useCustomPages();
   const { theme } = useTheme();
 
@@ -148,14 +138,35 @@ export function HomePage() {
   const { data: animalsData } = useOrionQuery(
     "animals.list",
     { limit: 500 },
-    { enabled: herdEnabled, refetchTables: ["animals"] },
+    { enabled: herdEnabled, refetchTables: ["animals", "device_bindings", "devices"] },
   );
 
-  const animalById = new Map((animalsData?.rows ?? []).map((a) => [a.id, a]));
+  const animalRows = animalsData?.rows ?? [];
+  const animalById = useMemo(() => new Map(animalRows.map((a) => [a.id, a])), [animalRows]);
+
+  const groupSegments = useMemo(() => {
+    const active = animalRows.filter((a) => a.status === "active" && a.species === species);
+    if (active.length === 0) return [];
+    const counts = new Map<string, number>();
+    for (const a of active) {
+      const key = a.groupName?.trim() || t("herd.animal.ungrouped");
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([name, count], idx) => ({
+        name,
+        count,
+        color: GROUP_PALETTE[idx % GROUP_PALETTE.length],
+      }));
+  }, [animalRows, species, t]);
 
   const cattle = summary?.counts?.cattle ?? 0;
   const horses = summary?.counts?.horses ?? 0;
   const totalAnimals = cattle + horses;
+  const primaryAnimals =
+    species === "horse" ? (horses > 0 ? horses : cattle) : cattle > 0 ? cattle : horses;
   const totalDevices = summary?.counts?.devices ?? 0;
   const devicesOffline = summary?.counts?.devicesOffline ?? 0;
   const devicesOnline = Math.max(0, totalDevices - devicesOffline);
@@ -169,6 +180,50 @@ export function HomePage() {
   const isMinimalHome = !isLoading && !anyEnabled && totalAnimals === 0;
   const orionOnline = useOrion().state === "open";
   const needsSetup = useNeedsSetup();
+  const isHorse = species === "horse";
+
+  const suggestedQuestions: readonly MessageKey[] = isHorse
+    ? ["home.suggest.alerts.horse", "home.suggest.calving.horse", "home.suggest.battery"]
+    : ["home.suggest.alerts.cattle", "home.suggest.calving", "home.suggest.battery"];
+
+  const minimalStarters: ReadonlyArray<{
+    id: string;
+    labelKey: MessageKey;
+    promptKey: MessageKey;
+  }> = [
+    {
+      id: "herd",
+      labelKey: isHorse
+        ? "home.minimal.starter.herd.label.horse"
+        : "home.minimal.starter.herd.label",
+      promptKey: isHorse
+        ? "home.minimal.starter.herd.prompt.horse"
+        : "home.minimal.starter.herd.prompt",
+    },
+    {
+      id: "devices",
+      labelKey: isHorse
+        ? "home.minimal.starter.devices.label.horse"
+        : "home.minimal.starter.devices.label",
+      promptKey: isHorse
+        ? "home.minimal.starter.devices.prompt.horse"
+        : "home.minimal.starter.devices.prompt",
+    },
+    {
+      id: "cameras",
+      labelKey: isHorse
+        ? "home.minimal.starter.cameras.label.horse"
+        : "home.minimal.starter.cameras.label",
+      promptKey: isHorse
+        ? "home.minimal.starter.cameras.prompt.horse"
+        : "home.minimal.starter.cameras.prompt",
+    },
+    {
+      id: "page",
+      labelKey: "home.minimal.starter.page.label",
+      promptKey: "home.minimal.starter.page.prompt",
+    },
+  ];
 
   const openOrionWithQuestion = (prompt?: string) => {
     const trimmed = prompt?.trim();
@@ -203,7 +258,7 @@ export function HomePage() {
           </h1>
 
           <p className="orbit-home__lede" data-testid="home-minimal-lede">
-            {t("home.minimal.lede")}
+            {t(isHorse ? "home.minimal.lede.horse" : "home.minimal.lede.cattle")}
           </p>
 
           {needsSetup ? (
@@ -262,19 +317,20 @@ export function HomePage() {
               </form>
 
               <ul
-                className="orbit-ask__suggestions"
+                className="orbit-starter-grid"
                 aria-label={t("home.minimal.startersLabel")}
                 data-testid="home-starter-chips"
               >
-                {MINIMAL_STARTERS.map((starter) => (
+                {minimalStarters.map((starter) => (
                   <li key={starter.id}>
                     <button
                       type="button"
-                      className="orbit-ask__suggestion"
+                      className="orbit-starter-tile"
                       data-testid={`home-starter-${starter.id}`}
                       onClick={() => openOrionWithQuestion(t(starter.promptKey))}
                     >
-                      {t(starter.labelKey)}
+                      <span>{t(starter.labelKey)}</span>
+                      <ChevronRight size={15} aria-hidden="true" />
                     </button>
                   </li>
                 ))}
@@ -300,20 +356,12 @@ export function HomePage() {
     ...(herdEnabled || totalAnimals > 0
       ? ([
           {
-            id: "cattle",
-            label: t("home.orbit.cattle"),
+            id: isHorse ? "horses" : "cattle",
+            label: t(isHorse ? "home.orbit.horses" : "home.orbit.cattle"),
             ring: 1 as const,
             angleDeg: -35,
             tone: "ok" as const,
-            count: cattle,
-          },
-          {
-            id: "horses",
-            label: t("home.orbit.horses"),
-            ring: 1 as const,
-            angleDeg: 145,
-            tone: "ok" as const,
-            count: horses,
+            count: primaryAnimals,
           },
         ] satisfies OrbitSatellite[])
       : []),
@@ -363,9 +411,11 @@ export function HomePage() {
     {
       id: "animals",
       moduleId: "herd",
-      label: t("home.gauge.animals"),
-      value: String(totalAnimals),
-      detail: t("home.gauge.animalsDetail", { cattle, horses }),
+      label: t(isHorse ? "home.gauge.animals.horse" : "home.gauge.animals.cattle"),
+      value: String(primaryAnimals),
+      detail: t(isHorse ? "home.gauge.animalsDetail.horse" : "home.gauge.animalsDetail.cattle", {
+        count: primaryAnimals,
+      }),
       tone: "ok",
       to: "/herd",
       testId: "home-animals-gauge",
@@ -415,7 +465,6 @@ export function HomePage() {
     (ins) => isEnabled(ins.moduleId) || (ins.moduleId === "herd" && totalAnimals > 0),
   );
 
-  // Without a summary from Orion nothing is known yet, so never claim the barn is quiet.
   const heroHeadline = !summary
     ? t("home.hero.waiting")
     : recentAlerts.length > 0
@@ -425,30 +474,67 @@ export function HomePage() {
   return (
     <div className="orbit-container orbit-home">
       <header className="orbit-home__head">
-        <div className="orbit-home__meta">
-          {summary && (
-            <Badge
-              data-testid="home-alerts"
-              variant={recentAlerts.length > 0 ? "warn" : "ok"}
-              icon={
-                recentAlerts.length > 0 ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />
-              }
-            >
-              {recentAlerts.length > 0
-                ? t("home.badge.alerts", { count: recentAlerts.length })
-                : t("home.badge.steady")}
-            </Badge>
-          )}
-          {(herdEnabled || totalAnimals > 0) && (
-            <span data-testid="home-herd-counts" className="orbit-home__counts">
-              {t("home.counts", { cattle, horses })}
-            </span>
+        <div className="orbit-home__masthead">
+          <div className="orbit-home__masthead-main">
+            <div className="orbit-home__meta">
+              {summary && (
+                <Badge
+                  data-testid="home-alerts"
+                  variant={recentAlerts.length > 0 ? "warn" : "ok"}
+                  icon={
+                    recentAlerts.length > 0 ? (
+                      <AlertTriangle size={13} />
+                    ) : (
+                      <CheckCircle2 size={13} />
+                    )
+                  }
+                >
+                  {recentAlerts.length > 0
+                    ? t("home.badge.alerts", { count: recentAlerts.length })
+                    : t("home.badge.steady")}
+                </Badge>
+              )}
+              {(herdEnabled || totalAnimals > 0) && (
+                <span data-testid="home-herd-counts" className="orbit-home__counts">
+                  {formatPrimaryAnimalCount(cattle, horses, species, t)}
+                </span>
+              )}
+            </div>
+
+            <h1 data-testid="home-hero-headline" className="orbit-home__headline">
+              {heroHeadline}
+            </h1>
+          </div>
+
+          {summary && (herdEnabled || devicesEnabled || camerasEnabled || totalAnimals > 0) && (
+            <dl className="orbit-telemetry">
+              {(herdEnabled || totalAnimals > 0) && (
+                <div className="orbit-telemetry__item">
+                  <dd className="orbit-telemetry__value tabular-nums">{primaryAnimals}</dd>
+                  <dt className="orbit-telemetry__label">
+                    {t(isHorse ? "home.telemetry.horses" : "home.telemetry.cattle")}
+                  </dt>
+                </div>
+              )}
+              {devicesEnabled && (
+                <div className="orbit-telemetry__item">
+                  <dd className="orbit-telemetry__value tabular-nums">
+                    {devicesOnline}/{totalDevices}
+                  </dd>
+                  <dt className="orbit-telemetry__label">{t("home.telemetry.sensors")}</dt>
+                </div>
+              )}
+              {camerasEnabled && (
+                <div className="orbit-telemetry__item">
+                  <dd className="orbit-telemetry__value tabular-nums">
+                    {camerasOnline}/{totalCameras}
+                  </dd>
+                  <dt className="orbit-telemetry__label">{t("home.telemetry.cameras")}</dt>
+                </div>
+              )}
+            </dl>
           )}
         </div>
-
-        <h1 data-testid="home-hero-headline" className="orbit-home__headline">
-          {heroHeadline}
-        </h1>
 
         <form className="orbit-ask" onSubmit={submitQuestion}>
           <label htmlFor="home-ask-orion" className="orbit-visually-hidden">
@@ -464,8 +550,19 @@ export function HomePage() {
             autoComplete="off"
           />
           <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            icon={<Mic size={15} />}
+            onClick={() => navigate("/chat")}
+            data-testid="home-voice-btn"
+          >
+            {t("home.ask.voice")}
+          </Button>
+          <Button
             type="submit"
             variant="primary"
+            size="sm"
             icon={<ArrowUp size={16} />}
             data-testid="home-ask-submit"
           >
@@ -474,7 +571,7 @@ export function HomePage() {
         </form>
 
         <ul className="orbit-ask__suggestions" aria-label={t("home.ask.suggestions")}>
-          {SUGGESTED_QUESTIONS.map((key) => (
+          {suggestedQuestions.map((key) => (
             <li key={key}>
               <button
                 type="button"
@@ -533,6 +630,15 @@ export function HomePage() {
                         {animal?.earTagNumber && (
                           <span className="orbit-alert__tag">{animal.earTagNumber}</span>
                         )}
+                        {animal?.wearable && (
+                          <span className="orbit-alert__wearable">
+                            {formatWearableChip(
+                              animal.wearable.kind,
+                              animal.wearable.batteryPct,
+                              t,
+                            )}
+                          </span>
+                        )}
                         <span className="orbit-alert__kind">{meta.label}</span>
                         <span className="orbit-alert__time">{formatRelativeTime(alert.ts, t)}</span>
                       </div>
@@ -573,12 +679,36 @@ export function HomePage() {
 
             <div className="orbit-home__rings">
               <OrbitRings
-                size={184}
-                centerLabel={t("home.status.center")}
-                centerSublabel={t("home.status.head", { count: totalAnimals })}
+                size={188}
+                centerLabel={t(isHorse ? "home.status.center.horse" : "home.status.center")}
+                centerSublabel={t("home.status.head", { count: primaryAnimals })}
                 satellites={satellites}
               />
             </div>
+
+            {groupSegments.length > 0 && (
+              <div className="orbit-herd-composition">
+                <div className="orbit-herd-composition__legend">
+                  {groupSegments.map((seg) => (
+                    <span key={seg.name} className="orbit-herd-composition__item tabular-nums">
+                      <span
+                        className="orbit-herd-composition__swatch"
+                        style={{ backgroundColor: seg.color }}
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {seg.name} {seg.count}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                <div className="orbit-herd-composition__bar" aria-hidden="true">
+                  {groupSegments.map((seg) => (
+                    <span key={seg.name} style={{ flex: seg.count, backgroundColor: seg.color }} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             <ul className="orbit-gauges">
               {instruments.map((ins) => (

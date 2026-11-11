@@ -209,7 +209,7 @@ function createMinimalTestClient(options?: {
 }
 
 describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules", () => {
-  it("renders only Home, Ask Orion, and Settings while loading and when all modules are disabled, then adds Cows & Horses on modules.updated", async () => {
+  it("renders only Home, Ask Orion, and Settings while loading and when all modules are disabled, then adds Cattle on modules.updated", async () => {
     const { client, emit, releaseInitialList } = createMinimalTestClient({
       holdModulesList: true,
     });
@@ -226,7 +226,7 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
     expect(within(nav).getByText("Home")).toBeInTheDocument();
     expect(within(nav).getByText("Ask Orion")).toBeInTheDocument();
     expect(within(nav).getByText("Settings")).toBeInTheDocument();
-    expect(within(nav).queryByText("Cows & Horses")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Cattle")).not.toBeInTheDocument();
     expect(within(nav).queryByText("Sensors & Robots")).not.toBeInTheDocument();
     expect(within(nav).queryByText("Cameras")).not.toBeInTheDocument();
 
@@ -237,7 +237,7 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
     await waitFor(() => {
       expect(screen.getByTestId("home-minimal")).toBeInTheDocument();
     });
-    expect(within(nav).queryByText("Cows & Horses")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Cattle")).not.toBeInTheDocument();
 
     act(() => {
       emit({
@@ -256,15 +256,10 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
     });
 
     const links = await waitFor(() => {
-      expect(within(nav).getByText("Cows & Horses")).toBeInTheDocument();
+      expect(within(nav).getByText("Cattle")).toBeInTheDocument();
       return within(nav).getAllByRole("link");
     });
-    expect(links.map((l) => l.textContent)).toEqual([
-      "Home",
-      "Ask Orion",
-      "Cows & Horses",
-      "Settings",
-    ]);
+    expect(links.map((l) => l.textContent)).toEqual(["Home", "Ask Orion", "Cattle", "Settings"]);
   });
 
   it("shows Orion-first Home when no modules and no animals exist, and starter chips send their prompt to Orion", async () => {
@@ -355,7 +350,7 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId("home-herd-counts")).toHaveTextContent("18 cattle · 2 horses");
+    expect(await screen.findByTestId("home-herd-counts")).toHaveTextContent("18 cattle");
     expect(screen.getByTestId("home-animals-gauge")).toBeInTheDocument();
     expect(screen.queryByTestId("home-sensors-online")).not.toBeInTheDocument();
     expect(screen.queryByTestId("home-cameras-live")).not.toBeInTheDocument();
@@ -373,7 +368,7 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
     );
 
     expect(await screen.findByTestId("module-disabled-herd")).toBeInTheDocument();
-    expect(screen.getByText("Cows & Horses is not added yet")).toBeInTheDocument();
+    expect(screen.getByText("Cattle is not added yet")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("module-disabled-enable-herd"));
 

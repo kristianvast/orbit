@@ -33,7 +33,7 @@ test("Orbit starts minimal and Orion adds the herd module", async ({ page }) => 
   await page.goto("/herd");
   const herdOff = page.getByTestId("module-disabled-herd");
   await expect(herdOff).toBeVisible();
-  await expect(herdOff).toContainText("Cows & Horses is not added yet");
+  await expect(herdOff).toContainText("Cattle is not added yet");
   await expect(page.getByTestId("herd-page")).toHaveCount(0);
   await proof(page, "02-herd-not-added.png");
 

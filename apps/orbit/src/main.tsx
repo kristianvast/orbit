@@ -5,6 +5,13 @@ import "./design/tokens.css";
 import { AppProviders, AppRoutes } from "./app";
 import { captureLocalUiReturn, handOffToLocalUi, localUiBasename } from "./lib/local-ui";
 
+try {
+  const savedTheme = window.localStorage?.getItem("orbit.theme");
+  if (savedTheme === "dark" || savedTheme === "light") {
+    document.documentElement.setAttribute("data-theme", savedTheme);
+  }
+} catch {}
+
 captureLocalUiReturn();
 void handOffToLocalUi();
 

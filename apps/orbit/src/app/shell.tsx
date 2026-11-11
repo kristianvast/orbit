@@ -1,24 +1,24 @@
 import {
   Camera,
-  CheckCircle2,
   CloudOff,
   Home,
   MessageSquare,
   MessageSquareHeart,
   Moon,
   Radio,
-  RefreshCw,
   Settings as SettingsIcon,
   Sun,
   Tag,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router";
-import { Badge, Button } from "../design";
+import { Badge, BrandMark, Button } from "../design";
 import { CUSTOM_PAGE_ICON, useCustomPages } from "../features/pages";
 import { type MessageKey, useT } from "../i18n";
 import { useLocalUiLifecycle } from "../lib/local-ui";
 import { MODULE_IDS, type ModuleId, useModules } from "../lib/modules";
-import { OrionConnectionBanner, useOrion, useOrionQuery } from "../lib/orion";
+import { OrionConnectionBanner, resolveSyncNotice, useOrion, useOrionQuery } from "../lib/orion";
+import { useFarmSpecies } from "../lib/species";
 import { useAppUpdate } from "../lib/updater";
 import { useTheme } from "./providers";
 
@@ -67,68 +67,38 @@ export const NAV_ITEMS: NavItem[] = [
 function SyncStatusBadge() {
   const { state: connState, syncStatus } = useOrion();
   const t = useT();
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  if (connState !== "open") {
+  useEffect(() => {
+    if (syncStatus.unhealthySinceMs == null && syncStatus.state !== "offline") return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, [syncStatus.unhealthySinceMs, syncStatus.state]);
+
+  const notice = resolveSyncNotice(connState, syncStatus, nowMs);
+  if (!notice) return null;
+
+  if (notice === "local_waiting") {
     return (
-      <Badge variant="warn" icon={<CloudOff size={13} />}>
+      <Badge variant="warn" icon={<CloudOff size={13} />} data-testid="shell-sync-notice">
         {t("shell.sync.localWaiting")}
       </Badge>
     );
   }
 
-  switch (syncStatus.state) {
-    case "syncing":
-    case "connecting":
-      return (
-        <Badge variant="info" icon={<RefreshCw size={13} className="orbit-spin" />}>
-          {t("shell.sync.syncing", { count: syncStatus.pendingOutbox })}
-        </Badge>
-      );
-    case "error":
-      return (
-        <Badge variant="danger" icon={<CloudOff size={13} />}>
-          {t("shell.sync.error")}
-        </Badge>
-      );
-    case "offline":
-    case "disabled":
-      return (
-        <Badge variant="neutral" icon={<CloudOff size={13} />}>
-          {t("shell.sync.savedLocally")}
-        </Badge>
-      );
-    default:
-      return (
-        <Badge variant="ok" icon={<CheckCircle2 size={13} />}>
-          {t("shell.sync.synced")}
-        </Badge>
-      );
+  if (notice === "sync_error") {
+    return (
+      <Badge variant="danger" icon={<CloudOff size={13} />} data-testid="shell-sync-notice">
+        {t("shell.sync.error")}
+      </Badge>
+    );
   }
-}
 
-function BrandMark() {
   return (
-    <svg
-      className="orbit-brand__mark"
-      width="22"
-      height="22"
-      viewBox="0 0 22 22"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="11" cy="11" r="4" fill="currentColor" />
-      <ellipse
-        cx="11"
-        cy="11"
-        rx="9.5"
-        ry="4.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        transform="rotate(-28 11 11)"
-      />
-      <circle cx="18.6" cy="6.4" r="2" fill="var(--accent-primary)" />
-    </svg>
+    <Badge variant="warn" icon={<CloudOff size={13} />} data-testid="shell-sync-notice">
+      {t("shell.sync.outOfSync")}
+    </Badge>
   );
 }
 
@@ -137,6 +107,7 @@ export function AppShell() {
   const { data: summary } = useOrionQuery("farm.summary");
   const { isEnabled } = useModules();
   const { theme, toggleTheme } = useTheme();
+  const { species } = useFarmSpecies();
   const customPages = useCustomPages();
   const t = useT();
   useLocalUiLifecycle();
@@ -144,7 +115,16 @@ export function AppShell() {
 
   const farmName = summary?.farm?.name ?? t("shell.farm.fallbackName");
   const alertCount = summary?.recentAlerts?.length ?? 0;
-  const totalAnimals = (summary?.counts?.cattle ?? 0) + (summary?.counts?.horses ?? 0);
+  const cattleCount = summary?.counts?.cattle ?? 0;
+  const horseCount = summary?.counts?.horses ?? 0;
+  const primaryAnimals =
+    species === "horse"
+      ? horseCount > 0
+        ? horseCount
+        : cattleCount
+      : cattleCount > 0
+        ? cattleCount
+        : horseCount;
   const orionOnline = connState === "open";
 
   const topAndModuleNavItems: NavItem[] = [
@@ -155,11 +135,17 @@ export function AppShell() {
 
   const renderNavItem = (item: NavItem) => {
     const Icon = item.icon;
+    const labelKey: MessageKey =
+      item.moduleId === "herd"
+        ? species === "horse"
+          ? "shell.nav.herd.horse"
+          : "shell.nav.herd.cattle"
+        : item.labelKey;
     const count =
       item.to === "/" && alertCount > 0
         ? alertCount
-        : item.to === "/herd" && totalAnimals > 0
-          ? totalAnimals
+        : item.to === "/herd" && primaryAnimals > 0
+          ? primaryAnimals
           : null;
     const testId = item.moduleId
       ? `nav-module-${item.moduleId}`
@@ -173,7 +159,7 @@ export function AppShell() {
         <NavLink to={item.to} end={item.end} className="orbit-nav-link" data-testid={testId}>
           <span className="orbit-nav-link-inner">
             <Icon size={18} aria-hidden="true" />
-            <span>{t(item.labelKey)}</span>
+            <span>{t(labelKey)}</span>
           </span>
           {count !== null && (
             <span
@@ -238,12 +224,15 @@ export function AppShell() {
           <span>{t("shell.nav.feedback")}</span>
         </NavLink>
 
-        <div className="orbit-rail__status">
-          <span
-            className={orionOnline ? "orbit-status-dot orbit-status-dot--ok" : "orbit-status-dot"}
-            aria-hidden="true"
-          />
-          <span>{t(orionOnline ? "shell.orion.online" : `shell.orion.${connState}`)}</span>
+        <div className="orbit-rail__status-card">
+          <div className="orbit-rail__status">
+            <span
+              className={orionOnline ? "orbit-status-dot orbit-status-dot--ok" : "orbit-status-dot"}
+              aria-hidden="true"
+            />
+            <span>{t(orionOnline ? "shell.orion.online" : `shell.orion.${connState}`)}</span>
+          </div>
+          <span className="orbit-rail__status-sub">{t("shell.sync.savedLocally")}</span>
         </div>
       </aside>
 

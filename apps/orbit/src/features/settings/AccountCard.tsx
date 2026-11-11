@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { Badge, Button, Card, Input, useToast } from "../../design";
 import { useT } from "../../i18n";
-import { useOrion, useOrionEvent } from "../../lib/orion";
+import { calmAccountSyncState, useOrion, useOrionEvent } from "../../lib/orion";
 import { BillingSection } from "./BillingSection";
 import { MembersCard } from "./MembersCard";
 
@@ -298,9 +298,14 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
               </dd>
               <dt style={muted}>{t("account.sync")}</dt>
               <dd style={{ margin: 0 }}>
-                <Badge variant={SYNC_BADGE[syncStatus.state]} data-testid="account-sync">
-                  {t(`account.sync.${syncStatus.state}`)}
-                </Badge>
+                {(() => {
+                  const displayState = calmAccountSyncState(syncStatus);
+                  return (
+                    <Badge variant={SYNC_BADGE[displayState]} data-testid="account-sync">
+                      {t(`account.sync.${displayState}`)}
+                    </Badge>
+                  );
+                })()}
               </dd>
             </dl>
           ) : (

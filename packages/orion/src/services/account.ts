@@ -83,6 +83,7 @@ const MUTATION_TABLE: Record<string, SyncedTable> = {
   "cameras.upsert": "cameras",
   "cameraLayout.save": "camera_layouts",
   "observations.add": "observations",
+  "farm.update": "farms",
 };
 
 export class AccountService {

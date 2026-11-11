@@ -18,7 +18,7 @@ export const chat: Catalog<typeof en> = {
   "starter.milkYield.category": "Besetning og melking",
   "starter.listCows.label": "Vis kyrne i besetningen og sensorene deres",
   "starter.listCows.prompt": "Vis kyrne i besetningen min",
-  "starter.listCows.category": "Kyr og hester",
+  "starter.listCows.category": "Besetning",
   "starter.findCameras.label": "Finn kameraer på nettverket mitt",
   "starter.findCameras.prompt": "Finn kameraer på nettverket mitt",
   "starter.findCameras.category": "Fjøskameraer",

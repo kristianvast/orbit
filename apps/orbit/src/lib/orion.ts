@@ -86,11 +86,64 @@ export async function resolveOrionEndpoint(): Promise<OrionEndpoint> {
   };
 }
 
+export const OUT_OF_SYNC_THRESHOLD_MS = 3 * 60_000;
+
+export type SyncNoticeKind = "local_waiting" | "sync_error" | "out_of_sync" | null;
+
 export interface SyncStatusSnapshot {
   state: EventFrame<"sync.status">["state"];
   pendingOutbox: number;
   lastSyncedAt: string | null;
   error?: string;
+  unhealthySinceMs?: number | null;
+}
+
+export function resolveSyncNotice(
+  connState: ConnectionState,
+  syncStatus: SyncStatusSnapshot,
+  nowMs = Date.now(),
+): SyncNoticeKind {
+  if (connState !== "open") return "local_waiting";
+  if (syncStatus.state === "error") return "sync_error";
+  if (syncStatus.state === "disabled" || syncStatus.state === "up_to_date") return null;
+
+  const since = syncStatus.unhealthySinceMs ?? null;
+  if (since !== null && nowMs - since >= OUT_OF_SYNC_THRESHOLD_MS) {
+    return "out_of_sync";
+  }
+
+  if (
+    syncStatus.state === "offline" &&
+    syncStatus.pendingOutbox > 0 &&
+    syncStatus.lastSyncedAt !== null
+  ) {
+    const lastMs = Date.parse(syncStatus.lastSyncedAt);
+    if (Number.isFinite(lastMs) && nowMs - lastMs >= OUT_OF_SYNC_THRESHOLD_MS) {
+      return "out_of_sync";
+    }
+  }
+
+  return null;
+}
+
+export function calmAccountSyncState(
+  syncStatus: SyncStatusSnapshot,
+  nowMs = Date.now(),
+): SyncStatusSnapshot["state"] {
+  if (
+    (syncStatus.state === "syncing" || syncStatus.state === "connecting") &&
+    syncStatus.lastSyncedAt !== null &&
+    syncStatus.pendingOutbox === 0
+  ) {
+    return "up_to_date";
+  }
+  if (syncStatus.state === "offline" && syncStatus.lastSyncedAt !== null) {
+    const since = syncStatus.unhealthySinceMs ?? null;
+    if (since === null || nowMs - since < OUT_OF_SYNC_THRESHOLD_MS) {
+      return "up_to_date";
+    }
+  }
+  return syncStatus.state;
 }
 
 export interface OrionContextValue {
@@ -108,7 +161,31 @@ const DEFAULT_SYNC_STATUS: SyncStatusSnapshot = {
   state: "up_to_date",
   pendingOutbox: 0,
   lastSyncedAt: null,
+  unhealthySinceMs: null,
 };
+
+function nextSyncSnapshot(
+  prev: SyncStatusSnapshot,
+  ev: EventFrame<"sync.status">,
+  nowMs = Date.now(),
+): SyncStatusSnapshot {
+  let unhealthySinceMs: number | null = null;
+  if (ev.state === "offline" || ev.state === "error") {
+    unhealthySinceMs = prev.unhealthySinceMs ?? nowMs;
+  } else if (
+    (ev.state === "syncing" || ev.state === "connecting") &&
+    prev.unhealthySinceMs != null
+  ) {
+    unhealthySinceMs = prev.unhealthySinceMs;
+  }
+  return {
+    state: ev.state,
+    pendingOutbox: ev.pendingOutbox,
+    lastSyncedAt: ev.lastSyncedAt,
+    error: ev.error,
+    unhealthySinceMs,
+  };
+}
 
 const OrionContext = createContext<OrionContextValue | null>(null);
 
@@ -135,12 +212,7 @@ export function OrionProvider({ children, initialClient, initialEndpoint }: Orio
       setState(initialClient.state);
       const offState = initialClient.onState((next) => setState(next));
       const offSync = initialClient.on("sync.status", (ev) => {
-        setSyncStatus({
-          state: ev.state,
-          pendingOutbox: ev.pendingOutbox,
-          lastSyncedAt: ev.lastSyncedAt,
-          error: ev.error,
-        });
+        setSyncStatus((prev) => nextSyncSnapshot(prev, ev));
       });
       return () => {
         offState();
@@ -195,12 +267,7 @@ export function OrionProvider({ children, initialClient, initialEndpoint }: Orio
         });
         offSync = created.on("sync.status", (ev) => {
           if (!cancelled) {
-            setSyncStatus({
-              state: ev.state,
-              pendingOutbox: ev.pendingOutbox,
-              lastSyncedAt: ev.lastSyncedAt,
-              error: ev.error,
-            });
+            setSyncStatus((prev) => nextSyncSnapshot(prev, ev));
           }
         });
       },

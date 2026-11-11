@@ -3,7 +3,9 @@ import type { Messages } from "../../core";
 export const shell = {
   "nav.home": "Home",
   "nav.chat": "Ask Orion",
-  "nav.herd": "Cows & Horses",
+  "nav.herd": "Cattle",
+  "nav.herd.cattle": "Cattle",
+  "nav.herd.horse": "Horses",
   "nav.devices": "Sensors & Robots",
   "nav.cameras": "Cameras",
   "nav.settings": "Settings",
@@ -14,10 +16,18 @@ export const shell = {
   "nav.feedback": "Send feedback",
   "update.ready": "A new version of Orbit is ready.",
   "update.restart": "Restart to update",
-  "module.disabled.herd.title": "Cows & Horses is not added yet",
+  "module.disabled.herd.title": "Cattle is not added yet",
+  "module.disabled.herd.title.cattle": "Cattle is not added yet",
+  "module.disabled.herd.title.horse": "Horses is not added yet",
   "module.disabled.herd.description":
-    "Orion adds the herd register when you start tracking cattle or horses.",
+    "Orion adds the herd register when you start tracking your cattle.",
+  "module.disabled.herd.description.cattle":
+    "Orion adds the herd register when you start tracking your cattle.",
+  "module.disabled.herd.description.horse":
+    "Orion adds the stable register when you start tracking your horses.",
   "module.disabled.herd.prompt": "Help me track my herd",
+  "module.disabled.herd.prompt.cattle": "Help me track my herd",
+  "module.disabled.herd.prompt.horse": "Help me track my horses",
   "module.disabled.devices.title": "Sensors & Robots is not added yet",
   "module.disabled.devices.description":
     "Orion adds this screen when you connect a milking robot, collar, bolus, ear tag sensor, or scale.",
@@ -33,6 +43,7 @@ export const shell = {
   "sync.error": "Sync error",
   "sync.savedLocally": "Saved on this PC",
   "sync.synced": "Synced",
+  "sync.outOfSync": "Out of sync",
   "orion.online": "Orion online",
   "orion.connecting": "Orion connecting",
   "orion.reconnecting": "Orion reconnecting",
