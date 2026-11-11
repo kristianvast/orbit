@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { BrowserSession } from "../src/agent/browser";
-import { removeDir, tempDir } from "./helpers";
+import { tempDir } from "./helpers";
 
 const FORM_PAGE = `<!doctype html><title>Order feed</title>
 <h1>Order feed</h1>
@@ -39,7 +40,10 @@ beforeAll(() => {
 afterAll(() => {
   session.close();
   server.stop(true);
-  removeDir(profile);
+  // Edge and Chrome keep the profile folder locked until their process is gone, which on
+  // Windows is a moment after it is killed.
+  Bun.WebView.closeAll();
+  rmSync(profile, { recursive: true, force: true, maxRetries: 50, retryDelay: 100 });
 });
 
 function shown(result: AgentToolResult<unknown>): string {
