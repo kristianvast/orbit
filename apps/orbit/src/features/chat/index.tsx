@@ -18,6 +18,7 @@ import { Button, Dialog, useToast } from "../../design";
 import { type MessageKey, useT } from "../../i18n";
 import { useOrion } from "../../lib/orion";
 import { Composer, type SendMode } from "./Composer";
+import { forgetChat, lastChat, rememberChat } from "./last-chat";
 import { classifyPlanError, PlanErrorCard } from "./PlanErrorCard";
 import { chatReducer, createInitialChatState } from "./reducer";
 import { ThreadSidebar } from "./Sidebar";
@@ -155,6 +156,22 @@ export default function ChatPage() {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const initialSessionParam = useRef(searchParams.get(SESSION_PARAM));
+  // Arriving with a question to ask (from Home, say) starts a new conversation instead.
+  const resumeLast = useRef(!searchParams.get("prompt") && !statePrefill.trim());
+  const sessionIdRef = useRef(chatState.sessionId);
+  sessionIdRef.current = chatState.sessionId;
+
+  useEffect(() => {
+    if (chatState.sessionId) rememberChat(chatState.sessionId);
+  }, [chatState.sessionId]);
+
+  // Leaving Chat is the moment "last used" is counted from.
+  useEffect(
+    () => () => {
+      if (sessionIdRef.current) rememberChat(sessionIdRef.current);
+    },
+    [],
+  );
 
   const isDraft = chatState.sessionId === null;
 
@@ -228,6 +245,7 @@ export default function ChatPage() {
 
   const startDraft = useCallback(() => {
     dispatch({ type: "session.cleared" });
+    forgetChat();
     setSessionParam(null);
     setAtBottom(true);
     setSidebarOpen(false);
@@ -247,10 +265,15 @@ export default function ChatPage() {
         if (cancelled) return;
         setSessions(list.sessions);
         if (settings?.model) setDefaultModel(settings.model);
-        const wanted = initialSessionParam.current;
+        const last = resumeLast.current ? lastChat() : null;
+        resumeLast.current = false;
+        const wanted = initialSessionParam.current ?? last?.id ?? null;
+        const fromLink = initialSessionParam.current !== null;
         initialSessionParam.current = null;
-        if (wanted && list.sessions.some((s) => s.id === wanted)) {
-          await openSessionRef.current(wanted);
+        const found = list.sessions.find((s) => s.id === wanted);
+        // A conversation Orion is still working in is returned to however long it has been.
+        if (found && (fromLink || last?.recent || found.streaming)) {
+          await openSessionRef.current(found.id);
         }
       } catch (err) {
         if (!cancelled) {

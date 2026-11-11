@@ -15,7 +15,7 @@ import {
 } from "@orbit/protocol";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "../../app/providers";
 import SettingsPage from "../settings";
 import ChatPage, {
@@ -30,6 +30,7 @@ import ChatPage, {
   ToolCard,
   turnDurationMs,
 } from "./index";
+import { lastChat, RESUME_WINDOW_MS, rememberChat } from "./last-chat";
 
 const baseSession: SessionSummary = {
   id: "sess-1",
@@ -994,5 +995,72 @@ describe("ChatPage and SettingsPage integration", () => {
       expect(requestMock).toHaveBeenCalledWith("auth.cancel", { loginId: "login-1" });
     });
     expect(screen.queryByTestId("login-dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("returning to Chat", () => {
+  beforeEach(() => window.sessionStorage.clear());
+  afterEach(() => window.sessionStorage.clear());
+
+  const openChat = (client: ReturnType<typeof createMockClient>["client"], url = "/chat") =>
+    render(
+      <MemoryRouter initialEntries={[url]}>
+        <AppProviders initialClient={client}>
+          <ChatPage />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+  it("counts a conversation as recent up to the resume window and not after", () => {
+    rememberChat("sess-1", 1_000);
+    expect(lastChat(1_000 + RESUME_WINDOW_MS)).toEqual({ id: "sess-1", recent: true });
+    expect(lastChat(1_001 + RESUME_WINDOW_MS)).toEqual({ id: "sess-1", recent: false });
+  });
+
+  it("opens the conversation used a moment ago", async () => {
+    rememberChat("sess-1");
+    const { client } = createMockClient();
+    openChat(client);
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toHaveAttribute("data-active", "true");
+    });
+  });
+
+  it("starts a new conversation when the last one was used long ago, and remembers one opened now", async () => {
+    rememberChat("sess-1", Date.now() - RESUME_WINDOW_MS - 1);
+    const { client, requestMock } = createMockClient();
+    const view = openChat(client);
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("chat-empty-state")).toBeInTheDocument();
+    expect(requestMock).not.toHaveBeenCalledWith("sessions.open", expect.anything());
+
+    fireEvent.click(screen.getByTestId("session-open-sess-1"));
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toHaveAttribute("data-active", "true");
+    });
+    view.unmount();
+    expect(lastChat()).toEqual({ id: "sess-1", recent: true });
+  });
+
+  it("starts a new conversation after New chat, and when arriving with a question", async () => {
+    rememberChat("sess-1");
+    const first = createMockClient();
+    const view = openChat(first.client);
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toHaveAttribute("data-active", "true");
+    });
+    fireEvent.click(screen.getByTestId("session-new-button"));
+    view.unmount();
+    expect(lastChat()).toBeNull();
+
+    rememberChat("sess-1");
+    const second = createMockClient();
+    openChat(second.client, "/chat?prompt=How%20is%20the%20herd%3F");
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toBeInTheDocument();
+    });
+    expect(second.requestMock).not.toHaveBeenCalledWith("sessions.open", expect.anything());
   });
 });
