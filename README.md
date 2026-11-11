@@ -2,16 +2,17 @@
 
 Orbit is an open-source desktop app for cattle (dairy and beef) and horse farms. You install it on your own computer on the farm, talk to Orion, its built-in AI assistant, and Orbit grows the screens and connections your farm needs. Records live on your PC first, work offline, and every change Orion makes can be undone with one click.
 
-**Status:** Early release (v0.1.0). Interfaces, database tables, and cloud endpoints may still change.
+**Status:** Early release. Interfaces, database tables, and cloud endpoints may still change.
 
 ## Download
 
-Installers for Orbit v0.1.0:
+Installers for the latest release:
 
 - **Windows (x64):** [Orbit-Windows.exe](https://github.com/kristianvast/orbit/releases/latest/download/Orbit-Windows.exe)
 - **macOS (Apple Silicon):** [Orbit-macOS-Apple-Silicon.dmg](https://github.com/kristianvast/orbit/releases/latest/download/Orbit-macOS-Apple-Silicon.dmg)
 - **macOS (Intel):** [Orbit-macOS-Intel.dmg](https://github.com/kristianvast/orbit/releases/latest/download/Orbit-macOS-Intel.dmg)
 - **Linux (x64):** [Orbit-Linux-x64.AppImage](https://github.com/kristianvast/orbit/releases/latest/download/Orbit-Linux-x64.AppImage)
+- **Linux (ARM64, Debian or Ubuntu):** [Orbit-Linux-arm64.deb](https://github.com/kristianvast/orbit/releases/latest/download/Orbit-Linux-arm64.deb)
 
 Additional formats (`.msi` for Windows and `.deb` for Debian/Ubuntu) are attached to the [latest GitHub release](https://github.com/kristianvast/orbit/releases/latest). Installed copies download newer releases in the background and offer a one-click restart to update.
 
