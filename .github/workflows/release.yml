@@ -173,7 +173,8 @@ jobs:
           releaseBody: See the assets below to download and install this version.
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          # The publish job writes latest.json once; parallel builds rewriting it lose entries.
+          includeUpdaterJson: false
 
   # Gives each installer a name that never changes, so the website can link straight to
   # releases/latest/download/<name>, then publishes the draft so the updater feed goes live.
@@ -184,6 +185,12 @@ jobs:
     if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Add stable download names and publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -191,7 +198,9 @@ jobs:
         run: |
           mkdir assets && cd assets
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --pattern '*-setup.exe' --pattern '*.dmg' --pattern '*.AppImage' --pattern '*.deb'
+            --pattern '*-setup.exe' --pattern '*.dmg' --pattern '*.AppImage' --pattern '*.deb' \
+            --pattern '*.sig'
+          bun ../scripts/release-latest-json.ts . "$TAG" "$GITHUB_REPOSITORY"
           named=()
           stable() {
             local found=( $1 )
@@ -209,5 +218,5 @@ jobs:
           stable '*_arm64.deb' Orbit-Linux-arm64.deb
           # Windows is where most farm PCs are: never publish a release without it.
           if [[ ! -f Orbit-Windows.exe ]]; then echo "no Windows installer; leaving the release as a draft"; exit 1; fi
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "${named[@]}"
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber latest.json "${named[@]}"
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
