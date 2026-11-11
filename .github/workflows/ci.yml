@@ -82,7 +82,7 @@ jobs:
             bun-target: bun-linux-x64
             exe: ""
             smoke: true
-          # tauri-driver has no macOS driver: macOS gets a build + artifact only.
+          # tauri-driver has no macOS driver: macOS gets a launch smoke instead of WebDriver.
           - os: macos-latest
             bun-target: bun-darwin-arm64
             exe: ""
@@ -118,7 +118,8 @@ jobs:
           TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
           echo "Rust host triple: $TRIPLE"
           mkdir -p apps/orbit/src-tauri/binaries
-          bun build --compile --target=${{ matrix.bun-target }} packages/orion/src/main.ts \
+          bun build --compile --minify --keep-names --target=${{ matrix.bun-target }} \
+            packages/orion/src/main.ts \
             --outfile "apps/orbit/src-tauri/binaries/orion-$TRIPLE${{ matrix.exe }}"
           ls -la apps/orbit/src-tauri/binaries
 
@@ -238,3 +239,90 @@ jobs:
         if: runner.os == 'Linux'
         timeout-minutes: 5
         run: xvfb-run -a bun run --filter '@orbit/e2e' test:desktop
+
+      - name: Orion sidecar exits with the app (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 1
+        run: |
+          for _ in $(seq 1 15); do
+            pgrep -f 'src-tauri/target/debug/orion' > /dev/null || { echo "No orphaned sidecar"; exit 0; }
+            sleep 1
+          done
+          ps -eo pid,ppid,etime,args | grep -E 'orion|orbit-desktop' | grep -v grep || true
+          echo "Orion sidecar still running after the desktop smoke closed Orbit (orphan)"
+          exit 1
+
+      - name: Desktop launch smoke (macOS)
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        env:
+          ORION_MOCK_MODEL: "1"
+          ORION_SECRETS: file
+        run: |
+          # Same binary as target/debug/orbit-desktop, launched from inside the .app so it has
+          # its bundle id and can be quit like a user would (Cmd+Q). SIGTERM would skip
+          # RunEvent::Exit, which is where lib.rs kills the sidecar.
+          APP="apps/orbit/src-tauri/target/debug/bundle/macos/Orbit.app"
+          LOG="$RUNNER_TEMP/orbit-macos.log"
+          echo "Data dir (default app location): $HOME/Library/Application Support/no.agrointel.orbit"
+          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+            -f "$APP" || true
+          "$APP/Contents/MacOS/orbit-desktop" > "$LOG" 2>&1 &
+          APP_PID=$!
+          ORION_PID=""
+          PORT=""
+          for _ in $(seq 1 60); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              cat "$LOG"; echo "Orbit exited during startup"; exit 1
+            fi
+            ORION_PID="$(pgrep -P "$APP_PID" -f 'Contents/MacOS/orion' | head -n1 || true)"
+            if [ -n "$ORION_PID" ]; then
+              PORT="$(lsof -nP -iTCP -sTCP:LISTEN -a -p "$ORION_PID" 2>/dev/null \
+                | awk '$9 ~ /^127\.0\.0\.1:/ { sub(/.*:/, "", $9); print $9; exit }' || true)"
+              if [ -n "$PORT" ]; then break; fi
+            fi
+            sleep 1
+          done
+          if [ -z "$PORT" ]; then
+            cat "$LOG"
+            ps -axo pid,ppid,args | grep -E 'orion|orbit-desktop' | grep -v grep || true
+            kill -9 "$APP_PID" ${ORION_PID:+"$ORION_PID"} 2>/dev/null || true
+            echo "Orion sidecar did not listen on 127.0.0.1 within 60s"
+            exit 1
+          fi
+          echo "Orion sidecar pid $ORION_PID listening on 127.0.0.1:$PORT"
+          CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:$PORT/" || true)"
+          echo "HTTP status from sidecar: $CODE"
+          if ! [[ "$CODE" =~ ^[1-5][0-9][0-9]$ ]]; then
+            kill -9 "$APP_PID" "$ORION_PID" 2>/dev/null || true
+            echo "Sidecar port gave no HTTP response"
+            exit 1
+          fi
+          screencapture -x "$RUNNER_TEMP/orbit-macos.png" || echo "::warning::screencapture failed"
+          if ! osascript -e 'tell application id "no.agrointel.orbit" to quit'; then
+            echo "::warning::AppleEvent quit failed; falling back to SIGTERM (skips RunEvent::Exit)"
+            kill -TERM "$APP_PID" || true
+          fi
+          for _ in $(seq 1 20); do kill -0 "$APP_PID" 2>/dev/null || break; sleep 1; done
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            kill -9 "$APP_PID" "$ORION_PID" 2>/dev/null || true
+            echo "Orbit did not quit within 20s"; exit 1
+          fi
+          for _ in $(seq 1 15); do kill -0 "$ORION_PID" 2>/dev/null || break; sleep 1; done
+          cat "$LOG"
+          if kill -0 "$ORION_PID" 2>/dev/null; then
+            kill -9 "$ORION_PID" || true
+            echo "Orion sidecar outlived Orbit (orphan)"; exit 1
+          fi
+          echo "Orbit quit and its Orion sidecar exited with it"
+
+      - name: Upload macOS launch screenshot
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbit-macos-launch
+          path: |
+            ${{ runner.temp }}/orbit-macos.png
+            ${{ runner.temp }}/orbit-macos.log
+          if-no-files-found: warn
+          retention-days: 14
