@@ -15,7 +15,7 @@ import { NavLink, Outlet } from "react-router";
 import { Badge, BrandMark, Button } from "../design";
 import { CUSTOM_PAGE_ICON, useCustomPages } from "../features/pages";
 import { type MessageKey, useT } from "../i18n";
-import { useLocalUiLifecycle } from "../lib/local-ui";
+import { useLocalUiLifecycle, useLocalUiReady } from "../lib/local-ui";
 import { MODULE_IDS, type ModuleId, useModules } from "../lib/modules";
 import { OrionConnectionBanner, resolveSyncNotice, useOrion, useOrionQuery } from "../lib/orion";
 import { useFarmSpecies } from "../lib/species";
@@ -111,6 +111,7 @@ export function AppShell() {
   const customPages = useCustomPages();
   const t = useT();
   useLocalUiLifecycle();
+  const localUiReady = useLocalUiReady();
   const appUpdate = useAppUpdate();
 
   const farmName = summary?.farm?.name ?? t("shell.farm.fallbackName");
@@ -263,6 +264,19 @@ export function AppShell() {
             <span>{t("shell.update.ready")}</span>
             <Button variant="primary" size="sm" onClick={appUpdate.restart}>
               {t("shell.update.restart")}
+            </Button>
+          </div>
+        )}
+        {localUiReady.ready && (
+          <div className="orbit-update-bar" role="status" data-testid="local-ui-ready-bar">
+            <span>{t("shell.localUi.ready")}</span>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={localUiReady.open}
+              data-testid="local-ui-ready-open"
+            >
+              {t("shell.localUi.open")}
             </Button>
           </div>
         )}

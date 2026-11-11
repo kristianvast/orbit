@@ -22,7 +22,11 @@ import ChatPage, {
   buildTurnBlocks,
   buildTurns,
   chatReducer,
+  collapseToolRuns,
   createInitialChatState,
+  summarizeToolArgs,
+  summarizeToolGroup,
+  Timeline,
   ToolCard,
   turnDurationMs,
 } from "./index";
@@ -460,6 +464,140 @@ describe("turn grouping", () => {
     expect(buildTurnBlocks(first.steps).map((b) => b.kind)).toEqual(["tools", "step"]);
     expect(turnDurationMs(first)).toBe(4000);
     expect(turnDurationMs(second)).toBeNull();
+  });
+
+  it("summarizes tool groups by kind with counts sorted descending and other last", () => {
+    const mk = (id: string, name: string, status: ToolItem["status"] = "done"): ToolItem => ({
+      kind: "tool",
+      id,
+      ts: "2026-11-03T07:00:01.000Z",
+      toolCallId: id,
+      name,
+      label: name,
+      args: {},
+      status,
+    });
+
+    const summary = summarizeToolGroup([
+      mk("t1", "local_ui_build"),
+      mk("t2", "read"),
+      mk("t3", "bash", "error"),
+      mk("t4", "powershell"),
+      mk("t5", "bash"),
+      mk("t6", "read", "error"),
+      mk("t7", "write"),
+      mk("t8", "memory_remember"),
+    ]);
+
+    expect(summary.total).toBe(8);
+    expect(summary.failed).toBe(2);
+    expect(summary.kinds.map((k) => ({ kind: k.kind, count: k.count }))).toEqual([
+      { kind: "commands", count: 3 },
+      { kind: "filesRead", count: 2 },
+      { kind: "filesChanged", count: 1 },
+      { kind: "other", count: 2 },
+    ]);
+  });
+
+  it("collapses consecutive calls with identical tool name and argument summary", () => {
+    const mk = (
+      id: string,
+      name: string,
+      args: Record<string, unknown>,
+      durationMs?: number,
+      status: ToolItem["status"] = "done",
+    ): ToolItem => ({
+      kind: "tool",
+      id,
+      ts: "2026-11-03T07:00:01.000Z",
+      toolCallId: id,
+      name,
+      label: name,
+      args,
+      status,
+      ...(durationMs !== undefined ? { durationMs } : {}),
+    });
+
+    const tools = [
+      mk("c1", "computer", { action: "screenshot" }, 100),
+      mk("c2", "computer", { action: "screenshot" }, 150),
+      mk("c3", "computer", { action: "screenshot" }, 200, "error"),
+      mk("c4", "computer", { action: "key", keys: "ctrl+s" }, 50),
+      mk("c5", "computer", { action: "screenshot" }, 120),
+    ];
+
+    const runs = collapseToolRuns(tools, (tool) =>
+      summarizeToolArgs(tool.name, tool.args, (k) => k),
+    );
+    expect(runs.map((r) => ({ name: r.item.name, arg: r.argSummary, count: r.count }))).toEqual([
+      { name: "computer", arg: "screenshot", count: 3 },
+      { name: "computer", arg: "key: ctrl+s", count: 1 },
+      { name: "computer", arg: "screenshot", count: 1 },
+    ]);
+    expect(runs[0]?.item.durationMs).toBe(450);
+    expect(runs[0]?.item.status).toBe("error");
+  });
+
+  it("keeps tool group collapsed when tools are running or failed and expands only on click", () => {
+    const { client } = createMockClient();
+    const mk = (
+      id: string,
+      name: string,
+      args: Record<string, unknown>,
+      status: ToolItem["status"],
+    ): ToolItem => ({
+      kind: "tool",
+      id,
+      ts: "2026-11-03T07:00:01.000Z",
+      toolCallId: id,
+      name,
+      label: name,
+      args,
+      status,
+    });
+
+    const { rerender } = render(
+      <AppProviders initialClient={client}>
+        <Timeline
+          items={[
+            { kind: "user", id: "u1", ts: "2026-11-03T07:00:00.000Z", text: "Check" },
+            mk("t1", "read", { path: "apps/orbit/src/app/shell.tsx" }, "done"),
+            mk("t2", "bash", { command: "git status" }, "running"),
+          ]}
+          streaming={true}
+          runStartedAt="2026-11-03T07:00:00.000Z"
+        />
+      </AppProviders>,
+    );
+
+    expect(screen.getByTestId("tool-group-toggle")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("tool-group-live")).toHaveTextContent("git status");
+    expect(screen.queryByTestId("tool-group-list")).not.toBeInTheDocument();
+
+    rerender(
+      <AppProviders initialClient={client}>
+        <Timeline
+          items={[
+            { kind: "user", id: "u1", ts: "2026-11-03T07:00:00.000Z", text: "Check" },
+            mk("t1", "read", { path: "apps/orbit/src/app/shell.tsx" }, "done"),
+            mk("t2", "bash", { command: "git status" }, "error"),
+            mk("t3", "bash", { command: "git status" }, "done"),
+          ]}
+          streaming={false}
+          runStartedAt={null}
+        />
+      </AppProviders>,
+    );
+
+    expect(screen.getByTestId("tool-group-toggle")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("tool-group-failed")).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-group-list")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("tool-group-toggle"));
+    expect(screen.getByTestId("tool-group-toggle")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("tool-group-list")).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^tool-card-toggle-/)).toHaveLength(2);
+    expect(screen.getByTestId("tool-card-repeat-t3")).toHaveTextContent("x2");
   });
 });
 

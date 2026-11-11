@@ -16,6 +16,8 @@ export const shell = {
   "nav.feedback": "Send feedback",
   "update.ready": "A new version of Orbit is ready.",
   "update.restart": "Restart to update",
+  "localUi.ready": "A new version of your Orbit is ready.",
+  "localUi.open": "Open new version",
   "module.disabled.herd.title": "Cattle is not added yet",
   "module.disabled.herd.title.cattle": "Cattle is not added yet",
   "module.disabled.herd.title.horse": "Horses is not added yet",

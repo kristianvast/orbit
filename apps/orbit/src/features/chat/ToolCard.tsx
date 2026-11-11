@@ -2,6 +2,7 @@ import type { AnimalListItem, ToolItem } from "@orbit/protocol";
 import {
   Activity,
   AlertCircle,
+  Bookmark,
   Camera,
   CheckCircle2,
   ChevronDown,
@@ -11,7 +12,11 @@ import {
   FileCode2,
   FileText,
   FolderPlus,
+  Globe,
+  Hammer,
   Loader2,
+  Monitor,
+  PackagePlus,
   Play,
   Plug,
   PlusCircle,
@@ -28,53 +33,232 @@ import { type I18nContextValue, type MessageKey, type TranslateFn, useI18n } fro
 
 export interface FriendlyToolMeta {
   title: string;
+  runningTitle: string;
   icon: typeof Tag;
 }
 
 /** Placeholder label the chat reducer gives a tool.end that arrived without its tool.start. */
 const UNKNOWN_TOOL_LABEL = "Tool call";
 
-function toolMetaKey(name: string): { key: MessageKey; icon: typeof Tag } | null {
+function toolMetaKey(name: string): {
+  key: MessageKey;
+  runningKey: MessageKey;
+  icon: typeof Tag;
+} | null {
   switch (name) {
     case "herd_query":
-      return { key: "chat.tool.herdQuery", icon: Tag };
+      return {
+        key: "chat.tool.herdQuery",
+        runningKey: "chat.toolRunning.herdQuery",
+        icon: Tag,
+      };
     case "herd_upsert_animal":
-      return { key: "chat.tool.herdUpsertAnimal", icon: PlusCircle };
+      return {
+        key: "chat.tool.herdUpsertAnimal",
+        runningKey: "chat.toolRunning.herdUpsertAnimal",
+        icon: PlusCircle,
+      };
+    case "herd_record_event":
+      return {
+        key: "chat.tool.herdRecordEvent",
+        runningKey: "chat.toolRunning.herdRecordEvent",
+        icon: Activity,
+      };
     case "devices_list":
-      return { key: "chat.tool.devicesList", icon: Radio };
+      return {
+        key: "chat.tool.devicesList",
+        runningKey: "chat.toolRunning.devicesList",
+        icon: Radio,
+      };
     case "device_bind":
-      return { key: "chat.tool.deviceBind", icon: Radio };
+      return {
+        key: "chat.tool.deviceBind",
+        runningKey: "chat.toolRunning.deviceBind",
+        icon: Radio,
+      };
     case "observations_query":
-      return { key: "chat.tool.observationsQuery", icon: Activity };
+      return {
+        key: "chat.tool.observationsQuery",
+        runningKey: "chat.toolRunning.observationsQuery",
+        icon: Activity,
+      };
     case "orbit_modules":
-      return { key: "chat.tool.orbitModules", icon: Wrench };
+      return {
+        key: "chat.tool.orbitModules",
+        runningKey: "chat.toolRunning.orbitModules",
+        icon: Wrench,
+      };
     case "connectors_list":
-      return { key: "chat.tool.connectorsList", icon: Plug };
+      return {
+        key: "chat.tool.connectorsList",
+        runningKey: "chat.toolRunning.connectorsList",
+        icon: Plug,
+      };
     case "connector_scaffold":
-      return { key: "chat.tool.connectorScaffold", icon: FolderPlus };
+      return {
+        key: "chat.tool.connectorScaffold",
+        runningKey: "chat.toolRunning.connectorScaffold",
+        icon: FolderPlus,
+      };
+    case "connector_configure":
+      return {
+        key: "chat.tool.connectorConfigure",
+        runningKey: "chat.toolRunning.connectorConfigure",
+        icon: Plug,
+      };
     case "connector_run":
-      return { key: "chat.tool.connectorRun", icon: Play };
+      return {
+        key: "chat.tool.connectorRun",
+        runningKey: "chat.toolRunning.connectorRun",
+        icon: Play,
+      };
     case "camera_discover":
-      return { key: "chat.tool.cameraDiscover", icon: Camera };
+      return {
+        key: "chat.tool.cameraDiscover",
+        runningKey: "chat.toolRunning.cameraDiscover",
+        icon: Camera,
+      };
     case "camera_add":
-      return { key: "chat.tool.cameraAdd", icon: Camera };
+      return {
+        key: "chat.tool.cameraAdd",
+        runningKey: "chat.toolRunning.cameraAdd",
+        icon: Camera,
+      };
     case "bash":
     case "powershell":
-      return { key: "chat.tool.runCommand", icon: Terminal };
+      return {
+        key: "chat.tool.runCommand",
+        runningKey: "chat.toolRunning.runCommand",
+        icon: Terminal,
+      };
     case "write":
-      return { key: "chat.tool.writeFile", icon: FileCode2 };
+      return {
+        key: "chat.tool.writeFile",
+        runningKey: "chat.toolRunning.writeFile",
+        icon: FileCode2,
+      };
     case "edit":
-      return { key: "chat.tool.editFile", icon: Edit3 };
+      return {
+        key: "chat.tool.editFile",
+        runningKey: "chat.toolRunning.editFile",
+        icon: Edit3,
+      };
     case "read":
-      return { key: "chat.tool.readFile", icon: FileText };
+      return {
+        key: "chat.tool.readFile",
+        runningKey: "chat.toolRunning.readFile",
+        icon: FileText,
+      };
     case "ls":
     case "find":
     case "grep":
-      return { key: "chat.tool.searchFiles", icon: Search };
+      return {
+        key: "chat.tool.searchFiles",
+        runningKey: "chat.toolRunning.searchFiles",
+        icon: Search,
+      };
+    case "computer":
+      return {
+        key: "chat.tool.computer",
+        runningKey: "chat.toolRunning.computer",
+        icon: Monitor,
+      };
+    case "web_search":
+      return {
+        key: "chat.tool.webSearch",
+        runningKey: "chat.toolRunning.webSearch",
+        icon: Search,
+      };
+    case "web_fetch":
+      return {
+        key: "chat.tool.webFetch",
+        runningKey: "chat.toolRunning.webFetch",
+        icon: Globe,
+      };
+    case "browser":
+      return {
+        key: "chat.tool.browser",
+        runningKey: "chat.toolRunning.browser",
+        icon: Globe,
+      };
+    case "orbit_source":
+      return {
+        key: "chat.tool.orbitSource",
+        runningKey: "chat.toolRunning.orbitSource",
+        icon: Hammer,
+      };
+    case "local_ui_build":
+      return {
+        key: "chat.tool.localUiBuild",
+        runningKey: "chat.toolRunning.localUiBuild",
+        icon: Hammer,
+      };
+    case "local_ui_disable":
+      return {
+        key: "chat.tool.localUiDisable",
+        runningKey: "chat.toolRunning.localUiDisable",
+        icon: Wrench,
+      };
+    case "memory_remember":
+      return {
+        key: "chat.tool.memoryRemember",
+        runningKey: "chat.toolRunning.memoryRemember",
+        icon: Bookmark,
+      };
+    case "memory_forget":
+      return {
+        key: "chat.tool.memoryForget",
+        runningKey: "chat.toolRunning.memoryForget",
+        icon: Bookmark,
+      };
+    case "skill_search":
+      return {
+        key: "chat.tool.skillSearch",
+        runningKey: "chat.toolRunning.skillSearch",
+        icon: Search,
+      };
+    case "skill_install":
+      return {
+        key: "chat.tool.skillInstall",
+        runningKey: "chat.toolRunning.skillInstall",
+        icon: PackagePlus,
+      };
+    case "page_scaffold":
+      return {
+        key: "chat.tool.pageScaffold",
+        runningKey: "chat.toolRunning.pageScaffold",
+        icon: FolderPlus,
+      };
+    case "feedback_send":
+      return {
+        key: "chat.tool.feedbackSend",
+        runningKey: "chat.toolRunning.feedbackSend",
+        icon: Wrench,
+      };
+    case "share_build":
+      return {
+        key: "chat.tool.shareBuild",
+        runningKey: "chat.toolRunning.shareBuild",
+        icon: Wrench,
+      };
+    case "share_status":
+      return {
+        key: "chat.tool.shareStatus",
+        runningKey: "chat.toolRunning.shareStatus",
+        icon: Wrench,
+      };
     case "db_query":
-      return { key: "chat.tool.dbQuery", icon: Tag };
+      return {
+        key: "chat.tool.dbQuery",
+        runningKey: "chat.toolRunning.dbQuery",
+        icon: Tag,
+      };
     case "db_mutate":
-      return { key: "chat.tool.dbMutate", icon: PlusCircle };
+      return {
+        key: "chat.tool.dbMutate",
+        runningKey: "chat.toolRunning.dbMutate",
+        icon: PlusCircle,
+      };
     default:
       return null;
   }
@@ -86,10 +270,24 @@ export function getFriendlyToolMeta(
   fallbackLabel?: string,
 ): FriendlyToolMeta {
   const known = toolMetaKey(name);
-  if (known) return { title: t(known.key), icon: known.icon };
-  if (fallbackLabel === UNKNOWN_TOOL_LABEL) return { title: t("chat.tool.fallback"), icon: Wrench };
+  if (known) {
+    return {
+      title: t(known.key),
+      runningTitle: t(known.runningKey),
+      icon: known.icon,
+    };
+  }
+  if (fallbackLabel === UNKNOWN_TOOL_LABEL) {
+    return {
+      title: t("chat.tool.fallback"),
+      runningTitle: t("chat.toolRunning.fallback"),
+      icon: Wrench,
+    };
+  }
+  const title = fallbackLabel && fallbackLabel !== name ? fallbackLabel : name;
   return {
-    title: fallbackLabel && fallbackLabel !== name ? fallbackLabel : name,
+    title,
+    runningTitle: title,
     icon: Wrench,
   };
 }
@@ -158,7 +356,7 @@ function speciesLabel(species: string, t: TranslateFn): string {
   }
 }
 
-function summarizeToolArgs(name: string, args: unknown, t: TranslateFn): string {
+export function summarizeToolArgs(name: string, args: unknown, t: TranslateFn): string {
   if (!args || typeof args !== "object") return "";
   const rec = args as Record<string, unknown>;
   if (name === "herd_query") {
@@ -185,6 +383,75 @@ function summarizeToolArgs(name: string, args: unknown, t: TranslateFn): string 
   }
   if (name === "bash" || name === "powershell") {
     return String(rec.command ?? "");
+  }
+  if (name === "computer") {
+    const action = typeof rec.action === "string" ? rec.action : "";
+    if (!action) return "";
+    if (action === "type" && typeof rec.text === "string" && rec.text.length > 0) {
+      return `type: ${rec.text}`;
+    }
+    if (action === "key" && typeof rec.keys === "string" && rec.keys.length > 0) {
+      return `key: ${rec.keys}`;
+    }
+    if (
+      action === "drag" &&
+      typeof rec.x === "number" &&
+      typeof rec.y === "number" &&
+      typeof rec.toX === "number" &&
+      typeof rec.toY === "number"
+    ) {
+      return `drag (${rec.x}, ${rec.y}) → (${rec.toX}, ${rec.toY})`;
+    }
+    if (typeof rec.x === "number" && typeof rec.y === "number") {
+      return `${action.replaceAll("_", " ")} (${rec.x}, ${rec.y})`;
+    }
+    return action.replaceAll("_", " ");
+  }
+  if (name === "web_search" || name === "skill_search") {
+    return typeof rec.query === "string" ? rec.query : "";
+  }
+  if (name === "web_fetch") {
+    return typeof rec.url === "string" ? rec.url : "";
+  }
+  if (name === "browser") {
+    const action = typeof rec.action === "string" ? rec.action : "";
+    if (action === "open" && typeof rec.url === "string") {
+      return rec.url;
+    }
+    if (action === "type" && typeof rec.text === "string") {
+      return rec.ref !== undefined ? `type [${String(rec.ref)}]: ${rec.text}` : `type: ${rec.text}`;
+    }
+    if (action === "click" && rec.ref !== undefined) {
+      return `click [${String(rec.ref)}]`;
+    }
+    if (action === "press" && typeof rec.key === "string") {
+      return `press: ${rec.key}`;
+    }
+    if (typeof rec.url === "string" && rec.url.length > 0) {
+      return action ? `${action}: ${rec.url}` : rec.url;
+    }
+    return action;
+  }
+  if (name === "orbit_source" || name === "local_ui_disable") {
+    return "";
+  }
+  if (name === "local_ui_build") {
+    return typeof rec.summary === "string" ? rec.summary : "";
+  }
+  if (name === "memory_remember") {
+    return typeof rec.fact === "string" ? rec.fact : "";
+  }
+  if (name === "memory_forget") {
+    return typeof rec.match === "string" ? rec.match : "";
+  }
+  if (name === "skill_install") {
+    return typeof rec.name === "string" ? rec.name : "";
+  }
+  if (name === "page_scaffold") {
+    const parts = [rec.fromSkill, rec.id ?? rec.page].filter(
+      (v): v is string => typeof v === "string" && v.length > 0,
+    );
+    return parts.join(" / ");
   }
   if (name === "db_query" && typeof rec.query === "string") {
     return rec.query;
@@ -250,10 +517,11 @@ function formatWearableLabel(wearable: AnimalListItem["wearable"], t: TranslateF
 
 export interface ToolCardProps {
   item: ToolItem;
+  repeatCount?: number;
   defaultExpanded?: boolean;
 }
 
-export function ToolCard({ item, defaultExpanded = false }: ToolCardProps) {
+export function ToolCard({ item, repeatCount = 1, defaultExpanded = false }: ToolCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const i18n = useI18n();
   const { t } = i18n;
@@ -274,6 +542,7 @@ export function ToolCard({ item, defaultExpanded = false }: ToolCardProps) {
       data-testid={`tool-card-${item.toolCallId}`}
       data-tool-name={item.name}
       data-tool-status={item.status}
+      data-repeat-count={repeatCount > 1 ? String(repeatCount) : undefined}
     >
       <button
         type="button"
@@ -312,11 +581,21 @@ export function ToolCard({ item, defaultExpanded = false }: ToolCardProps) {
               style={{
                 display: "flex",
                 alignItems: "center",
-                flexWrap: "wrap",
+                flexWrap: "nowrap",
                 gap: "var(--space-2)",
+                minInlineSize: 0,
               }}
             >
-              <span style={{ fontWeight: 650, color: "var(--text-primary)" }}>{meta.title}</span>
+              <span
+                style={{
+                  fontWeight: 650,
+                  color: "var(--text-primary)",
+                  flexShrink: 0,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {meta.title}
+              </span>
               {argSummary && (
                 <span
                   style={{
@@ -326,10 +605,18 @@ export function ToolCard({ item, defaultExpanded = false }: ToolCardProps) {
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
-                    maxInlineSize: "24rem",
+                    minInlineSize: 0,
                   }}
                 >
                   {argSummary}
+                </span>
+              )}
+              {repeatCount > 1 && (
+                <span
+                  className="orbit-tool-card__repeat tabular-nums"
+                  data-testid={`tool-card-repeat-${item.toolCallId}`}
+                >
+                  x{repeatCount}
                 </span>
               )}
             </div>

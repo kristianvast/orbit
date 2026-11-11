@@ -1,10 +1,28 @@
 import type { AssistantItem, ToolItem, TranscriptItem } from "@orbit/protocol";
-import { AlertCircle, Brain, Check, ChevronRight, Copy, GitBranch, Wrench } from "lucide-react";
+import {
+  AlertCircle,
+  Brain,
+  Check,
+  ChevronRight,
+  Copy,
+  GitBranch,
+  Loader2,
+  Wrench,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "../../i18n";
 import { SafeMarkdown } from "./markdown";
-import { getFriendlyToolMeta, ToolCard } from "./ToolCard";
-import { buildTurnBlocks, buildTurns, formatElapsed, type Turn, turnDurationMs } from "./turns";
+import { getFriendlyToolMeta, summarizeToolArgs, ToolCard } from "./ToolCard";
+import {
+  buildTurnBlocks,
+  buildTurns,
+  collapseToolRuns,
+  formatElapsed,
+  selectLiveTool,
+  summarizeToolGroup,
+  type Turn,
+  turnDurationMs,
+} from "./turns";
 
 function useElapsedLabel(since: string | null, active: boolean): string {
   const t = useT();
@@ -41,13 +59,13 @@ function WorkedFor({ ms }: { ms: number }) {
 
 function ToolGroup({ tools, live }: { tools: ToolItem[]; live: boolean }) {
   const t = useT();
-  const failed = tools.some((tool) => tool.status === "error");
   const running = tools.some((tool) => tool.status === "running");
+  const isLiveRunning = live || running;
   const [open, setOpen] = useState(false);
-  const expanded = open || (live && running) || failed;
+  const expanded = open;
 
   const first = tools[0];
-  if (tools.length === 1 && first) {
+  if (tools.length === 1 && first && !isLiveRunning) {
     return (
       <div className="orbit-tools">
         <ToolCard item={first} />
@@ -55,9 +73,21 @@ function ToolGroup({ tools, live }: { tools: ToolItem[]; live: boolean }) {
     );
   }
 
-  const names = [
-    ...new Set(tools.map((tool) => getFriendlyToolMeta(t, tool.name, tool.label).title)),
-  ];
+  const activeTool = selectLiveTool(tools);
+  const activeMeta = activeTool ? getFriendlyToolMeta(t, activeTool.name, activeTool.label) : null;
+  const activeArg = activeTool ? summarizeToolArgs(activeTool.name, activeTool.args, t) : "";
+  const liveText = activeMeta
+    ? activeArg
+      ? `${activeMeta.runningTitle} - ${activeArg}`
+      : activeMeta.runningTitle
+    : "";
+
+  const summary = summarizeToolGroup(tools);
+  const kindSummary = summary.kinds.map((k) => t(k.labelKey, { count: k.count })).join(", ");
+  const collapsedRuns = collapseToolRuns(tools, (tool) =>
+    summarizeToolArgs(tool.name, tool.args, t),
+  );
+
   return (
     <div className="orbit-tools" data-expanded={expanded ? "true" : "false"}>
       <button
@@ -67,19 +97,41 @@ function ToolGroup({ tools, live }: { tools: ToolItem[]; live: boolean }) {
         onClick={() => setOpen((v) => !v)}
         data-testid="tool-group-toggle"
       >
-        <Wrench size={13} aria-hidden="true" />
-        <span className="orbit-tools__count">
-          {t(running ? "chat.timeline.usingTools" : "chat.timeline.usedTools", {
-            count: tools.length,
-          })}
-        </span>
-        <span className="orbit-tools__names">{names.join(", ")}</span>
+        {isLiveRunning ? (
+          <>
+            <Loader2 size={13} className="orbit-spin" aria-hidden="true" />
+            <span className="orbit-tools__live" data-testid="tool-group-live">
+              {liveText}
+            </span>
+            <span className="orbit-tools__count tabular-nums" data-testid="tool-group-steps">
+              {t("chat.timeline.steps", { count: tools.length })}
+            </span>
+          </>
+        ) : (
+          <>
+            <Wrench size={13} aria-hidden="true" />
+            <span className="orbit-tools__count tabular-nums" data-testid="tool-group-steps">
+              {t("chat.timeline.steps", { count: summary.total })}
+            </span>
+            <span className="orbit-tools__sep" aria-hidden="true">
+              -
+            </span>
+            <span className="orbit-tools__names" data-testid="tool-group-kinds">
+              {kindSummary}
+            </span>
+            {summary.failed > 0 && (
+              <span className="orbit-tools__failed tabular-nums" data-testid="tool-group-failed">
+                {t("chat.timeline.didNotWork", { count: summary.failed })}
+              </span>
+            )}
+          </>
+        )}
         <ChevronRight size={14} className="orbit-tools__chevron" aria-hidden="true" />
       </button>
       {expanded && (
-        <div className="orbit-tools__list">
-          {tools.map((tool) => (
-            <ToolCard key={tool.id} item={tool} />
+        <div className="orbit-tools__list" data-testid="tool-group-list">
+          {collapsedRuns.map((run) => (
+            <ToolCard key={run.key} item={run.item} repeatCount={run.count} />
           ))}
         </div>
       )}

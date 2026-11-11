@@ -135,7 +135,14 @@ function createMinimalTestClient(options?: {
         case "snapshots.list":
           return { snapshots: [] } as RequestResult<T>;
         case "localUi.status":
-          return { state: "none", path: null, builtAt: null, lastError: null } as RequestResult<T>;
+          return { state: "none", path: null, builtAt: null, commit: null } as RequestResult<T>;
+        case "localUi.launched":
+          return {
+            state: "ready",
+            path: "/app/tok-123/",
+            builtAt: "2026-11-11T10:00:00.000Z",
+            commit: "abc1234",
+          } as RequestResult<T>;
         default:
           return {} as RequestResult<T>;
       }
@@ -227,6 +234,7 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
     expect(within(nav).getByText("Ask Orion")).toBeInTheDocument();
     expect(within(nav).getByText("Settings")).toBeInTheDocument();
     expect(within(nav).queryByText("Cattle")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Horses")).not.toBeInTheDocument();
     expect(within(nav).queryByText("Sensors & Robots")).not.toBeInTheDocument();
     expect(within(nav).queryByText("Cameras")).not.toBeInTheDocument();
 
@@ -463,5 +471,65 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
       expect(requestMock).toHaveBeenCalledWith("modules.disable", { moduleId: "herd" });
     });
     expect(screen.getByTestId("settings-module-status-herd")).toHaveTextContent("Not added");
+  });
+
+  it("shows the local-ui-ready-bar on localUi.updated ready event and hands off on button click", async () => {
+    const { client, requestMock, emit } = createMinimalTestClient();
+    const replaceSpy = vi.fn();
+    const origLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...origLocation,
+        pathname: "/",
+        search: "",
+        hash: "",
+        href: "http://127.0.0.1:5173/",
+        replace: replaceSpy,
+      },
+    });
+
+    try {
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <AppProviders
+            initialClient={client}
+            initialEndpoint={{ url: "ws://127.0.0.1:7717/ws", token: "dev" }}
+          >
+            <AppRoutes />
+          </AppProviders>
+        </MemoryRouter>,
+      );
+
+      expect(await screen.findByTestId("home-minimal")).toBeInTheDocument();
+      expect(screen.queryByTestId("local-ui-ready-bar")).not.toBeInTheDocument();
+
+      act(() => {
+        emit({
+          type: "localUi.updated",
+          state: "ready",
+          path: "/app/tok-123/",
+          builtAt: "2026-11-11T10:00:00.000Z",
+          commit: "abc1234",
+        });
+      });
+
+      expect(screen.getByTestId("local-ui-ready-bar")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("local-ui-ready-open"));
+      await waitFor(() => {
+        expect(requestMock).toHaveBeenCalledWith("localUi.launched", {});
+      });
+      await waitFor(() => {
+        expect(replaceSpy).toHaveBeenCalledWith(
+          expect.stringContaining("http://127.0.0.1:7717/app/tok-123/#return="),
+        );
+      });
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: origLocation,
+      });
+    }
   });
 });

@@ -92,6 +92,165 @@ export const RECENCY_LABELS: Record<RecencyBucket, MessageKey> = {
 
 const BUCKET_ORDER: RecencyBucket[] = ["today", "yesterday", "week", "older"];
 
+export type ToolActivityKind =
+  | "commands"
+  | "filesRead"
+  | "filesChanged"
+  | "filesSearched"
+  | "screen"
+  | "web"
+  | "farm"
+  | "other";
+
+export const TOOL_KIND_LABELS: Record<ToolActivityKind, MessageKey> = {
+  commands: "chat.timeline.kind.commands",
+  filesRead: "chat.timeline.kind.filesRead",
+  filesChanged: "chat.timeline.kind.filesChanged",
+  filesSearched: "chat.timeline.kind.filesSearched",
+  screen: "chat.timeline.kind.screen",
+  web: "chat.timeline.kind.web",
+  farm: "chat.timeline.kind.farm",
+  other: "chat.timeline.kind.other",
+};
+
+export function classifyToolKind(name: string): ToolActivityKind {
+  switch (name) {
+    case "bash":
+    case "powershell":
+      return "commands";
+    case "read":
+      return "filesRead";
+    case "write":
+    case "edit":
+      return "filesChanged";
+    case "ls":
+    case "find":
+    case "grep":
+      return "filesSearched";
+    case "computer":
+      return "screen";
+    case "web_search":
+    case "web_fetch":
+    case "browser":
+      return "web";
+    case "herd_query":
+    case "herd_upsert_animal":
+    case "herd_record_event":
+    case "devices_list":
+    case "device_bind":
+    case "observations_query":
+    case "connectors_list":
+    case "connector_scaffold":
+    case "connector_configure":
+    case "connector_run":
+    case "camera_discover":
+    case "camera_add":
+    case "db_query":
+    case "db_mutate":
+      return "farm";
+    default:
+      return "other";
+  }
+}
+
+export interface ToolKindCount {
+  kind: ToolActivityKind;
+  labelKey: MessageKey;
+  count: number;
+}
+
+export interface ToolActivitySummary {
+  total: number;
+  failed: number;
+  kinds: ToolKindCount[];
+}
+
+export function summarizeToolGroup(tools: readonly ToolItem[]): ToolActivitySummary {
+  const counts = new Map<ToolActivityKind, number>();
+  const firstSeen = new Map<ToolActivityKind, number>();
+  let failed = 0;
+
+  tools.forEach((tool, idx) => {
+    if (tool.status === "error") failed += 1;
+    const kind = classifyToolKind(tool.name);
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    if (!firstSeen.has(kind)) firstSeen.set(kind, idx);
+  });
+
+  const kinds: ToolKindCount[] = [...counts.entries()]
+    .map(([kind, count]) => ({
+      kind,
+      labelKey: TOOL_KIND_LABELS[kind],
+      count,
+    }))
+    .sort((a, b) => {
+      if (a.kind === "other" && b.kind !== "other") return 1;
+      if (b.kind === "other" && a.kind !== "other") return -1;
+      if (b.count !== a.count) return b.count - a.count;
+      return (firstSeen.get(a.kind) ?? 0) - (firstSeen.get(b.kind) ?? 0);
+    });
+
+  return {
+    total: tools.length,
+    failed,
+    kinds,
+  };
+}
+
+export interface CollapsedToolRun {
+  key: string;
+  item: ToolItem;
+  argSummary: string;
+  count: number;
+  items: ToolItem[];
+}
+
+export function collapseToolRuns(
+  tools: readonly ToolItem[],
+  summarizeArgs: (tool: ToolItem) => string,
+): CollapsedToolRun[] {
+  const runs: CollapsedToolRun[] = [];
+  for (const tool of tools) {
+    const argSummary = summarizeArgs(tool);
+    const prev = runs[runs.length - 1];
+    if (prev && prev.item.name === tool.name && prev.argSummary === argSummary) {
+      prev.count += 1;
+      prev.items.push(tool);
+      const totalDuration = prev.items.reduce(
+        (sum, entry) => sum + (typeof entry.durationMs === "number" ? entry.durationMs : 0),
+        0,
+      );
+      const hasDuration = prev.items.some((entry) => typeof entry.durationMs === "number");
+      const hasRunning = prev.items.some((entry) => entry.status === "running");
+      const hasError = prev.items.some((entry) => entry.status === "error");
+      const status: ToolItem["status"] = hasRunning ? "running" : hasError ? "error" : tool.status;
+      prev.item = {
+        ...tool,
+        status,
+        ...(hasDuration ? { durationMs: totalDuration } : {}),
+      };
+    } else {
+      runs.push({
+        key: tool.id,
+        item: tool,
+        argSummary,
+        count: 1,
+        items: [tool],
+      });
+    }
+  }
+  return runs;
+}
+
+/** Picks the newest running tool, or the last finished tool in the group. */
+export function selectLiveTool(tools: readonly ToolItem[]): ToolItem | null {
+  for (let i = tools.length - 1; i >= 0; i--) {
+    const tool = tools[i];
+    if (tool && tool.status === "running") return tool;
+  }
+  return tools[tools.length - 1] ?? null;
+}
+
 function bucketOf(iso: string, now: Date): RecencyBucket {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return "older";

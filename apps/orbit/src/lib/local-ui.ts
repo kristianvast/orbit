@@ -1,8 +1,14 @@
 // Hand-off between the shipped UI and the farm's own build that Orion serves at /app/<token>/.
 // The shipped UI asks Orion at startup and moves to the local build when it is ready; the local
 // build reports that it booted, reloads when Orion rebuilds it, and can send the farmer back.
-import { createOrionClient, type LocalUiStatus, type OrionClient } from "@orbit/protocol";
-import { useEffect } from "react";
+import {
+  createOrionClient,
+  DEV_SERVER_URL,
+  DEV_TOKEN,
+  type LocalUiStatus,
+  type OrionClient,
+} from "@orbit/protocol";
+import { useCallback, useEffect, useState } from "react";
 import { localUiBasename } from "./local-ui-path";
 import { isTauriRuntime, type OrionEndpoint, resolveOrionEndpoint, useOrion } from "./orion";
 
@@ -85,4 +91,34 @@ export function useLocalUiLifecycle(): void {
       if (ev.state === "ready") window.location.reload();
     });
   }, [client, state]);
+}
+
+export function useLocalUiReady(): { ready: boolean; open: () => void } {
+  const { client, endpoint } = useOrion();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (localUiBasename() || !client) {
+      setReady(false);
+      return;
+    }
+    return client.on("localUi.updated", (ev) => {
+      setReady(ev.state === "ready");
+    });
+  }, [client]);
+
+  const open = useCallback(() => {
+    if (!client) return;
+    void (async () => {
+      const target =
+        endpoint ??
+        (await resolveOrionEndpoint().catch(() => ({
+          url: DEV_SERVER_URL,
+          token: DEV_TOKEN,
+        })));
+      await openLocalUi(client, target);
+    })();
+  }, [client, endpoint]);
+
+  return { ready, open };
 }

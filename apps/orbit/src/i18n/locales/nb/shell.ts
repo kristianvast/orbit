@@ -17,6 +17,8 @@ export const shell: Catalog<typeof en> = {
   "nav.feedback": "Send tilbakemelding",
   "update.ready": "En ny versjon av Orbit er klar.",
   "update.restart": "Start på nytt for å oppdatere",
+  "localUi.ready": "En ny versjon av din Orbit er klar.",
+  "localUi.open": "Åpne ny versjon",
   "module.disabled.herd.title": "Storfe er ikke lagt til ennå",
   "module.disabled.herd.title.cattle": "Storfe er ikke lagt til ennå",
   "module.disabled.herd.title.horse": "Hester er ikke lagt til ennå",
