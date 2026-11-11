@@ -352,10 +352,14 @@ against the real device before showing their data or controls; validated catalog
   tokens retain their previous default/override budget behavior.
   `LLM_UPSTREAM_AUTH=google` uses cached ADC OAuth tokens and the global Vertex OpenAI endpoint,
   mapping `orbit-default` to `google/gemini-3.8-flash` and stripping Orion's `/v1` prefix.
-  `/v1/voice/live` requires a session and farm membership, proxies Gemini Live JSON frames to
-  Vertex in `us-central1`, forces `VOICE_MODEL=gemini-3.8-live`, meters connected seconds in
-  `voice_usage`, and closes with 4402 when the allowance is consumed. No paid plan returns
-  HTTP 402 before WebSocket upgrade.
+  Core's `/v1/voice/live` and `/v1/voice/agent` require a session and farm membership and share
+  voice entitlement checks, connected-second metering in `voice_usage`, and close code 4402
+  when the allowance is consumed. Without a paid plan or free month they return HTTP 402
+  before WebSocket upgrade. The existing live route proxies Gemini Live JSON frames to Vertex
+  in `us-central1` and forces `VOICE_MODEL=gemini-3.8-live`. The agent route relays opaque
+  ElevenLabs text frames for `VOICE_AGENT_ID`, using `ELEVENLABS_API_KEY` to obtain a signed
+  upstream URL that stays server-side. Missing configuration returns 503; signed-URL failures
+  return 502 before upgrade without recording usage.
 
 ## Camera relay
 

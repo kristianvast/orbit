@@ -4,6 +4,7 @@ import type { CoreDb } from "./db";
 import { createGoogleTokenProvider } from "./google-auth";
 import { createMailer } from "./mailer";
 import { createVoiceGateway, type VoiceConnection } from "./voice";
+import { createVoiceAgentGateway } from "./voice-agent";
 import { VOICE_DEMO_DEFAULTS } from "./voice-demo";
 
 export function serveCore(db: CoreDb, defaultPort: number) {
@@ -82,11 +83,17 @@ export function serveCore(db: CoreDb, defaultPort: number) {
     location: process.env.VOICE_LOCATION ?? "us-central1",
     accessToken,
   });
+  const voiceAgent = createVoiceAgentGateway(db, {
+    apiKey: process.env.ELEVENLABS_API_KEY || undefined,
+    agentId: process.env.VOICE_AGENT_ID || undefined,
+  });
   const server = Bun.serve<VoiceConnection>({
     port: Number(process.env.PORT ?? defaultPort),
     idleTimeout: 120,
     fetch(request, server) {
       if (new URL(request.url).pathname === "/v1/voice/live") return voice.upgrade(request, server);
+      if (new URL(request.url).pathname === "/v1/voice/agent")
+        return voiceAgent.upgrade(request, server);
       return app.fetch(request);
     },
     websocket: voice.websocket,

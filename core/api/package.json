@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "bun src/dev.ts",
     "stripe:setup": "bun src/stripe-setup.ts",
+    "voice:setup": "bun src/orion-voice-agent-setup.ts",
     "typecheck": "tsc -p . --noEmit",
     "test": "bun test"
   },

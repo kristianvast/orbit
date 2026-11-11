@@ -31,6 +31,8 @@ login, the price-gated plan catalog and signed Stripe webhooks are public.
 | `GET /v1/shape?table=<synced table>&offset=<o>[&handle=&live=&cursor=]` | Proxies to Electric with `where=farm_id = $1`, `params[1]=<token farm>`, `replica=full` and the Electric secret. Electric's headers (`electric-handle`, `electric-offset`, ...) pass through. |
 | `POST /v1/changes`                                                      | Body `{ changes: [{ seq, op, table, rowId, hlc, row }] }`, at most 1000 per request. Returns `{ results: [{ seq, status, error? }] }`.                                                        |
 | `POST /v1/llm/<provider path>`                                          | Forwards to `LLM_UPSTREAM_URL/<provider path>` using Core's key, after checking the farm's monthly budget.                                                                                    |
+| `GET /v1/voice/live`                                                    | Session-authenticated, metered Gemini Live WebSocket for existing desktop clients.                                                                                                            |
+| `GET /v1/voice/agent`                                                   | Session-authenticated, metered ElevenLabs Agents WebSocket; requires farm membership.                                                                                                         |
 
 `POST /v1/changes` returns one status per change:
 
@@ -203,6 +205,23 @@ concurrent connections share the allowance, including the free month's single po
 Reaching it closes with 4402. A farm without a paid plan or free month receives HTTP 402
 before upgrade. Upstream disconnection ends the client connection.
 
+`GET /v1/voice/agent` uses the same session, farm membership and voice allowance checks.
+Set `VOICE_AGENT_ID` to the Orbit ElevenLabs agent and reuse `ELEVENLABS_API_KEY`.
+Core fetches a signed WebSocket URL with its key; neither credential reaches the client.
+ElevenLabs text frames pass through verbatim in both directions, including queued client
+frames sent before the upstream opens. Usage is stored as `elevenlabs:<agentId>` in
+`voice_usage`, sharing the Gemini allowance and 4402 close behavior. Either socket closing
+ends the call. Missing key or agent configuration returns 503 `not_configured`; a failed
+signed-URL request returns 502 `upstream_error` before upgrade and creates no usage row.
+The `/v1/voice/live` endpoint remains available for released desktop clients.
+
+The Orbit agent itself (what Orion is told, its voice, and its five client tools) is defined in
+`api/src/orion-voice-agent.ts`. `bun run --filter '@core/api' voice:setup -- --print` shows what
+would be sent. With `ELEVENLABS_API_KEY` set, `voice:setup` creates the agent and its tools in
+ElevenLabs and prints the id to use as `VOICE_AGENT_ID`; with `VOICE_AGENT_ID` also set it
+updates that agent and only the tools that agent already uses. The tools run on the farm's own
+computer, so nothing in ElevenLabs reaches farm data directly.
+
 The remaining local-stack instructions below apply to a server or CI machine.
 
 The tests need no Docker, because they run Postgres in-process through PGlite:
@@ -258,6 +277,8 @@ Paste the token into Orbit's sync settings. Orion then passes it to
 | `TERMS_VERSION`            | api           | Current terms version.                                                                                            |
 | `GOOGLE_CLIENT_IDS`        | api           | Comma-separated Google OAuth client IDs accepted by `/v1/auth/google`; unset disables it (503).                   |
 | `GCP_PROJECT`              | api           | With `LLM_UPSTREAM_AUTH=google`: Vertex project. Also `LLM_DEFAULT_MODEL`, `VOICE_MODEL`, `VOICE_LOCATION`.       |
+| `ELEVENLABS_API_KEY`       | api           | ElevenLabs server API key, shared by the website demo and authenticated agent gateway. **Secret.**                |
+| `VOICE_AGENT_ID`           | api           | Orbit ElevenLabs agent ID for `/v1/voice/agent`; unset disables the gateway (503).                                |
 
 Keep these in Secret Manager: the Postgres password (inside `DATABASE_URL`), `ELECTRIC_SECRET`,
 the Stripe secrets, `MAIL_API_KEY`, `CORE_ADMIN_TOKEN` and `LLM_UPSTREAM_API_KEY`.
