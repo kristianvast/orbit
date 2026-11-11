@@ -49,7 +49,7 @@ import { DEFAULT_SKILLS_URL, SkillService } from "./services/skills";
 import { maskKey, SettingsStore } from "./settings";
 import { VoiceSessions } from "./voice/session";
 
-export const SERVER_VERSION = "0.1.3";
+export const SERVER_VERSION = "0.1.4";
 
 const EXAMPLE_VIEWS_SKILL = "farm-views";
 
