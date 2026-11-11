@@ -265,6 +265,8 @@ export function ToolCard({ item, defaultExpanded = false }: ToolCardProps) {
   const Icon = meta.icon;
 
   const isFailedOrDenied = item.status === "error";
+  // Orbit's own tools explain a refusal in plain words ("Not done: ..."); raw errors from file and shell tools stay behind the Failed badge.
+  const showErrorSummary = isFailedOrDenied && !!item.result?.startsWith("Not done:") && !expanded;
 
   return (
     <div
@@ -372,7 +374,7 @@ export function ToolCard({ item, defaultExpanded = false }: ToolCardProps) {
         </div>
       </button>
 
-      {isFailedOrDenied && item.result && !expanded && (
+      {showErrorSummary && (
         <div
           data-testid={`tool-card-error-summary-${item.toolCallId}`}
           style={{

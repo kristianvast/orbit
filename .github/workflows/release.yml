@@ -115,6 +115,10 @@ jobs:
           chmod +x "$DEST"
           rm -rf "$DOWNLOAD_DIR"
 
+      - name: Bundle git and a shell for Windows (MinGit)
+        if: runner.os == 'Windows'
+        run: scripts/fetch-mingit.sh
+
       - name: Install Azure Trusted Signing CLI
         if: runner.os == 'Windows' && env.AZURE_CLIENT_ID != ''
         run: cargo install trusted-signing-cli --locked

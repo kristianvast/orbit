@@ -6,6 +6,7 @@ target/
 .DS_Store
 apps/orbit/src-tauri/gen/
 apps/orbit/src-tauri/binaries/
+apps/orbit/src-tauri/resources/
 test-results/
 playwright-report/
 .env

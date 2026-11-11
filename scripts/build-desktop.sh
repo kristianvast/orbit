@@ -41,6 +41,11 @@ if [ ! -x "$GO2RTC_DEST" ]; then
   rm -rf "$TMP"
 fi
 
+# Windows has no bash or git; ship MinGit next to the sidecars.
+if [ "$TRIPLE" = "x86_64-pc-windows-msvc" ]; then
+  scripts/fetch-mingit.sh
+fi
+
 echo "==> Tauri build ($PROFILE)"
 cd apps/orbit
 # CI=true makes the macOS DMG step skip its Finder AppleScript, which otherwise asks for Automation access.

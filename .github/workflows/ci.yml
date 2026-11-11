@@ -169,6 +169,10 @@ jobs:
           chmod +x "$DEST"
           rm -rf "$DOWNLOAD_DIR"
 
+      - name: Bundle git and a shell for Windows (MinGit)
+        if: runner.os == 'Windows'
+        run: scripts/fetch-mingit.sh
+
       - name: Build desktop app (debug, unsigned)
         working-directory: apps/orbit
         run: bunx tauri build --debug
