@@ -3,7 +3,6 @@ import type { localUi as en } from "../en/localUi";
 
 export const localUi: Catalog<typeof en> = {
   title: "Din Orbit",
-  subtitle: "Orion kan endre selve Orbit ved å bygge din egen versjon av appen på denne PC-en",
   "badge.none": "Original",
   "badge.ready": "Din versjon",
   "badge.broken": "Sikker modus",

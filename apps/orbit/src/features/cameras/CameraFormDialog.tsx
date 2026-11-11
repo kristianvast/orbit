@@ -83,7 +83,6 @@ export function CameraFormDialog({
           ? t("cameras.form.titleEdit", { name: editingCamera.name })
           : t("cameras.form.titleAdd")
       }
-      description={t("cameras.form.description")}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} data-testid="camera-form-cancel">

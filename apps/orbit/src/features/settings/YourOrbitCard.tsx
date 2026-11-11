@@ -67,7 +67,6 @@ export function YourOrbitCard() {
   return (
     <Card
       title={t("localUi.title")}
-      subtitle={t("localUi.subtitle")}
       actions={
         <Badge variant={status ? BADGE[status.state] : "neutral"} data-testid="local-ui-badge">
           {isLocal

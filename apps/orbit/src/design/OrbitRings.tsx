@@ -21,14 +21,6 @@ type DefaultSatellite = Omit<OrbitSatellite, "label"> & { labelKey: MessageKey }
 
 const DEFAULT_SATELLITES: readonly DefaultSatellite[] = [
   { id: "cattle", labelKey: "design.orbit.cattle", ring: 1, angleDeg: -38, tone: "ok", count: 24 },
-  {
-    id: "sensors",
-    labelKey: "design.orbit.sensors",
-    ring: 2,
-    angleDeg: 32,
-    tone: "accent",
-    count: 24,
-  },
   { id: "robot", labelKey: "design.orbit.robot", ring: 2, angleDeg: 215, tone: "ok", count: 1 },
   {
     id: "cameras",

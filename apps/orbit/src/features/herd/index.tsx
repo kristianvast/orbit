@@ -1,4 +1,4 @@
-import type { ActiveWearable, AnimalInput, DeviceListItem } from "@orbit/protocol";
+import type { ActiveWearable, AnimalInput } from "@orbit/protocol";
 import type { Animal, AnimalSex, AnimalStatus, Observation, Species } from "@orbit/schema";
 import {
   ArrowDown,
@@ -8,12 +8,10 @@ import {
   Edit3,
   Eye,
   LayoutGrid,
-  Link2,
   MessageSquare,
   Orbit as OrbitIcon,
   Plus,
   RefreshCw,
-  Unlink,
 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -69,41 +67,8 @@ function isKnownWearableKind(kind: string): kind is KnownWearableKind {
   return (KNOWN_WEARABLE_KINDS as readonly string[]).includes(kind);
 }
 
-export function formatWearableKind(kind: string | null | undefined, t: TranslateFn): string {
-  if (!kind) return t("herd.wearable.none");
+export function formatWearableKind(kind: string, t: TranslateFn): string {
   return isKnownWearableKind(kind) ? t(`herd.wearable.${kind}`) : kind.replace(/_/g, " ");
-}
-
-export function articleForKind(label: string): "a" | "an" {
-  return /^[aeiou]/i.test(label.trim()) ? "an" : "a";
-}
-
-interface WearableTerms {
-  noun: string;
-  article: string;
-  existing: string;
-}
-
-/** Grammar pieces for sentences about a wearable ("a collar", "the existing collar"). */
-function wearableTerms(kind: string, t: TranslateFn): WearableTerms {
-  if (isKnownWearableKind(kind)) {
-    return {
-      noun: t(`herd.wearable.noun.${kind}`),
-      article: t(`herd.wearable.article.${kind}`),
-      existing: t(`herd.wearable.existing.${kind}`),
-    };
-  }
-  const noun = kind.replace(/_/g, " ").toLowerCase();
-  return {
-    noun,
-    article: t("herd.wearable.article.other", { article: articleForKind(noun) }),
-    existing: t("herd.wearable.existing.other", { kind: noun }),
-  };
-}
-
-export function formatWearableWithArticle(kind: string, t: TranslateFn): string {
-  const { article, noun } = wearableTerms(kind, t);
-  return t("herd.wearable.withArticle", { article, kind: noun });
 }
 
 export function formatRelativeTime(iso: string | null | undefined, t: TranslateFn): string {
@@ -570,40 +535,23 @@ function HerdOrbitCanvas({ animals, selectedAnimalId, onSelectAnimal }: HerdOrbi
               backgroundColor: "var(--bg-elevated)",
               border: "1px solid var(--border-subtle)",
               display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-1)",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "var(--space-2)",
             }}
           >
-            <div
+            <span
+              className="tabular-nums"
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "var(--space-2)",
+                fontFamily: "var(--font-display)",
+                fontSize: "var(--text-h2)",
+                fontWeight: "var(--display-weight)",
+                lineHeight: 1,
               }}
             >
-              <span
-                className="tabular-nums"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "var(--text-h2)",
-                  fontWeight: 750,
-                  lineHeight: 1,
-                }}
-              >
-                {groupedByRing.alert.length}
-              </span>
-              <Badge variant="danger">{t("herd.orbit.ring.alert")}</Badge>
-            </div>
-            <p
-              style={{
-                margin: "var(--space-1) 0 0 0",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              {t("herd.orbit.ring.alertHint")}
-            </p>
+              {groupedByRing.alert.length}
+            </span>
+            <Badge variant="danger">{t("herd.orbit.ring.alert")}</Badge>
           </div>
 
           <div
@@ -613,40 +561,23 @@ function HerdOrbitCanvas({ animals, selectedAnimalId, onSelectAnimal }: HerdOrbi
               backgroundColor: "var(--bg-elevated)",
               border: "1px solid var(--border-subtle)",
               display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-1)",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "var(--space-2)",
             }}
           >
-            <div
+            <span
+              className="tabular-nums"
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "var(--space-2)",
+                fontFamily: "var(--font-display)",
+                fontSize: "var(--text-h2)",
+                fontWeight: "var(--display-weight)",
+                lineHeight: 1,
               }}
             >
-              <span
-                className="tabular-nums"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "var(--text-h2)",
-                  fontWeight: 750,
-                  lineHeight: 1,
-                }}
-              >
-                {groupedByRing.watch.length}
-              </span>
-              <Badge variant="warn">{t("herd.orbit.ring.watch")}</Badge>
-            </div>
-            <p
-              style={{
-                margin: "var(--space-1) 0 0 0",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              {t("herd.orbit.ring.watchHint")}
-            </p>
+              {groupedByRing.watch.length}
+            </span>
+            <Badge variant="warn">{t("herd.orbit.ring.watch")}</Badge>
           </div>
 
           <div
@@ -656,40 +587,23 @@ function HerdOrbitCanvas({ animals, selectedAnimalId, onSelectAnimal }: HerdOrbi
               backgroundColor: "var(--bg-elevated)",
               border: "1px solid var(--border-subtle)",
               display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-1)",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "var(--space-2)",
             }}
           >
-            <div
+            <span
+              className="tabular-nums"
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "var(--space-2)",
+                fontFamily: "var(--font-display)",
+                fontSize: "var(--text-h2)",
+                fontWeight: "var(--display-weight)",
+                lineHeight: 1,
               }}
             >
-              <span
-                className="tabular-nums"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "var(--text-h2)",
-                  fontWeight: 750,
-                  lineHeight: 1,
-                }}
-              >
-                {groupedByRing.healthy.length}
-              </span>
-              <Badge variant="ok">{t("herd.orbit.ring.healthy")}</Badge>
-            </div>
-            <p
-              style={{
-                margin: "var(--space-1) 0 0 0",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              {t("herd.orbit.ring.healthyHint")}
-            </p>
+              {groupedByRing.healthy.length}
+            </span>
+            <Badge variant="ok">{t("herd.orbit.ring.healthy")}</Badge>
           </div>
         </div>
 
@@ -700,27 +614,16 @@ function HerdOrbitCanvas({ animals, selectedAnimalId, onSelectAnimal }: HerdOrbi
             gap: "var(--space-3)",
           }}
         >
-          <div
+          <h3
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
+              margin: 0,
+              fontFamily: "var(--font-sans)",
+              fontSize: "var(--text-lg)",
+              fontWeight: 600,
             }}
           >
-            <h3
-              style={{
-                margin: 0,
-                fontFamily: "var(--font-display)",
-                fontSize: "var(--text-lg)",
-                fontWeight: 700,
-              }}
-            >
-              {t("herd.orbit.animalsHeading", { count: animals.length })}
-            </h3>
-            <span style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
-              {t("herd.orbit.clickHint")}
-            </span>
-          </div>
+            {t("herd.orbit.animalsHeading", { count: animals.length })}
+          </h3>
 
           <div
             style={{
@@ -796,18 +699,18 @@ function HerdOrbitCanvas({ animals, selectedAnimalId, onSelectAnimal }: HerdOrbi
                       t(`herd.species.code.${animal.species}`)}{" "}
                     · {animal.groupName ?? t("herd.animal.ungrouped")}
                   </div>
-                  <div
-                    style={{
-                      fontSize: "var(--text-xs)",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    {animal.wearable
-                      ? `${formatWearableKind(animal.wearable.kind, t)}${
-                          animal.wearable.vendor ? ` (${animal.wearable.vendor})` : ""
-                        }`
-                      : t("herd.wearable.noneLong")}
-                  </div>
+                  {animal.wearable && (
+                    <div
+                      style={{
+                        fontSize: "var(--text-xs)",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      {`${formatWearableKind(animal.wearable.kind, t)}${
+                        animal.wearable.vendor ? ` (${animal.wearable.vendor})` : ""
+                      }`}
+                    </div>
+                  )}
                 </button>
               );
             })}
@@ -815,211 +718,6 @@ function HerdOrbitCanvas({ animals, selectedAnimalId, onSelectAnimal }: HerdOrbi
         </div>
       </div>
     </div>
-  );
-}
-
-interface AttachSensorDialogProps {
-  open: boolean;
-  onClose: () => void;
-  animal: Animal;
-  currentWearable: ActiveWearable | null;
-  wearableDevices: DeviceListItem[];
-  allAnimals: EnrichedAnimal[];
-  onBound: () => Promise<void>;
-}
-
-function AttachSensorDialog({
-  open,
-  onClose,
-  animal,
-  currentWearable,
-  wearableDevices,
-  allAnimals,
-  onBound,
-}: AttachSensorDialogProps) {
-  const { client } = useOrion();
-  const { pushToast } = useToast();
-  const t = useT();
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const animalById = useMemo(() => new Map(allAnimals.map((a) => [a.id, a])), [allAnimals]);
-
-  const candidateDevices = useMemo(() => {
-    return wearableDevices.filter((d) => d.id !== currentWearable?.deviceId);
-  }, [wearableDevices, currentWearable]);
-
-  const effectiveDeviceId = selectedDeviceId || candidateDevices[0]?.id || "";
-  const chosenDevice = candidateDevices.find((d) => d.id === effectiveDeviceId) ?? null;
-  const previousHolder =
-    chosenDevice?.boundAnimalId && chosenDevice.boundAnimalId !== animal.id
-      ? (animalById.get(chosenDevice.boundAnimalId) ?? null)
-      : null;
-
-  const currentTerms = currentWearable ? wearableTerms(currentWearable.kind, t) : null;
-
-  const handleConfirm = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!client || !effectiveDeviceId) return;
-    setSubmitting(true);
-    setErrorMessage(null);
-    try {
-      if (currentWearable && currentWearable.deviceId !== effectiveDeviceId) {
-        await client.mutate("bindings.clear", { deviceId: currentWearable.deviceId });
-      }
-      await client.mutate("bindings.set", {
-        deviceId: effectiveDeviceId,
-        animalId: animal.id,
-      });
-      pushToast({
-        title: currentWearable ? t("herd.attach.toast.replaced") : t("herd.attach.toast.attached"),
-        description: t("herd.attach.toast.description", {
-          kind: formatWearableKind(chosenDevice?.kind, t),
-          serial: chosenDevice?.serial ?? "",
-          animal: animal.name ?? animal.earTagNumber ?? t("herd.animal.fallbackThis"),
-        }),
-        tone: "ok",
-      });
-      await onBound();
-      onClose();
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={
-        currentWearable
-          ? t("herd.attach.title.replace", {
-              animal: animal.name ?? animal.earTagNumber ?? t("herd.animal.fallbackLower"),
-            })
-          : t("herd.attach.title.attach", {
-              animal: animal.name ?? animal.earTagNumber ?? t("herd.animal.fallbackLower"),
-            })
-      }
-      description={t("herd.attach.description")}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} data-testid="herd-attach-sensor-cancel">
-            {t("herd.attach.cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            type="submit"
-            form="herd-attach-sensor-form"
-            loading={submitting}
-            disabled={!effectiveDeviceId}
-            data-testid="herd-attach-sensor-submit"
-          >
-            {currentWearable ? t("herd.attach.submit.replace") : t("herd.attach.submit.attach")}
-          </Button>
-        </>
-      }
-    >
-      <form
-        id="herd-attach-sensor-form"
-        onSubmit={handleConfirm}
-        data-testid="herd-attach-sensor-dialog"
-        style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}
-      >
-        <div
-          style={{
-            padding: "var(--space-3) var(--space-4)",
-            borderRadius: "var(--radius-md)",
-            backgroundColor: "var(--bg-elevated)",
-            border: "1px solid var(--border-subtle)",
-            fontSize: "var(--text-sm)",
-            color: "var(--text-secondary)",
-          }}
-        >
-          <strong style={{ color: "var(--text-primary)" }}>{t("herd.attach.rule.title")}</strong>{" "}
-          {t("herd.attach.rule.body")}
-        </div>
-
-        {currentWearable && (
-          <div
-            data-testid="herd-attach-replace-notice"
-            style={{
-              padding: "var(--space-3) var(--space-4)",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--status-warn-bg)",
-              border: "1px solid var(--status-warn-border)",
-              fontSize: "var(--text-sm)",
-              color: "var(--text-primary)",
-            }}
-          >
-            <strong>{animal.name ?? animal.earTagNumber}</strong>
-            {t("herd.attach.replace.wears", { article: currentTerms?.article ?? "" })}
-            <strong>{currentTerms?.noun}</strong>
-            {currentWearable.vendor ? ` (${currentWearable.vendor})` : ""}
-            {t("herd.attach.replace.removes", { existing: currentTerms?.existing ?? "" })}
-          </div>
-        )}
-
-        <Select
-          label={t("herd.attach.select.label")}
-          data-testid="herd-attach-sensor-select"
-          value={effectiveDeviceId}
-          onChange={(e) => setSelectedDeviceId(e.target.value)}
-          options={
-            candidateDevices.length > 0
-              ? candidateDevices.map((d) => {
-                  const holder = d.boundAnimalId ? animalById.get(d.boundAnimalId) : null;
-                  const holderText = holder
-                    ? t("herd.attach.option.holder", {
-                        animal: holder.name ?? holder.earTagNumber ?? "",
-                      })
-                    : t("herd.attach.option.spare");
-                  return {
-                    value: d.id,
-                    label: t("herd.attach.option.label", {
-                      kind: formatWearableKind(d.kind, t),
-                      vendor: d.vendor ?? t("herd.wearable.vendorFallback"),
-                      serial: d.serial ?? "",
-                      holder: holderText,
-                    }),
-                  };
-                })
-              : [{ value: "", label: t("herd.attach.option.empty") }]
-          }
-        />
-
-        {previousHolder && (
-          <div
-            style={{
-              padding: "var(--space-3) var(--space-4)",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--bg-elevated)",
-              border: "1px solid var(--border-subtle)",
-              fontSize: "var(--text-xs)",
-              color: "var(--text-secondary)",
-            }}
-          >
-            {t("herd.attach.move.prefix")}{" "}
-            <strong style={{ color: "var(--text-primary)" }}>
-              {previousHolder.name ?? previousHolder.earTagNumber}
-            </strong>{" "}
-            {t("herd.attach.move.middle")}{" "}
-            <strong style={{ color: "var(--text-primary)" }}>
-              {animal.name ?? animal.earTagNumber}
-            </strong>
-            {t("herd.attach.move.suffix")}
-          </div>
-        )}
-
-        {errorMessage && (
-          <p className="orbit-field__error" role="alert">
-            {errorMessage}
-          </p>
-        )}
-      </form>
-    </Dialog>
   );
 }
 
@@ -1115,7 +813,6 @@ function AnimalFormDialog({
             })
           : t(species === "horse" ? "herd.form.title.add.horse" : "herd.form.title.add.cattle")
       }
-      description={t("herd.form.description")}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} data-testid="animal-form-cancel">
@@ -1282,8 +979,6 @@ export interface HerdPageProps {
 
 export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
   const navigate = useNavigate();
-  const { client } = useOrion();
-  const { pushToast } = useToast();
   const { t, formatNumber } = useI18n();
   const { species: farmSpecies } = useFarmSpecies();
 
@@ -1299,7 +994,6 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
   const [selectedAnimalId, setSelectedAnimalId] = useState<string | null>(null);
   const [animalFormOpen, setAnimalFormOpen] = useState(false);
   const [editingAnimal, setEditingAnimal] = useState<Animal | null>(null);
-  const [attachDialogOpen, setAttachDialogOpen] = useState(false);
 
   const {
     data: animalsData,
@@ -1312,22 +1006,16 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
     { refetchTables: ["animals", "device_bindings", "devices"] },
   );
 
-  const { data: alertsData, refetch: refetchAlerts } = useOrionQuery(
+  const { data: alertsData } = useOrionQuery(
     "observations.recent",
     { alertsOnly: true, limit: 100 },
     { refetchTables: ["observations"] },
   );
 
-  const { data: milkingsData, refetch: refetchMilkings } = useOrionQuery(
+  const { data: milkingsData } = useOrionQuery(
     "observations.recent",
     { kind: "milking", limit: 300 },
     { refetchTables: ["observations"] },
-  );
-
-  const { data: devicesData, refetch: refetchDevices } = useOrionQuery(
-    "devices.list",
-    {},
-    { refetchTables: ["devices", "device_bindings"] },
   );
 
   const {
@@ -1404,37 +1092,12 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
     [filteredAnimals, sortField, sortDirection],
   );
 
-  const wearableDevices = useMemo(() => {
-    return (devicesData?.rows ?? []).filter(
-      (d) => d.kind === "collar" || d.kind === "bolus" || d.kind === "ear_tag_sensor",
-    );
-  }, [devicesData]);
-
   const handleSort = (field: HerdSortField) => {
     if (sortField === field) {
       setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortField(field);
       setSortDirection("asc");
-    }
-  };
-
-  const handleUnbindWearable = async (deviceId: string, animalLabel: string) => {
-    if (!client) return;
-    try {
-      await client.mutate("bindings.clear", { deviceId });
-      pushToast({
-        title: t("herd.unbind.toast.title"),
-        description: t("herd.unbind.toast.description", { animal: animalLabel }),
-        tone: "ok",
-      });
-      await Promise.all([refetchAnimals(), refetchDevices(), refetchDetail()]);
-    } catch (err) {
-      pushToast({
-        title: t("herd.unbind.toast.errorTitle"),
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      });
     }
   };
 
@@ -1461,6 +1124,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
   const hasCattle = enrichedAnimals.some((a) => a.species === "cattle");
   const hasHorses = enrichedAnimals.some((a) => a.species === "horse");
   const hasBothSpecies = hasCattle && hasHorses;
+  const hasAnyWearable = sortedAnimals.some((a) => a.wearable !== null);
   const showMilkingColumn = !isHorseFarm || hasCattle;
 
   const visibleColumns: readonly HerdSortField[] = [
@@ -1468,7 +1132,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
     "name",
     "groupName",
     ...(hasBothSpecies ? (["species"] as const) : []),
-    "wearable",
+    ...(hasAnyWearable ? (["wearable"] as const) : []),
     ...(showMilkingColumn ? (["lastMilking"] as const) : []),
     "status",
   ];
@@ -1478,40 +1142,28 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
       <header
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
           gap: "var(--space-4)",
         }}
       >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-            <h1
-              style={{
-                margin: 0,
-                fontFamily: "var(--font-display)",
-                fontSize: "var(--text-h1)",
-                fontWeight: 400,
-                lineHeight: "var(--leading-tight)",
-                letterSpacing: "var(--tracking-display)",
-              }}
-            >
-              {t(isHorseFarm ? "herd.page.title.horse" : "herd.page.title.cattle")}
-            </h1>
-            <Badge variant="neutral" className="tabular-nums">
-              {t("herd.page.shown", { count: filteredAnimals.length })}
-            </Badge>
-          </div>
-          <p
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+          <h1
             style={{
-              margin: "var(--space-2) 0 0 0",
-              color: "var(--text-secondary)",
-              fontSize: "var(--text-base)",
-              maxInlineSize: "68ch",
+              margin: 0,
+              fontFamily: "var(--font-display)",
+              fontSize: "var(--text-h1)",
+              fontWeight: 400,
+              lineHeight: "var(--leading-tight)",
+              letterSpacing: "var(--tracking-display)",
             }}
           >
-            {t(isHorseFarm ? "herd.page.description.horse" : "herd.page.description")}
-          </p>
+            {t(isHorseFarm ? "herd.page.title.horse" : "herd.page.title.cattle")}
+          </h1>
+          <Badge variant="neutral" className="tabular-nums">
+            {t("herd.page.shown", { count: filteredAnimals.length })}
+          </Badge>
         </div>
 
         <div
@@ -1622,11 +1274,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
       </Card>
 
       {animalsError ? (
-        <Card
-          title={t("herd.error.title")}
-          subtitle={t("herd.error.subtitle")}
-          data-testid="herd-error-state"
-        >
+        <Card title={t("herd.error.title")} data-testid="herd-error-state">
           <div
             style={{
               display: "flex",
@@ -1662,9 +1310,6 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
         <EmptyState
           data-testid="herd-empty-state"
           title={t(isHorseFarm ? "herd.empty.title.horse" : "herd.empty.title.cattle")}
-          description={t(
-            isHorseFarm ? "herd.empty.description.horse" : "herd.empty.description.cattle",
-          )}
           action={
             <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)" }}>
               {(searchQuery || speciesFilter !== "all" || groupFilter !== "all") && (
@@ -1695,7 +1340,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
           }
         />
       ) : viewMode === "orbit" ? (
-        <Card title={t("herd.orbitCard.title")} subtitle={t("herd.orbitCard.subtitle")}>
+        <Card title={t("herd.orbitCard.title")}>
           <HerdOrbitCanvas
             animals={sortedAnimals}
             selectedAnimalId={selectedAnimalId}
@@ -1703,7 +1348,7 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
           />
         </Card>
       ) : (
-        <Card title={t("herd.table.title")} subtitle={t("herd.table.subtitle")}>
+        <Card title={t("herd.table.title")}>
           <div style={{ overflowX: "auto" }}>
             <table
               data-testid="herd-table"
@@ -1815,33 +1460,37 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
                               })}
                         </td>
                       )}
-                      <td style={{ padding: "var(--space-3)" }}>
-                        {animal.wearable ? (
-                          <div
-                            style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}
-                          >
-                            <Badge variant="info">
-                              {formatWearableKind(animal.wearable.kind, t)}
-                            </Badge>
-                            {animal.wearable.batteryPct !== null && (
-                              <span
-                                className="tabular-nums"
-                                style={{
-                                  fontFamily: "var(--font-mono)",
-                                  fontSize: "var(--text-xs)",
-                                  color: "var(--text-secondary)",
-                                }}
-                              >
-                                {formatNumber(animal.wearable.batteryPct / 100, PERCENT)}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>
-                            {t("herd.wearable.none")}
-                          </span>
-                        )}
-                      </td>
+                      {hasAnyWearable && (
+                        <td style={{ padding: "var(--space-3)" }}>
+                          {animal.wearable ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "var(--space-2)",
+                              }}
+                            >
+                              <Badge variant="info">
+                                {formatWearableKind(animal.wearable.kind, t)}
+                              </Badge>
+                              {animal.wearable.batteryPct !== null && (
+                                <span
+                                  className="tabular-nums"
+                                  style={{
+                                    fontFamily: "var(--font-mono)",
+                                    fontSize: "var(--text-xs)",
+                                    color: "var(--text-secondary)",
+                                  }}
+                                >
+                                  {formatNumber(animal.wearable.batteryPct / 100, PERCENT)}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: "var(--text-muted)" }}>—</span>
+                          )}
+                        </td>
+                      )}
                       {showMilkingColumn && (
                         <td
                           className="tabular-nums"
@@ -2024,131 +1673,51 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
               </div>
             </section>
 
-            <section aria-label={t("herd.drawer.wearableAria")}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: "var(--space-2)",
-                }}
-              >
+            {selectedWearable && (
+              <section aria-label={t("herd.drawer.wearableAria")}>
                 <h3
                   style={{
-                    margin: 0,
-                    fontFamily: "var(--font-display)",
+                    margin: "0 0 var(--space-2) 0",
+                    fontFamily: "var(--font-sans)",
                     fontSize: "var(--text-base)",
-                    fontWeight: 700,
+                    fontWeight: 600,
                   }}
                 >
                   {t("herd.drawer.wearableHeading")}
                 </h3>
-                <Badge variant={selectedWearable ? "info" : "neutral"}>
-                  {selectedWearable
-                    ? formatWearableKind(selectedWearable.kind, t)
-                    : t("herd.wearable.none")}
-                </Badge>
-              </div>
 
-              <div
-                data-testid="animal-drawer-wearable-card"
-                style={{
-                  padding: "var(--space-4)",
-                  borderRadius: "var(--radius-md)",
-                  backgroundColor: "var(--bg-elevated)",
-                  border: "1px solid var(--border-subtle)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "var(--space-3)",
-                }}
-              >
-                {selectedWearable ? (
-                  <>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "var(--space-3)",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: "var(--text-base)" }}>
-                          {formatWearableKind(selectedWearable.kind, t)}{" "}
-                          {selectedWearable.vendor ? `· ${selectedWearable.vendor}` : ""}
-                        </div>
-                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
-                          {t("herd.drawer.wearableActive")}
-                        </div>
-                      </div>
-                      {selectedWearable.batteryPct !== null && (
-                        <Badge
-                          variant={selectedWearable.batteryPct < 25 ? "warn" : "ok"}
-                          icon={<Battery size={13} />}
-                        >
-                          {formatNumber(selectedWearable.batteryPct / 100, PERCENT)}
-                        </Badge>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        icon={<Link2 size={15} />}
-                        data-testid="animal-drawer-attach-sensor-btn"
-                        onClick={() => setAttachDialogOpen(true)}
-                      >
-                        {t("herd.drawer.replaceSensor")}
-                      </Button>
-                      <Button
-                        variant="subtle"
-                        size="sm"
-                        icon={<Unlink size={15} />}
-                        data-testid="animal-drawer-unbind-sensor-btn"
-                        onClick={() =>
-                          void handleUnbindWearable(
-                            selectedWearable.deviceId,
-                            selectedAnimal.name ??
-                              selectedAnimal.earTagNumber ??
-                              t("herd.animal.fallbackLower"),
-                          )
-                        }
-                      >
-                        {t("herd.drawer.removeSensor")}
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "var(--space-3)",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: "var(--text-sm)" }}>
-                        {t("herd.drawer.noSensor")}
-                      </div>
-                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
-                        {t("herd.drawer.noSensorHint")}
-                      </div>
-                    </div>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={<Link2 size={15} />}
-                      data-testid="animal-drawer-attach-sensor-btn"
-                      onClick={() => setAttachDialogOpen(true)}
-                    >
-                      {t("herd.drawer.attachSensor")}
-                    </Button>
+                <div
+                  data-testid="animal-drawer-wearable-card"
+                  style={{
+                    padding: "var(--space-3) var(--space-4)",
+                    borderRadius: "var(--radius-md)",
+                    backgroundColor: "var(--bg-elevated)",
+                    border: "1px solid var(--border-subtle)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "var(--space-3)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                    <Badge variant="info">{formatWearableKind(selectedWearable.kind, t)}</Badge>
+                    {selectedWearable.vendor && (
+                      <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+                        {selectedWearable.vendor}
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
-            </section>
+                  {selectedWearable.batteryPct !== null && (
+                    <Badge
+                      variant={selectedWearable.batteryPct < 25 ? "warn" : "ok"}
+                      icon={<Battery size={13} />}
+                    >
+                      {formatNumber(selectedWearable.batteryPct / 100, PERCENT)}
+                    </Badge>
+                  )}
+                </div>
+              </section>
+            )}
 
             <section aria-label={t("herd.drawer.observationsAria")}>
               <h3
@@ -2213,26 +1782,6 @@ export function HerdPage({ initialViewMode = "orbit" }: HerdPageProps = {}) {
           </div>
         )}
       </Drawer>
-
-      {selectedAnimal && (
-        <AttachSensorDialog
-          open={attachDialogOpen}
-          onClose={() => setAttachDialogOpen(false)}
-          animal={selectedAnimal}
-          currentWearable={selectedWearable}
-          wearableDevices={wearableDevices}
-          allAnimals={enrichedAnimals}
-          onBound={async () => {
-            await Promise.all([
-              refetchAnimals(),
-              refetchDevices(),
-              refetchDetail(),
-              refetchAlerts(),
-              refetchMilkings(),
-            ]);
-          }}
-        />
-      )}
 
       {animalFormOpen && (
         <AnimalFormDialog

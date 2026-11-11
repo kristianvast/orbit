@@ -6,7 +6,7 @@ export const shell = {
   "nav.herd": "Cattle",
   "nav.herd.cattle": "Cattle",
   "nav.herd.horse": "Horses",
-  "nav.devices": "Sensors & Robots",
+  "nav.devices": "Connections",
   "nav.cameras": "Cameras",
   "nav.settings": "Settings",
   "nav.primary": "Primary farm navigation",
@@ -21,22 +21,13 @@ export const shell = {
   "module.disabled.herd.title": "Cattle is not added yet",
   "module.disabled.herd.title.cattle": "Cattle is not added yet",
   "module.disabled.herd.title.horse": "Horses is not added yet",
-  "module.disabled.herd.description":
-    "Orion adds the herd register when you start tracking your cattle.",
-  "module.disabled.herd.description.cattle":
-    "Orion adds the herd register when you start tracking your cattle.",
-  "module.disabled.herd.description.horse":
-    "Orion adds the stable register when you start tracking your horses.",
   "module.disabled.herd.prompt": "Help me track my herd",
   "module.disabled.herd.prompt.cattle": "Help me track my herd",
   "module.disabled.herd.prompt.horse": "Help me track my horses",
-  "module.disabled.devices.title": "Sensors & Robots is not added yet",
-  "module.disabled.devices.description":
-    "Orion adds this screen when you connect a milking robot, collar, bolus, ear tag sensor, or scale.",
-  "module.disabled.devices.prompt": "Connect my milking robot or sensors",
+  "module.disabled.devices.title": "No connections yet",
+  "module.disabled.devices.prompt": "Connect my milking robot",
+  "module.disabled.devices.prompt.horse": "Build something for my stable",
   "module.disabled.cameras.title": "Cameras is not added yet",
-  "module.disabled.cameras.description":
-    "Orion adds the barn map when you connect your first barn or stable camera.",
   "module.disabled.cameras.prompt": "Set up barn cameras",
   "module.disabled.askOrion": "Ask Orion to add it",
   "module.disabled.addNow": "Add it now",

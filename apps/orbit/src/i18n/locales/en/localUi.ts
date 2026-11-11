@@ -2,7 +2,6 @@ import type { Messages } from "../../core";
 
 export const localUi = {
   title: "Your Orbit",
-  subtitle: "Orion can change Orbit itself by building your own copy of the app on this PC",
   "badge.none": "Original",
   "badge.ready": "Your build",
   "badge.broken": "Safe mode",

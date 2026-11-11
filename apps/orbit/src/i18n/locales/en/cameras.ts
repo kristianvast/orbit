@@ -12,8 +12,6 @@ export const cameras = {
   "form.toastSavedLocal": "{name} saved on this farm PC.",
   "form.titleEdit": "Edit {name}",
   "form.titleAdd": "Add barn or stable camera",
-  "form.description":
-    "Enter the camera name, barn location, and stream address. Passwords are saved securely in your PC keychain and never shown again.",
   "form.cancel": "Cancel",
   "form.submitSave": "Save camera",
   "form.submitAdd": "Add camera",
@@ -38,15 +36,12 @@ export const cameras = {
     "Sent once to Orion's local keychain; never stored in plain text or displayed again.",
   "page.title": "Cameras",
   "page.onlineCount": "{online}/{total} online",
-  "page.intro":
-    "Barn, parlour, calving pen, and horse stable cameras. Orion can scan your farm network for cameras, and camera passwords are stored in your PC keychain (never shown again).",
   "page.findOnNetwork": "Find cameras on my network",
   "page.addCamera": "Add camera",
   "prompt.findCameras": "Find cameras on my network",
   "prompt.checkCamera": 'Check camera "{name}" in {location}',
   "prompt.locationFallback": "the barn",
   "privacy.title": "Network Camera Discovery & Password Privacy",
-  "privacy.subtitle": "How Orbit protects your barn cameras on the local network",
   "privacy.bodyBefore": "Clicking ",
   "privacy.bodyAction": "Find cameras on my network",
   "privacy.bodyAfter":
@@ -56,8 +51,6 @@ export const cameras = {
   "error.retry": "Retry",
   "loading.title": "Loading barn cameras…",
   "empty.title": "No cameras added yet",
-  "empty.description":
-    "Let Orion scan your farm network for network cameras or enter a camera stream address manually.",
   "card.locationFallback": "Barn camera",
   "card.status.online": "online",
   "card.status.offline": "offline",
@@ -74,7 +67,6 @@ export const cameras = {
   "barn.unpin": "Unpin location",
   "barn.new": "New location…",
   "barn.newTitle": "Move camera to a new location",
-  "barn.newDescription": "Enter a barn, parlour, pen, or stable name for {name}.",
   "barn.newPlaceholder": "e.g. Calving pen, Horse stable",
   "barn.newConfirm": "Move camera",
   "barn.toastMoved": "Moved {name} to {barn}",

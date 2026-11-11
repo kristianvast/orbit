@@ -96,7 +96,7 @@ function useModulesInternal(): UseModulesResult {
     if (modules) return modules;
     const cattle = summary?.counts?.cattle ?? 0;
     const horses = summary?.counts?.horses ?? 0;
-    const devices = summary?.counts?.devices ?? 0;
+    const connectors = summary?.counts?.connectors ?? 0;
     const cameras = summary?.counts?.cameras ?? 0;
     return [
       {
@@ -107,9 +107,9 @@ function useModulesInternal(): UseModulesResult {
       },
       {
         id: "devices",
-        enabled: devices > 0,
+        enabled: connectors > 0,
         enabledAt: null,
-        enabledBy: devices > 0 ? "auto" : null,
+        enabledBy: connectors > 0 ? "auto" : null,
       },
       {
         id: "cameras",

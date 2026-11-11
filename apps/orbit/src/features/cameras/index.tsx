@@ -191,7 +191,6 @@ export function CamerasPage() {
         <EmptyState
           data-testid="cameras-empty-state"
           title={t("cameras.empty.title")}
-          description={t("cameras.empty.description")}
           action={
             <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)" }}>
               <Button variant="secondary" icon={<Radar size={16} />} onClick={findCamerasOnNetwork}>

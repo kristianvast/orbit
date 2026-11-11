@@ -92,7 +92,7 @@ export function MembersCard({
   };
 
   return (
-    <Card title={t("account.members.title")} subtitle={t("account.members.subtitle")}>
+    <Card title={t("account.members.title")}>
       <div style={column}>
         <ul
           style={{ ...column, listStyle: "none", margin: 0, padding: 0 }}
@@ -187,9 +187,6 @@ export function MembersCard({
                 {t("account.members.invite")}
               </Button>
             </div>
-            <p style={{ ...muted, fontSize: "var(--text-sm)" }}>
-              {t(`account.roleHint.${inviteRole}`)}
-            </p>
           </form>
         )}
 

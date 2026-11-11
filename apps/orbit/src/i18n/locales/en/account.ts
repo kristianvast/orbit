@@ -2,12 +2,9 @@ import type { Messages } from "../../core";
 
 export const account = {
   title: "Orbit account",
-  subtitle: "Sign in to back up this farm, use Orion's cloud model and work with your team",
   "badge.signedIn": "Signed in",
   "badge.local": "On this PC only",
   "unavailable.body": "This Orbit has no cloud address, so everything stays on this PC.",
-  "signedOut.body":
-    "You are working on this PC only. Sign in or create an account to back up this farm and share it with your team.",
   "mode.login": "Sign in",
   "mode.register": "Create account",
   "field.name": "Your name",
@@ -40,7 +37,6 @@ export const account = {
   "linkError.body":
     "Orbit keeps working on this PC. Ask one of the farm's owners for an invite and enter the code below.",
   "invite.label": "Invite code",
-  "invite.hint": "Got a code from a farm owner or manager? Enter it to join their farm.",
   "invite.accept": "Join farm",
   "invite.joined": "You joined the farm",
   logout: "Sign out",
@@ -49,12 +45,7 @@ export const account = {
   "role.manager": "Manager",
   "role.worker": "Worker",
   "role.viewer": "Viewer",
-  "roleHint.owner": "Everything, including the team and other owners",
-  "roleHint.manager": "All farm data, integrations and the team (not owners)",
-  "roleHint.worker": "Animals, sensors and observations",
-  "roleHint.viewer": "Can look, cannot change",
   "members.title": "Farm team",
-  "members.subtitle": "Who can see and change this farm",
   "members.you": "you",
   "members.role": "Role",
   "members.remove": "Remove",

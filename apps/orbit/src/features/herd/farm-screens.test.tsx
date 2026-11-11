@@ -4,7 +4,6 @@ import type {
   DbMutationName,
   DbQueryName,
   DbQueryResults,
-  DeviceListItem,
   OrionClient,
   ServerEvent,
 } from "@orbit/protocol";
@@ -36,7 +35,9 @@ const NO_ADE_FIELDS = {
   lactationStatus: null,
 };
 
-function createFarmMockClient() {
+type ConnectorRow = DbQueryResults["connectors.list"]["rows"][number];
+
+function createFarmMockClient(options?: { connectors?: ConnectorRow[] }) {
   const animals: AnimalListItem[] = [
     {
       id: "animal-bella",
@@ -98,44 +99,16 @@ function createFarmMockClient() {
     },
   ];
 
-  const devices: DeviceListItem[] = [
+  const connectors: ConnectorRow[] = options?.connectors ?? [
     {
-      id: "dev-collar-1",
-      kind: "collar",
-      vendor: "Nedap",
-      model: "SmartTag Neck",
-      serial: "COL-101",
-      connection: null,
-      status: "online",
-      batteryPct: 88,
-      lastSeenAt: NOW,
-      boundAnimalId: "animal-bella",
-      ...makeSyncCols(),
-    },
-    {
-      id: "dev-bolus-1",
-      kind: "bolus",
-      vendor: "smaXtec",
-      model: "Climate Bolus",
-      serial: "BOL-201",
-      connection: null,
-      status: "online",
-      batteryPct: null,
-      lastSeenAt: NOW,
-      boundAnimalId: "animal-daisy",
-      ...makeSyncCols(),
-    },
-    {
-      id: "dev-spare-eartag",
-      kind: "ear_tag_sensor",
-      vendor: "CowManager",
-      model: "SensOor",
-      serial: "EAR-399",
-      connection: null,
-      status: "online",
-      batteryPct: 96,
-      lastSeenAt: NOW,
-      boundAnimalId: null,
+      id: "conn-lely",
+      vendor: "lely",
+      kind: "local_api",
+      name: "Lely Horizon",
+      config: { host: "192.168.1.20" },
+      enabled: true,
+      lastSyncAt: NOW,
+      lastError: null,
       ...makeSyncCols(),
     },
   ];
@@ -150,14 +123,16 @@ function createFarmMockClient() {
       farmId: FARM_ID,
     },
     request: vi.fn() as unknown as OrionClient["request"],
-    query: vi.fn(async <Q extends DbQueryName>(q: Q) => {
+    query: vi.fn(async <Q extends DbQueryName>(q: Q, params?: unknown) => {
       switch (q) {
         case "animals.list":
           return { rows: animals, total: animals.length } as DbQueryResults[Q];
-        case "animals.get":
+        case "animals.get": {
+          const id = (params as { id?: string } | undefined)?.id;
+          const found = animals.find((a) => a.id === id) ?? animals[0];
           return {
-            animal: animals[0],
-            wearable: animals[0]?.wearable ?? null,
+            animal: found,
+            wearable: found?.wearable ?? null,
             bindings: [],
             devices: [],
             recentObservations: [
@@ -174,24 +149,9 @@ function createFarmMockClient() {
               },
             ],
           } as unknown as DbQueryResults[Q];
-        case "devices.list":
-          return { rows: devices } as DbQueryResults[Q];
+        }
         case "connectors.list":
-          return {
-            rows: [
-              {
-                id: "conn-lely",
-                vendor: "lely",
-                kind: "local_api",
-                name: "Lely Horizon",
-                config: { host: "192.168.1.20" },
-                enabled: true,
-                lastSyncAt: NOW,
-                lastError: null,
-                ...makeSyncCols(),
-              },
-            ],
-          } as unknown as DbQueryResults[Q];
+          return { rows: connectors } as unknown as DbQueryResults[Q];
         case "observations.recent":
           return {
             rows: [
@@ -240,8 +200,8 @@ function createFarmMockClient() {
   return { client, mutateCalls };
 }
 
-describe("Farm Data Screens: Herd sorting & One-wearable sensor binding", () => {
-  it("sorts the herd register table by ear tag, name, and last milking yield", async () => {
+describe("Farm Data Screens: Herd register & Connections screen", () => {
+  it("sorts the herd register table, shows wearables read-only only when present, and drops the wearable column when none in the list have one", async () => {
     const { client } = createFarmMockClient();
 
     render(
@@ -263,6 +223,8 @@ describe("Farm Data Screens: Herd sorting & One-wearable sensor binding", () => 
       expect(getRowNames().length).toBe(3);
     });
 
+    expect(screen.getByTestId("herd-sort-wearable")).toBeInTheDocument();
+
     fireEvent.click(screen.getByTestId("herd-sort-name"));
     const ascByName = getRowNames();
     expect(ascByName[0]).toContain("Bella");
@@ -279,69 +241,27 @@ describe("Farm Data Screens: Herd sorting & One-wearable sensor binding", () => 
     const descByMilk = getRowNames();
     expect(descByMilk[0]).toContain("Bella");
     expect(descByMilk[0]).toContain("14.2 kg");
-  });
 
-  it("explains the one-wearable rule (collar OR bolus OR ear tag) and replaces an existing wearable when attaching a spare sensor", async () => {
-    const { client, mutateCalls } = createFarmMockClient();
+    fireEvent.click(screen.getByTestId("herd-inspect-DK-1002"));
+    const drawer = await screen.findByTestId("animal-detail-drawer");
+    expect(within(drawer).getByTestId("animal-drawer-wearable-card")).toHaveTextContent("Collar");
+    expect(screen.queryByTestId("animal-drawer-attach-sensor-btn")).not.toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={["/devices"]}>
-        <AppProviders initialClient={client}>
-          <DevicesPage />
-        </AppProviders>
-      </MemoryRouter>,
-    );
-
-    const attachSpareBtn = await screen.findByTestId("device-attach-btn-EAR-399");
-    fireEvent.click(attachSpareBtn);
-
-    const dialog = await screen.findByTestId("device-bind-dialog");
-    expect(dialog).toBeInTheDocument();
-
-    const ruleBox = screen.getByTestId("device-bind-rule-explanation");
-    expect(ruleBox.textContent).toMatch(/collar/i);
-    expect(ruleBox.textContent).toMatch(/bolus/i);
-    expect(ruleBox.textContent).toMatch(/ear tag sensor/i);
-
-    const conflictWarning = screen.getByTestId("device-bind-conflict-warning");
-    expect(conflictWarning.textContent).toMatch(/Bella already wears a collar/i);
-
-    const selectEl = screen.getByTestId("device-bind-animal-select");
-    expect(selectEl.textContent).not.toMatch(/\ba ear tag sensor\b/i);
-
-    const confirmBtn = screen.getByTestId("device-bind-confirm-btn");
-    expect(confirmBtn.textContent).toMatch(/Replace collar & attach/i);
-
-    fireEvent.click(confirmBtn);
-
+    fireEvent.click(screen.getByTestId("herd-inspect-animal-storm"));
     await waitFor(() => {
-      expect(mutateCalls).toEqual([
-        {
-          mutation: "bindings.clear",
-          params: { deviceId: "dev-collar-1" },
-        },
-        {
-          mutation: "bindings.set",
-          params: { deviceId: "dev-spare-eartag", animalId: "animal-bella" },
-        },
-      ]);
+      expect(screen.queryByTestId("animal-drawer-wearable-card")).not.toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByTestId("herd-filter-species"), { target: { value: "horse" } });
+    await waitFor(() => {
+      expect(screen.queryByTestId("herd-sort-wearable")).not.toBeInTheDocument();
     });
   });
 
-  it("uses 'an ear tag sensor' (vowel-sound article) when an animal wears an ear tag sensor", async () => {
-    const { client } = createFarmMockClient();
-    const firstQueryResult = await client.query("animals.list", {});
-    const bella = firstQueryResult.rows[0];
-    if (bella) {
-      bella.wearable = {
-        deviceId: "dev-spare-eartag",
-        kind: "ear_tag_sensor",
-        vendor: "CowManager",
-        batteryPct: 96,
-      };
-    }
+  it("renders Connections with configured connectors, keychain password dialog, sync action, and compact empty state when none exist", async () => {
+    const { client, mutateCalls } = createFarmMockClient();
 
-    render(
+    const view = render(
       <MemoryRouter initialEntries={["/devices"]}>
         <AppProviders initialClient={client}>
           <DevicesPage />
@@ -349,11 +269,53 @@ describe("Farm Data Screens: Herd sorting & One-wearable sensor binding", () => 
       </MemoryRouter>,
     );
 
-    const attachCollarBtn = await screen.findByTestId("device-attach-btn-COL-101");
-    fireEvent.click(attachCollarBtn);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Connections" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("connector-card-lely")).toHaveTextContent("Lely Horizon");
+    expect(screen.queryByTestId("devices-add-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("device-attach-btn-COL-101")).not.toBeInTheDocument();
 
-    const conflictWarning = await screen.findByTestId("device-bind-conflict-warning");
-    expect(conflictWarning.textContent).toMatch(/Bella already wears an ear tag sensor/i);
-    expect(conflictWarning.textContent).not.toMatch(/\ba ear tag sensor\b/i);
+    fireEvent.click(screen.getByTestId("connector-sync-lely"));
+    await waitFor(() => {
+      expect(mutateCalls).toContainEqual({
+        mutation: "connectors.syncNow",
+        params: { id: "conn-lely" },
+      });
+    });
+
+    fireEvent.click(screen.getByTestId("connector-password-lely"));
+    fireEvent.change(await screen.findByTestId("connector-password-input"), {
+      target: { value: "barn-secret-123" },
+    });
+    fireEvent.click(screen.getByTestId("connector-password-save"));
+
+    await waitFor(() => {
+      expect(mutateCalls).toContainEqual({
+        mutation: "connectors.upsert",
+        params: {
+          connector: {
+            id: "conn-lely",
+            vendor: "lely",
+            kind: "local_api",
+            name: "Lely Horizon",
+            secret: "barn-secret-123",
+          },
+        },
+      });
+    });
+
+    view.unmount();
+
+    const emptyClient = createFarmMockClient({ connectors: [] });
+    render(
+      <MemoryRouter initialEntries={["/devices"]}>
+        <AppProviders initialClient={emptyClient.client}>
+          <DevicesPage />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("connect-something-new-btn")).toBeInTheDocument();
   });
 });

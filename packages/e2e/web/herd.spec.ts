@@ -17,14 +17,13 @@ test("herd table lists the seeded cows", async ({ page }) => {
   );
 });
 
-test("attach sensor explains the one-wearable rule", async ({ page }) => {
+test("animal drawer shows read-only wearable details without sensor attach actions", async ({
+  page,
+}) => {
   await openHerdTable(page);
   await page.getByTestId(`herd-inspect-${SEED.firstDairyEarTag}`).click();
   await expect(page.getByTestId("animal-detail-drawer")).toBeVisible();
-  await page.getByTestId("animal-drawer-attach-sensor-btn").click();
-  const dialog = page.getByTestId("herd-attach-sensor-dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("a collar OR a bolus OR an ear tag sensor");
-  await page.getByTestId("herd-attach-sensor-cancel").click();
-  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId("animal-drawer-wearable-card")).toBeVisible();
+  await expect(page.getByTestId("animal-drawer-attach-sensor-btn")).toHaveCount(0);
+  await expect(page.getByTestId("animal-drawer-unbind-sensor-btn")).toHaveCount(0);
 });

@@ -1,4 +1,4 @@
-import { Camera, MessageSquare, Plus, Radio, Tag } from "lucide-react";
+import { Camera, MessageSquare, Plug, Plus, Tag } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Route, Routes, useNavigate } from "react-router";
 import { Button, EmptyState, Skeleton } from "../design";
@@ -19,26 +19,22 @@ const MODULE_META: Record<
   ModuleId,
   {
     titleKey: MessageKey;
-    descKey: MessageKey;
     promptKey: MessageKey;
     icon: typeof Tag;
   }
 > = {
   herd: {
     titleKey: "shell.module.disabled.herd.title",
-    descKey: "shell.module.disabled.herd.description",
     promptKey: "shell.module.disabled.herd.prompt",
     icon: Tag,
   },
   devices: {
     titleKey: "shell.module.disabled.devices.title",
-    descKey: "shell.module.disabled.devices.description",
     promptKey: "shell.module.disabled.devices.prompt",
-    icon: Radio,
+    icon: Plug,
   },
   cameras: {
     titleKey: "shell.module.disabled.cameras.title",
-    descKey: "shell.module.disabled.cameras.description",
     promptKey: "shell.module.disabled.cameras.prompt",
     icon: Camera,
   },
@@ -77,18 +73,14 @@ export function ModuleRoute({ moduleId, children }: ModuleRouteProps) {
         ? "shell.module.disabled.herd.title.horse"
         : "shell.module.disabled.herd.title.cattle"
       : meta.titleKey;
-  const descKey: MessageKey =
-    moduleId === "herd"
-      ? species === "horse"
-        ? "shell.module.disabled.herd.description.horse"
-        : "shell.module.disabled.herd.description.cattle"
-      : meta.descKey;
   const promptKey: MessageKey =
     moduleId === "herd"
       ? species === "horse"
         ? "shell.module.disabled.herd.prompt.horse"
         : "shell.module.disabled.herd.prompt.cattle"
-      : meta.promptKey;
+      : moduleId === "devices" && species === "horse"
+        ? "shell.module.disabled.devices.prompt.horse"
+        : meta.promptKey;
   const prompt = t(promptKey);
 
   const handleAskOrion = () => {
@@ -111,7 +103,6 @@ export function ModuleRoute({ moduleId, children }: ModuleRouteProps) {
       <EmptyState
         icon={<Icon size={24} />}
         title={t(titleKey)}
-        description={t(descKey)}
         action={
           <div
             style={{
@@ -130,15 +121,17 @@ export function ModuleRoute({ moduleId, children }: ModuleRouteProps) {
             >
               {t("shell.module.disabled.askOrion")}
             </Button>
-            <Button
-              variant="secondary"
-              loading={enabling}
-              icon={<Plus size={16} />}
-              onClick={() => void handleEnableNow()}
-              data-testid={`module-disabled-enable-${moduleId}`}
-            >
-              {t("shell.module.disabled.addNow")}
-            </Button>
+            {moduleId !== "devices" && (
+              <Button
+                variant="secondary"
+                loading={enabling}
+                icon={<Plus size={16} />}
+                onClick={() => void handleEnableNow()}
+                data-testid={`module-disabled-enable-${moduleId}`}
+              >
+                {t("shell.module.disabled.addNow")}
+              </Button>
+            )}
           </div>
         }
       />

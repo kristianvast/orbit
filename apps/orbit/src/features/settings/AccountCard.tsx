@@ -158,7 +158,6 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
   return (
     <Card
       title={t("account.title")}
-      subtitle={t("account.subtitle")}
       data-testid="account-card"
       actions={
         <Badge variant={signedIn ? "ok" : "neutral"} data-testid="account-badge">
@@ -171,7 +170,6 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
       {status.state === "signed_out" && (
         <>
           <form style={column} onSubmit={submit} data-testid="account-form">
-            <p style={muted}>{t("account.signedOut.body")}</p>
             <div style={row} role="tablist">
               {(["login", "register"] as const).map((m) => (
                 <Button
@@ -291,10 +289,7 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
               <dd style={{ margin: 0 }}>
                 <Badge variant="accent" data-testid="account-role">
                   {t(`account.role.${status.farm.role}`)}
-                </Badge>{" "}
-                <span style={{ ...muted, fontSize: "var(--text-sm)" }}>
-                  {t(`account.roleHint.${status.farm.role}`)}
-                </span>
+                </Badge>
               </dd>
               <dt style={muted}>{t("account.sync")}</dt>
               <dd style={{ margin: 0 }}>
@@ -343,7 +338,6 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
               {t("account.invite.accept")}
             </Button>
           </div>
-          <p style={{ ...muted, fontSize: "var(--text-sm)" }}>{t("account.invite.hint")}</p>
           <div style={row}>
             <Button variant="subtle" size="sm" onClick={logout} data-testid="account-logout">
               {t("account.logout")}

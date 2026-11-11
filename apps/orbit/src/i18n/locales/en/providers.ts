@@ -2,8 +2,6 @@ import type { Messages } from "../../core";
 
 export const providers = {
   "card.title": "Model accounts",
-  "card.subtitle":
-    "Sign in with a subscription you already pay for, or add an API key. Credentials stay on this PC.",
   "card.connectedCount": {
     zero: "None connected",
     one: "{count} connected",

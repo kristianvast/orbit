@@ -167,9 +167,6 @@ export function HomePage() {
   const totalAnimals = cattle + horses;
   const primaryAnimals =
     species === "horse" ? (horses > 0 ? horses : cattle) : cattle > 0 ? cattle : horses;
-  const totalDevices = summary?.counts?.devices ?? 0;
-  const devicesOffline = summary?.counts?.devicesOffline ?? 0;
-  const devicesOnline = Math.max(0, totalDevices - devicesOffline);
   const totalCameras = summary?.counts?.cameras ?? 0;
   const camerasOnline = summary?.counts?.camerasOnline ?? 0;
   const totalConnectors = summary?.counts?.connectors ?? 0;
@@ -183,8 +180,8 @@ export function HomePage() {
   const isHorse = species === "horse";
 
   const suggestedQuestions: readonly MessageKey[] = isHorse
-    ? ["home.suggest.alerts.horse", "home.suggest.calving.horse", "home.suggest.battery"]
-    : ["home.suggest.alerts.cattle", "home.suggest.calving", "home.suggest.battery"];
+    ? ["home.suggest.alerts.horse", "home.suggest.calving.horse"]
+    : ["home.suggest.alerts.cattle", "home.suggest.calving"];
 
   const minimalStarters: ReadonlyArray<{
     id: string;
@@ -220,8 +217,12 @@ export function HomePage() {
     },
     {
       id: "page",
-      labelKey: "home.minimal.starter.page.label",
-      promptKey: "home.minimal.starter.page.prompt",
+      labelKey: isHorse
+        ? "home.minimal.starter.page.label.horse"
+        : "home.minimal.starter.page.label",
+      promptKey: isHorse
+        ? "home.minimal.starter.page.prompt.horse"
+        : "home.minimal.starter.page.prompt",
     },
   ];
 
@@ -346,7 +347,6 @@ export function HomePage() {
           <span>
             {t("home.note.body")} <Link to="/settings">{t("home.note.undo")}</Link>
           </span>
-          <span className="orbit-visually-hidden">{t("home.note.wearable")}</span>
         </p>
       </div>
     );
@@ -365,16 +365,8 @@ export function HomePage() {
           },
         ] satisfies OrbitSatellite[])
       : []),
-    ...(devicesEnabled
+    ...(devicesEnabled && totalConnectors > 0
       ? ([
-          {
-            id: "sensors",
-            label: t("home.orbit.sensors"),
-            ring: 2 as const,
-            angleDeg: 30,
-            tone: devicesOffline > 0 ? ("warn" as const) : ("ok" as const),
-            count: devicesOnline,
-          },
           {
             id: "connectors",
             label: t("home.orbit.connectors"),
@@ -421,19 +413,6 @@ export function HomePage() {
       testId: "home-animals-gauge",
     },
     {
-      id: "sensors",
-      moduleId: "devices",
-      label: t("home.gauge.sensors"),
-      value: `${devicesOnline}/${totalDevices}`,
-      detail:
-        devicesOffline > 0
-          ? t("home.gauge.offline", { count: devicesOffline })
-          : t("home.gauge.allReporting"),
-      tone: devicesOffline > 0 ? "warn" : "ok",
-      to: "/devices",
-      testId: "home-sensors-online",
-    },
-    {
       id: "cameras",
       moduleId: "cameras",
       label: t("home.gauge.cameras"),
@@ -461,9 +440,10 @@ export function HomePage() {
     },
   ];
 
-  const instruments = allInstruments.filter(
-    (ins) => isEnabled(ins.moduleId) || (ins.moduleId === "herd" && totalAnimals > 0),
-  );
+  const instruments = allInstruments.filter((ins) => {
+    if (ins.id === "connectors") return devicesEnabled && totalConnectors > 0;
+    return isEnabled(ins.moduleId) || (ins.moduleId === "herd" && totalAnimals > 0);
+  });
 
   const heroHeadline = !summary
     ? t("home.hero.waiting")
@@ -506,7 +486,7 @@ export function HomePage() {
             </h1>
           </div>
 
-          {summary && (herdEnabled || devicesEnabled || camerasEnabled || totalAnimals > 0) && (
+          {summary && (herdEnabled || camerasEnabled || totalAnimals > 0) && (
             <dl className="orbit-telemetry">
               {(herdEnabled || totalAnimals > 0) && (
                 <div className="orbit-telemetry__item">
@@ -514,14 +494,6 @@ export function HomePage() {
                   <dt className="orbit-telemetry__label">
                     {t(isHorse ? "home.telemetry.horses" : "home.telemetry.cattle")}
                   </dt>
-                </div>
-              )}
-              {devicesEnabled && (
-                <div className="orbit-telemetry__item">
-                  <dd className="orbit-telemetry__value tabular-nums">
-                    {devicesOnline}/{totalDevices}
-                  </dd>
-                  <dt className="orbit-telemetry__label">{t("home.telemetry.sensors")}</dt>
                 </div>
               )}
               {camerasEnabled && (
@@ -601,10 +573,7 @@ export function HomePage() {
               <Skeleton height="3.5rem" />
             </div>
           ) : recentAlerts.length === 0 ? (
-            <EmptyState
-              title={t("home.alerts.emptyTitle")}
-              description={t("home.alerts.emptyDescription")}
-            />
+            <EmptyState title={t("home.alerts.emptyTitle")} />
           ) : (
             <ul className="orbit-alert-list">
               {recentAlerts.map((alert) => {
@@ -744,7 +713,6 @@ export function HomePage() {
         <span>
           {t("home.note.body")} <Link to="/settings">{t("home.note.undo")}</Link>
         </span>
-        <span className="orbit-visually-hidden">{t("home.note.wearable")}</span>
       </p>
     </div>
   );

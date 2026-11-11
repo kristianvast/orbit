@@ -160,13 +160,12 @@ describe("@orbit/app UI shell and design system", () => {
       screen.getByText("Bella (DK-1001) showing calving restlessness in Calving pen"),
     ).toBeInTheDocument();
     expect(screen.getByText("Rosa (DK-1003) bolus temperature 40.4 °C")).toBeInTheDocument();
-    expect(screen.getByText(/Collar OR bolus OR ear tag sensor/i)).toBeInTheDocument();
 
     const nav = screen.getByRole("navigation", { name: "Main" });
     expect(nav).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Cattle/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Cows & Horses/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Sensors & Robots/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Connections/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Cameras/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Settings/i })).toBeInTheDocument();
 
@@ -189,6 +188,7 @@ describe("@orbit/app UI shell and design system", () => {
 
     expect(await screen.findByRole("navigation", { name: "Hovedmeny" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Storfe/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Tilkoblinger/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Spør Orion/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Kyr og hester/ })).not.toBeInTheDocument();
     expect(document.documentElement.lang).toBe("nb");
@@ -323,8 +323,8 @@ describe("@orbit/app UI shell and design system", () => {
             { id: "horses", label: "Horses", content: <div>4 horses</div> },
           ]}
         />
-        <Dialog open title="Bind sensor" onClose={onClose}>
-          <p>Choose collar, bolus, or ear tag sensor</p>
+        <Dialog open title="Edit camera" onClose={onClose}>
+          <p>Enter stream address</p>
         </Dialog>
       </div>,
     );
@@ -336,7 +336,7 @@ describe("@orbit/app UI shell and design system", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Horses" }));
     expect(screen.getByText("4 horses")).toBeInTheDocument();
 
-    expect(screen.getByRole("dialog", { name: "Bind sensor" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Edit camera" })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });

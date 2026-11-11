@@ -3,13 +3,9 @@ import type { account as en } from "../en/account";
 
 export const account: Catalog<typeof en> = {
   title: "Orbit-konto",
-  subtitle:
-    "Logg inn for å sikkerhetskopiere gården, bruke Orions skymodell og jobbe sammen med teamet ditt",
   "badge.signedIn": "Logget inn",
   "badge.local": "Bare på denne PC-en",
   "unavailable.body": "Denne Orbit har ingen skyadresse, så alt blir værende på denne PC-en.",
-  "signedOut.body":
-    "Du jobber bare på denne PC-en. Logg inn eller lag en konto for å sikkerhetskopiere gården og dele den med teamet ditt.",
   "mode.login": "Logg inn",
   "mode.register": "Lag konto",
   "field.name": "Navnet ditt",
@@ -42,8 +38,6 @@ export const account: Catalog<typeof en> = {
   "linkError.body":
     "Orbit fungerer videre på denne PC-en. Be en av gårdens eiere om en invitasjon og skriv inn koden nedenfor.",
   "invite.label": "Invitasjonskode",
-  "invite.hint":
-    "Har du fått en kode fra en eier eller leder? Skriv den inn for å bli med på gården.",
   "invite.accept": "Bli med",
   "invite.joined": "Du ble med på gården",
   logout: "Logg ut",
@@ -52,12 +46,7 @@ export const account: Catalog<typeof en> = {
   "role.manager": "Leder",
   "role.worker": "Medarbeider",
   "role.viewer": "Leser",
-  "roleHint.owner": "Alt, også teamet og andre eiere",
-  "roleHint.manager": "Alle gårdsdata, integrasjoner og teamet (ikke eiere)",
-  "roleHint.worker": "Dyr, sensorer og observasjoner",
-  "roleHint.viewer": "Kan se, ikke endre",
   "members.title": "Gårdsteam",
-  "members.subtitle": "Hvem som kan se og endre denne gården",
   "members.you": "deg",
   "members.role": "Rolle",
   "members.remove": "Fjern",

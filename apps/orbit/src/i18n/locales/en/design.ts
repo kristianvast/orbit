@@ -11,7 +11,6 @@ export const design = {
   "orbit.sublabel": "Calm orbit",
   "orbit.cattle": "Cattle",
   "orbit.horses": "Horses",
-  "orbit.sensors": "Sensors",
   "orbit.robot": "Milking robot",
   "orbit.cameras": "Cameras",
   "orbit.alerts": "Alerts",

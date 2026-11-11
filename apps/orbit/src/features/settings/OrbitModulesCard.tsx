@@ -1,4 +1,4 @@
-import { Camera, Clock, Layers, Radio, Tag } from "lucide-react";
+import { Camera, Clock, Layers, Plug, Tag } from "lucide-react";
 import { useState } from "react";
 import { Badge, Button, Card, useToast } from "../../design";
 import { type MessageKey, useI18n } from "../../i18n";
@@ -9,23 +9,19 @@ const MODULE_META: Record<
   ModuleId,
   {
     labelKey: MessageKey;
-    descKey: MessageKey;
     icon: typeof Tag;
   }
 > = {
   herd: {
     labelKey: "settings.modules.herd.label",
-    descKey: "settings.modules.herd.description",
     icon: Tag,
   },
   devices: {
     labelKey: "settings.modules.devices.label",
-    descKey: "settings.modules.devices.description",
-    icon: Radio,
+    icon: Plug,
   },
   cameras: {
     labelKey: "settings.modules.cameras.label",
-    descKey: "settings.modules.cameras.description",
     icon: Camera,
   },
 };
@@ -85,7 +81,6 @@ export function OrbitModulesCard() {
       id="modules"
       data-testid="settings-modules-card"
       title={t("settings.modules.title")}
-      subtitle={t("settings.modules.subtitle")}
       actions={
         <Badge
           variant={activeCount > 0 ? "ok" : "neutral"}
@@ -138,7 +133,7 @@ export function OrbitModulesCard() {
               <div
                 style={{
                   display: "flex",
-                  alignItems: "flex-start",
+                  alignItems: "center",
                   gap: "var(--space-3)",
                   minInlineSize: 0,
                   flex: 1,
@@ -190,16 +185,6 @@ export function OrbitModulesCard() {
                         : t("settings.modules.status.off")}
                     </Badge>
                   </div>
-
-                  <p
-                    style={{
-                      margin: "var(--space-1) 0 0 0",
-                      fontSize: "var(--text-sm)",
-                      color: "var(--text-secondary)",
-                    }}
-                  >
-                    {t(meta.descKey)}
-                  </p>
 
                   {enabled && (addedByLabel || addedAtLabel) && (
                     <div

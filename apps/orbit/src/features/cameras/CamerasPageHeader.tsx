@@ -23,43 +23,31 @@ export function CamerasPageHeader({
       <header
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
           gap: "var(--space-4)",
         }}
       >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-            <h1
-              style={{
-                margin: 0,
-                fontFamily: "var(--font-display)",
-                fontSize: "var(--text-h1)",
-                fontWeight: "var(--display-weight)",
-                lineHeight: "var(--leading-tight)",
-                letterSpacing: "var(--tracking-display)",
-              }}
-            >
-              {t("cameras.page.title")}
-            </h1>
-            <Badge
-              variant={onlineCount === totalCount && totalCount > 0 ? "ok" : "warn"}
-              className="tabular-nums"
-            >
-              {t("cameras.page.onlineCount", { online: onlineCount, total: totalCount })}
-            </Badge>
-          </div>
-          <p
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+          <h1
             style={{
-              margin: "var(--space-2) 0 0 0",
-              color: "var(--text-secondary)",
-              fontSize: "var(--text-base)",
-              maxInlineSize: "68ch",
+              margin: 0,
+              fontFamily: "var(--font-display)",
+              fontSize: "var(--text-h1)",
+              fontWeight: "var(--display-weight)",
+              lineHeight: "var(--leading-tight)",
+              letterSpacing: "var(--tracking-display)",
             }}
           >
-            {t("cameras.page.intro")}
-          </p>
+            {t("cameras.page.title")}
+          </h1>
+          <Badge
+            variant={onlineCount === totalCount && totalCount > 0 ? "ok" : "warn"}
+            className="tabular-nums"
+          >
+            {t("cameras.page.onlineCount", { online: onlineCount, total: totalCount })}
+          </Badge>
         </div>
 
         <div
@@ -86,11 +74,7 @@ export function CamerasPageHeader({
         </div>
       </header>
 
-      <Card
-        variant="elevated"
-        title={t("cameras.privacy.title")}
-        subtitle={t("cameras.privacy.subtitle")}
-      >
+      <Card variant="elevated" title={t("cameras.privacy.title")}>
         <div
           style={{
             display: "flex",
@@ -161,7 +145,6 @@ export function NewBarnDialog({ cameraName, onClose, onConfirm }: NewBarnDialogP
         onClose();
       }}
       title={t("cameras.barn.newTitle")}
-      description={t("cameras.barn.newDescription", { name: cameraName })}
       footer={
         <>
           <Button

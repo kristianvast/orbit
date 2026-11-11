@@ -14,8 +14,6 @@ export const cameras: Catalog<typeof en> = {
   "form.toastSavedLocal": "{name} er lagret på gårds-PC-en.",
   "form.titleEdit": "Rediger {name}",
   "form.titleAdd": "Legg til kamera i fjøs eller stall",
-  "form.description":
-    "Skriv inn navn på kameraet, hvor i fjøset det står, og strømadressen. Passord lagres trygt i nøkkelringen på PC-en og vises aldri igjen.",
   "form.cancel": "Avbryt",
   "form.submitSave": "Lagre kamera",
   "form.submitAdd": "Legg til kamera",
@@ -40,15 +38,12 @@ export const cameras: Catalog<typeof en> = {
     "Sendes én gang til den lokale nøkkelringen til Orion. Lagres aldri som ren tekst og vises aldri igjen.",
   "page.title": "Kameraer",
   "page.onlineCount": "{online}/{total} tilkoblet",
-  "page.intro":
-    "Kameraer i fjøs, melkestall, kalvingsbinge og hestestall. Orion kan søke etter kameraer på gårdsnettverket, og kamerapassord lagres i nøkkelringen på PC-en (de vises aldri igjen).",
   "page.findOnNetwork": "Finn kameraer på nettverket mitt",
   "page.addCamera": "Legg til kamera",
   "prompt.findCameras": "Finn kameraer på nettverket mitt",
   "prompt.checkCamera": "Sjekk kameraet «{name}» i {location}",
   "prompt.locationFallback": "fjøset",
   "privacy.title": "Kamerasøk på nettverket og personvern for passord",
-  "privacy.subtitle": "Slik beskytter Orbit kameraene i fjøset på det lokale nettverket",
   "privacy.bodyBefore": "Når du klikker ",
   "privacy.bodyAction": "Finn kameraer på nettverket mitt",
   "privacy.bodyAfter":
@@ -58,8 +53,6 @@ export const cameras: Catalog<typeof en> = {
   "error.retry": "Prøv igjen",
   "loading.title": "Laster kameraer i fjøset…",
   "empty.title": "Ingen kameraer lagt til ennå",
-  "empty.description":
-    "La Orion søke etter nettverkskameraer på gårdsnettverket, eller skriv inn strømadressen til et kamera selv.",
   "card.locationFallback": "Fjøskamera",
   "card.status.online": "tilkoblet",
   "card.status.offline": "frakoblet",
@@ -76,7 +69,6 @@ export const cameras: Catalog<typeof en> = {
   "barn.unpin": "Løsne plassering",
   "barn.new": "Ny plassering…",
   "barn.newTitle": "Flytt kamera til en ny plassering",
-  "barn.newDescription": "Skriv inn navn på fjøs, melkestall, binge eller stall for {name}.",
   "barn.newPlaceholder": "f.eks. Kalvingsbinge, Hestestall",
   "barn.newConfirm": "Flytt kamera",
   "barn.toastMoved": "Flyttet {name} til {barn}",

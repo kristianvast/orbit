@@ -5,9 +5,9 @@ import {
   ArrowDown,
   Camera,
   GitBranch,
+  LayoutDashboard,
   Orbit as OrbitIcon,
   PanelLeft,
-  Radio,
   Tag,
   Trash2,
   X,
@@ -104,11 +104,11 @@ export const STARTER_PROMPTS: StarterPrompt[] = [
     icon: Camera,
   },
   {
-    id: "connect-ear-tags",
-    labelKey: "chat.starter.earTags.label",
-    promptKey: "chat.starter.earTags.prompt",
-    categoryKey: "chat.starter.earTags.category",
-    icon: Radio,
+    id: "build-page",
+    labelKey: "chat.starter.buildPage.label",
+    promptKey: "chat.starter.buildPage.prompt",
+    categoryKey: "chat.starter.buildPage.category",
+    icon: LayoutDashboard,
   },
 ];
 
@@ -559,7 +559,6 @@ export default function ChatPage() {
                   <OrbitIcon size={22} />
                 </span>
                 <h2 className="orbit-hero__title">{t("chat.hero.title")}</h2>
-                <p className="orbit-hero__lede">{t("chat.hero.lede")}</p>
                 <div className="orbit-starter-grid" data-testid="starter-prompts-grid">
                   {STARTER_PROMPTS.map((starter) => {
                     const StarterIcon = starter.icon;

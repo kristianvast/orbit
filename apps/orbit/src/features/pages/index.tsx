@@ -49,11 +49,7 @@ export default function CustomPageView({ theme }: { theme: PageTheme }) {
   if (!page) {
     return (
       <div className="orbit-container" data-testid="custom-page-missing">
-        <EmptyState
-          title={t("pages.missing.title")}
-          description={t("pages.missing.description")}
-          icon={<LayoutDashboard size={28} />}
-        />
+        <EmptyState title={t("pages.missing.title")} icon={<LayoutDashboard size={28} />} />
       </div>
     );
   }

@@ -3,7 +3,6 @@ import type { feedback as en } from "../en/feedback";
 
 export const feedback: Catalog<typeof en> = {
   title: "Tilbakemelding",
-  subtitle: "Fortell Orbit-teamet hva som ikke virker, hva som mangler, eller hva som fungerer bra",
   "kind.label": "Hva gjelder det?",
   "kind.issue": "Noe virker ikke",
   "kind.idea": "En idé eller et ønske",
@@ -11,7 +10,6 @@ export const feedback: Catalog<typeof en> = {
   "message.label": "Meldingen din",
   "message.placeholder": "Hva skjedde, eller hva ville hjulpet på gården din?",
   "email.label": "E-posten din (valgfritt)",
-  "email.hint": "Bare hvis du vil ha svar.",
   privacy:
     "Sendes sammen med Orbit-versjonen og typen datamaskin. Gårdens data blir aldri tatt med.",
   send: "Send tilbakemelding",

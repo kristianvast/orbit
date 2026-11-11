@@ -21,6 +21,8 @@ function createMinimalTestClient(options?: {
   initialEnabled?: ModuleId[];
   cattleCount?: number;
   horsesCount?: number;
+  connectorsCount?: number;
+  omitModulesList?: boolean;
   holdModulesList?: boolean;
   pages?: CustomPage[];
   /** A fresh install: cloud reachable, nobody signed in, no AI model usable. */
@@ -60,6 +62,9 @@ function createMinimalTestClient(options?: {
     ): Promise<RequestResult<T>> => {
       switch (type) {
         case "modules.list":
+          if (options?.omitModulesList) {
+            return {} as RequestResult<T>;
+          }
           if (heldPromise) {
             return (await heldPromise) as RequestResult<T>;
           }
@@ -178,7 +183,7 @@ function createMinimalTestClient(options?: {
             devicesOffline: 0,
             cameras: 1,
             camerasOnline: 1,
-            connectors: 1,
+            connectors: options?.connectorsCount ?? 1,
             connectorsWithErrors: 0,
           },
           recentAlerts: [],
@@ -235,7 +240,7 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
     expect(within(nav).getByText("Settings")).toBeInTheDocument();
     expect(within(nav).queryByText("Cattle")).not.toBeInTheDocument();
     expect(within(nav).queryByText("Horses")).not.toBeInTheDocument();
-    expect(within(nav).queryByText("Sensors & Robots")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Connections")).not.toBeInTheDocument();
     expect(within(nav).queryByText("Cameras")).not.toBeInTheDocument();
 
     await act(async () => {
@@ -287,6 +292,10 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
     );
     expect(screen.queryByTestId("home-sensors-online")).not.toBeInTheDocument();
     expect(screen.queryByTestId("home-cameras-live")).not.toBeInTheDocument();
+    expect(screen.getByTestId("home-starter-devices")).toHaveTextContent(
+      "Connect my milking robot",
+    );
+    expect(screen.getByTestId("home-starter-page")).toHaveTextContent("Build what my farm needs");
 
     fireEvent.click(screen.getByTestId("home-starter-herd"));
 
@@ -361,7 +370,45 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
     expect(await screen.findByTestId("home-herd-counts")).toHaveTextContent("18 cattle");
     expect(screen.getByTestId("home-animals-gauge")).toBeInTheDocument();
     expect(screen.queryByTestId("home-sensors-online")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("home-connectors-gauge")).not.toBeInTheDocument();
     expect(screen.queryByTestId("home-cameras-live")).not.toBeInTheDocument();
+  });
+
+  it("shows the Connections gauge on Home only when devices is enabled and at least one connector exists, and auto-enables fallback from connectors count", async () => {
+    const zeroConn = createMinimalTestClient({
+      omitModulesList: true,
+      cattleCount: 10,
+      connectorsCount: 0,
+    });
+    const view = render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProviders initialClient={zeroConn.client}>
+          <AppRoutes />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("home-animals-gauge")).toBeInTheDocument();
+    expect(screen.queryByTestId("nav-module-devices")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("home-connectors-gauge")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("home-sensors-online")).not.toBeInTheDocument();
+    view.unmount();
+
+    const withConn = createMinimalTestClient({
+      omitModulesList: true,
+      cattleCount: 10,
+      connectorsCount: 1,
+    });
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProviders initialClient={withConn.client}>
+          <AppRoutes />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("home-connectors-gauge")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-module-devices")).toHaveTextContent("Connections");
   });
 
   it("renders the calm not-added-yet state on /herd when disabled, with Ask Orion and Add it now actions", async () => {

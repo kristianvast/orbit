@@ -7,7 +7,7 @@ export const shell: Catalog<typeof en> = {
   "nav.herd": "Storfe",
   "nav.herd.cattle": "Storfe",
   "nav.herd.horse": "Hester",
-  "nav.devices": "Sensorer og roboter",
+  "nav.devices": "Tilkoblinger",
   "nav.cameras": "Kameraer",
   "nav.settings": "Innstillinger",
   "nav.primary": "Hovednavigasjon for gården",
@@ -22,22 +22,13 @@ export const shell: Catalog<typeof en> = {
   "module.disabled.herd.title": "Storfe er ikke lagt til ennå",
   "module.disabled.herd.title.cattle": "Storfe er ikke lagt til ennå",
   "module.disabled.herd.title.horse": "Hester er ikke lagt til ennå",
-  "module.disabled.herd.description":
-    "Orion legger til dyreregisteret når du begynner å registrere storfe.",
-  "module.disabled.herd.description.cattle":
-    "Orion legger til dyreregisteret når du begynner å registrere storfe.",
-  "module.disabled.herd.description.horse":
-    "Orion legger til stallregisteret når du begynner å registrere hester.",
   "module.disabled.herd.prompt": "Hjelp meg å føre oversikt over besetningen",
   "module.disabled.herd.prompt.cattle": "Hjelp meg å føre oversikt over besetningen",
   "module.disabled.herd.prompt.horse": "Hjelp meg å føre oversikt over hestene",
-  "module.disabled.devices.title": "Sensorer og roboter er ikke lagt til ennå",
-  "module.disabled.devices.description":
-    "Orion legger til denne skjermen når du kobler til en melkerobot, et halsbånd, en bolus, en øremerkesensor eller en vekt.",
-  "module.disabled.devices.prompt": "Koble til melkeroboten eller sensorene mine",
+  "module.disabled.devices.title": "Ingen tilkoblinger ennå",
+  "module.disabled.devices.prompt": "Koble til melkeroboten min",
+  "module.disabled.devices.prompt.horse": "Bygg noe for stallen min",
   "module.disabled.cameras.title": "Kameraer er ikke lagt til ennå",
-  "module.disabled.cameras.description":
-    "Orion legger til fjøskartet når du kobler til det første kameraet i fjøset eller stallen.",
   "module.disabled.cameras.prompt": "Sett opp fjøskameraer",
   "module.disabled.askOrion": "Be Orion legge det til",
   "module.disabled.addNow": "Legg det til nå",

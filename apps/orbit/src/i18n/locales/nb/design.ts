@@ -12,7 +12,6 @@ export const design: Catalog<typeof en> = {
   "orbit.sublabel": "Alt rolig",
   "orbit.cattle": "Storfe",
   "orbit.horses": "Hester",
-  "orbit.sensors": "Sensorer",
   "orbit.robot": "Melkerobot",
   "orbit.cameras": "Kameraer",
   "orbit.alerts": "Varsler",

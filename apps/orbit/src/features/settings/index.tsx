@@ -252,35 +252,24 @@ export default function SettingsPage() {
       <header
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
           gap: "var(--space-4)",
         }}
       >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontFamily: "var(--font-display)",
-              fontSize: "var(--text-h1)",
-              fontWeight: 400,
-              lineHeight: "var(--leading-tight)",
-              letterSpacing: "var(--tracking-display)",
-            }}
-          >
-            {t("settings.title")}
-          </h1>
-          <p
-            style={{
-              margin: "var(--space-2) 0 0 0",
-              color: "var(--text-secondary)",
-              fontSize: "var(--text-base)",
-            }}
-          >
-            {t("settings.intro")}
-          </p>
-        </div>
+        <h1
+          style={{
+            margin: 0,
+            fontFamily: "var(--font-display)",
+            fontSize: "var(--text-h1)",
+            fontWeight: 400,
+            lineHeight: "var(--leading-tight)",
+            letterSpacing: "var(--tracking-display)",
+          }}
+        >
+          {t("settings.title")}
+        </h1>
 
         <Button
           variant="secondary"
@@ -299,7 +288,6 @@ export default function SettingsPage() {
 
       <Card
         title={t("settings.language.title")}
-        subtitle={t("settings.language.subtitle")}
         actions={
           <Badge variant="neutral" icon={<Languages size={12} />}>
             {LOCALE_NAMES[locale]}
@@ -313,7 +301,6 @@ export default function SettingsPage() {
             if (isLocale(e.target.value)) setLocale(e.target.value);
           }}
           options={LOCALES.map((code) => ({ value: code, label: LOCALE_NAMES[code] }))}
-          hint={t("settings.language.hint")}
           data-testid="settings-language-select"
         />
       </Card>
@@ -321,7 +308,6 @@ export default function SettingsPage() {
       <div className="orbit-split-grid">
         <Card
           title={t("settings.model.title")}
-          subtitle={t("settings.model.subtitle")}
           actions={
             <Badge variant="accent" icon={<Cpu size={12} />}>
               {settings?.provider && settings?.model
@@ -383,7 +369,6 @@ export default function SettingsPage() {
                         },
                       ]
                 }
-                hint={t("settings.model.modelHint")}
                 data-testid="settings-model-select"
               />
 
@@ -392,7 +377,6 @@ export default function SettingsPage() {
                 value={selectedThinking}
                 onChange={(e) => setSelectedThinking(e.target.value as ThinkingLevel)}
                 options={THINKING_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
-                hint={t("settings.model.thinkingHint")}
                 data-testid="settings-thinking-select"
               />
 
@@ -415,7 +399,6 @@ export default function SettingsPage() {
 
       <Card
         title={t("settings.undo.title")}
-        subtitle={t("settings.undo.subtitle")}
         actions={
           latestUndoableSnapshot ? (
             <Button
@@ -436,10 +419,7 @@ export default function SettingsPage() {
         }
       >
         {snapshots.length === 0 ? (
-          <EmptyState
-            title={t("settings.undo.emptyTitle")}
-            description={t("settings.undo.emptyDesc")}
-          />
+          <EmptyState title={t("settings.undo.emptyTitle")} />
         ) : (
           <ul
             style={{
@@ -547,7 +527,7 @@ export default function SettingsPage() {
 
       <FeedbackCard />
 
-      <Card title={t("settings.privacy.title")} subtitle={t("settings.privacy.subtitle")}>
+      <Card title={t("settings.privacy.title")}>
         <label
           style={{
             display: "flex",
@@ -576,7 +556,6 @@ export default function SettingsPage() {
       <div className="orbit-split-grid">
         <Card
           title={t("settings.data.title")}
-          subtitle={t("settings.data.subtitle")}
           actions={
             <Badge variant="ok" icon={<FolderOpen size={12} />}>
               {t("settings.data.badge")}
@@ -618,8 +597,7 @@ export default function SettingsPage() {
             >
               <div>
                 <strong>{t("settings.data.dbFile")}</strong>{" "}
-                <code style={{ fontFamily: "var(--font-mono)" }}>orbit.sqlite</code>{" "}
-                {t("settings.data.dbContents")}
+                <code style={{ fontFamily: "var(--font-mono)" }}>orbit.sqlite</code>
               </div>
               <div>
                 <strong>{t("settings.data.endpoint")}</strong>{" "}
@@ -642,7 +620,6 @@ export default function SettingsPage() {
 
         <Card
           title={t("settings.about.title")}
-          subtitle={t("settings.about.subtitle")}
           actions={
             <Badge variant="accent" icon={<Scale size={12} />}>
               {t("settings.about.badge")}

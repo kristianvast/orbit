@@ -5,7 +5,7 @@ import {
   MessageSquare,
   MessageSquareHeart,
   Moon,
-  Radio,
+  Plug,
   Settings as SettingsIcon,
   Sun,
   Tag,
@@ -32,7 +32,7 @@ export interface NavItem {
 
 export const MODULE_NAV_ITEMS: Record<ModuleId, NavItem> = {
   herd: { to: "/herd", labelKey: "shell.nav.herd", icon: Tag, moduleId: "herd" },
-  devices: { to: "/devices", labelKey: "shell.nav.devices", icon: Radio, moduleId: "devices" },
+  devices: { to: "/devices", labelKey: "shell.nav.devices", icon: Plug, moduleId: "devices" },
   cameras: { to: "/cameras", labelKey: "shell.nav.cameras", icon: Camera, moduleId: "cameras" },
 };
 

@@ -71,7 +71,6 @@ export function FarmProfileCard() {
       id="farm-profile"
       data-testid="settings-farm-profile-card"
       title={t("settings.farm.title")}
-      subtitle={t("settings.farm.subtitle")}
       actions={
         <Badge variant="neutral">
           {t(
@@ -131,7 +130,6 @@ export function FarmProfileCard() {
               );
             })}
           </div>
-          <p className="orbit-field__hint">{t("settings.farm.speciesHint")}</p>
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>

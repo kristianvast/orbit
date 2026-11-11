@@ -104,9 +104,6 @@ export function Composer({
                 {modelLabel}
               </span>
             )}
-            <span className="orbit-composer__hint">
-              {streaming ? t("chat.composer.hintStreaming", { mod: MOD }) : t("chat.composer.hint")}
-            </span>
           </div>
 
           <div className="orbit-composer__actions">

@@ -74,11 +74,7 @@ export function FeedbackCard() {
 
   return (
     <div id="feedback">
-      <Card
-        title={t("feedback.title")}
-        subtitle={t("feedback.subtitle")}
-        data-testid="feedback-card"
-      >
+      <Card title={t("feedback.title")} data-testid="feedback-card">
         {account === "unavailable" ? (
           <p style={muted}>{t("feedback.unavailable")}</p>
         ) : (
@@ -114,7 +110,6 @@ export function FeedbackCard() {
               {account === "signed_out" && (
                 <Input
                   label={t("feedback.email.label")}
-                  hint={t("feedback.email.hint")}
                   type="email"
                   autoComplete="email"
                   value={email}

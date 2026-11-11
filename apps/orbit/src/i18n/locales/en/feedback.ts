@@ -2,7 +2,6 @@ import type { Messages } from "../../core";
 
 export const feedback = {
   title: "Feedback",
-  subtitle: "Tell the Orbit team what is broken, what is missing, or what works well",
   "kind.label": "What is it about?",
   "kind.issue": "Something is not working",
   "kind.idea": "An idea or a wish",
@@ -10,7 +9,6 @@ export const feedback = {
   "message.label": "Your message",
   "message.placeholder": "What happened, or what would help on your farm?",
   "email.label": "Your email (optional)",
-  "email.hint": "Only if you want an answer.",
   privacy:
     "Sent with your Orbit version and the type of computer. Your farm records are never included.",
   send: "Send feedback",

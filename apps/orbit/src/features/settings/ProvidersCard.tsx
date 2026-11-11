@@ -426,7 +426,6 @@ export function ProvidersCard({
     <Card
       id="providers"
       title={t("providers.card.title")}
-      subtitle={t("providers.card.subtitle")}
       actions={
         <Badge
           variant={connectedCount > 0 ? "ok" : "neutral"}

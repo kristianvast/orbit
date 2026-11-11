@@ -3,8 +3,6 @@ import type { providers as en } from "../en/providers";
 
 export const providers: Catalog<typeof en> = {
   "card.title": "Modellkontoer",
-  "card.subtitle":
-    "Logg inn med et abonnement du allerede betaler for, eller legg til en API-nøkkel. Påloggingen blir på denne PC-en.",
   "card.connectedCount": {
     zero: "Ingen tilkoblet",
     one: "{count} tilkoblet",
