@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { startOrion } from "../src/app";
+import { SERVER_VERSION, startOrion } from "../src/app";
 import { collectBuild } from "../src/services/feedback";
 import { connect, removeDir, TOKEN, tempDir } from "./helpers";
 
@@ -102,7 +102,7 @@ describe("feedback over the protocol", () => {
       message: "A hoof-trimming calendar would help.",
       contactEmail: "farmer@example.test",
       locale: "en",
-      appVersion: "0.1.0",
+      appVersion: SERVER_VERSION,
     });
     expect(String(received[0]?.body.os)).toContain(process.platform);
   });

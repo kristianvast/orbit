@@ -29,6 +29,10 @@ export function useCustomPages(): CustomPage[] {
 
   // Orion builds pages during a run; pick them up once it finishes.
   useOrionEvent("agent.settled", () => void refresh());
+  // Undoing a change can remove or bring back a page without any run.
+  useOrionEvent("db.changed", (event) => {
+    if (event.table === "workspace") void refresh();
+  });
 
   return pages;
 }

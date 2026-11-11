@@ -49,7 +49,7 @@ import { DEFAULT_SKILLS_URL, SkillService } from "./services/skills";
 import { maskKey, SettingsStore } from "./settings";
 import { VoiceSessions } from "./voice/session";
 
-export const SERVER_VERSION = "0.1.0";
+export const SERVER_VERSION = "0.1.1";
 
 const EXAMPLE_VIEWS_SKILL = "farm-views";
 
@@ -326,10 +326,10 @@ export async function startOrion(config: OrionConfig): Promise<OrionApp> {
     } catch (error) {
       throw new RequestError("conflict", error instanceof Error ? error.message : String(error));
     }
-    return {
-      snapshot: repo.markSnapshotUndone(snapshotId),
-      restored: [{ table: "workspace", ids: files }],
-    };
+    const snapshot = repo.markSnapshotUndone(snapshotId);
+    // Files are not database rows, so nothing else tells the UI that pages may have come or gone.
+    emit("db.changed", { table: "workspace", ids: files });
+    return { snapshot, restored: [{ table: "workspace", ids: files }] };
   };
 
   const handle = async (msg: ClientMessage, owner: object): Promise<unknown> => {

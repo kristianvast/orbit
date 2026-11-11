@@ -1,5 +1,6 @@
 import {
   type ConnectionState,
+  type CustomPage,
   MODULE_IDS,
   type ModuleId,
   type ModulesState,
@@ -21,10 +22,12 @@ function createMinimalTestClient(options?: {
   cattleCount?: number;
   horsesCount?: number;
   holdModulesList?: boolean;
+  pages?: CustomPage[];
   /** A fresh install: cloud reachable, nobody signed in, no AI model usable. */
   needsSetup?: boolean;
 }) {
   const listeners = new Map<string, Set<(ev: ServerEvent) => void>>();
+  let pages = options?.pages ?? [];
   const enabledSet = new Set(options?.initialEnabled ?? []);
   let state: ModulesState = {
     modules: MODULE_IDS.map((id) => ({
@@ -89,7 +92,7 @@ function createMinimalTestClient(options?: {
           return state as RequestResult<T>;
         }
         case "pages.list":
-          return { pages: [] } as RequestResult<T>;
+          return { pages } as RequestResult<T>;
         case "sessions.list":
           return { sessions: [] } as RequestResult<T>;
         case "sessions.create":
@@ -196,6 +199,9 @@ function createMinimalTestClient(options?: {
     client,
     requestMock,
     emit,
+    setPages(next: CustomPage[]) {
+      pages = next;
+    },
     releaseInitialList() {
       resolveInitialList?.(state);
     },
@@ -308,6 +314,30 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
       "aria-pressed",
       "true",
     );
+  });
+
+  it("drops a page from the menu as soon as an undo removes it from the workspace", async () => {
+    const { client, emit, setPages } = createMinimalTestClient({
+      pages: [{ id: "herd-count", title: "Herd count", path: "/pages/t/herd-count/index.html" }],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProviders initialClient={client}>
+          <AppRoutes />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("nav-custom-page-herd-count")).toBeInTheDocument();
+
+    setPages([]);
+    act(() => {
+      emit({ type: "db.changed", table: "workspace", ids: ["pages/herd-count/index.html"] });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("nav-custom-page-herd-count")).not.toBeInTheDocument();
+    });
   });
 
   it("shows only enabled module instruments on Home when a module is enabled", async () => {

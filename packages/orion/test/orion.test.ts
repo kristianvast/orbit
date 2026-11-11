@@ -380,9 +380,11 @@ describe("snapshots", () => {
     const { snapshots } = await client.request("snapshots.list", { sessionId: session.id });
     const snap = snapshots.find((s) => s.tables.includes("workspace"));
     expect(snap).toBeDefined();
+    const announced = waitFor(client, "db.changed", (e) => e.table === "workspace");
     const undone = await client.request("snapshots.undo", { snapshotId: snap?.id as string });
     expect(undone.snapshot.undoneAt).toBeString();
     expect(undone.restored).toEqual([{ table: "workspace", ids: ["notes/orion-note.md"] }]);
+    expect((await announced).ids).toEqual(["notes/orion-note.md"]);
     expect(existsSync(note)).toBe(false);
   });
 
