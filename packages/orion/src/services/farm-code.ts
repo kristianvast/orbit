@@ -38,6 +38,7 @@ const HeadResponse = Type.Object({ head: Type.Union([FarmCodeHead, Type.Null()])
 export class FarmCodeSync {
   private timer: ReturnType<typeof setInterval> | null = null;
   private running: Promise<void> | null = null;
+  private dirty = false;
   private active = false;
   private readonly app: AppCode;
   readonly noteFile: string;
@@ -67,17 +68,24 @@ export class FarmCodeSync {
   async settled(): Promise<void> {
     await this.running;
   }
+  /** Resolves after a pass that started after this call, so the caller's changes are included. */
   sync(): Promise<void> {
+    this.dirty = true;
     if (this.running) return this.running;
     if (!this.active || this.opts.busy()) return Promise.resolve();
-    this.running = this.reconcile()
-      .catch((error: unknown) => {
-        if (!(error instanceof Error)) throw error;
-        this.note(`Farm code sync needs attention: ${error.message}`);
-      })
-      .finally(() => {
-        this.running = null;
-      });
+    this.running = (async () => {
+      while (this.dirty && this.active) {
+        this.dirty = false;
+        try {
+          await this.reconcile();
+        } catch (error) {
+          if (!(error instanceof Error)) throw error;
+          this.note(`Farm code sync needs attention: ${error.message}`);
+        }
+      }
+    })().finally(() => {
+      this.running = null;
+    });
     return this.running;
   }
   private note(text: string): void {
@@ -190,7 +198,10 @@ export class FarmCodeSync {
       });
     // An editor outside Orion may have changed files while HTTP or Git was in flight. Keep the
     // old base and reconcile again rather than overwriting a version we did not compare.
-    if (!codeEqual(collectCode(workspace.dir).files, local.files)) return;
+    if (!codeEqual(collectCode(workspace.dir).files, local.files)) {
+      this.dirty = true;
+      return;
+    }
     for (const path of new Set([...Object.keys(local.files), ...Object.keys(merged)])) {
       if (local.files[path] === merged[path]) continue;
       const hash = merged[path];
