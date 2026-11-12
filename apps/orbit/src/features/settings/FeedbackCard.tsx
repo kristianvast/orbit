@@ -1,10 +1,11 @@
 import { FEEDBACK_KINDS, type FeedbackKind, type SharedBuild } from "@orbit/protocol";
-import { Send, Share2 } from "lucide-react";
+import { MessageSquare, Send, Share2 } from "lucide-react";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { Badge, Button, Card, Input, Select, useToast } from "../../design";
 import { useI18n } from "../../i18n";
 import { useOrion, useOrionEvent } from "../../lib/orion";
+import { SettingsTitle } from "./parts";
 
 const STATUS_BADGE = { pending: "info", approved: "ok", rejected: "neutral" } as const;
 
@@ -74,7 +75,10 @@ export function FeedbackCard() {
 
   return (
     <div id="feedback">
-      <Card title={t("feedback.title")} data-testid="feedback-card">
+      <Card
+        title={<SettingsTitle icon={MessageSquare}>{t("feedback.title")}</SettingsTitle>}
+        data-testid="feedback-card"
+      >
         {account === "unavailable" ? (
           <p style={muted}>{t("feedback.unavailable")}</p>
         ) : (

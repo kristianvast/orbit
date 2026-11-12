@@ -334,7 +334,7 @@ export function HomePage() {
         <p className="orbit-home__note">
           <ShieldCheck size={16} aria-hidden="true" />
           <span>
-            {t("home.note.body")} <Link to="/settings">{t("home.note.undo")}</Link>
+            {t("home.note.body")} <Link to="/settings#undo">{t("home.note.undo")}</Link>
           </span>
         </p>
       </div>
@@ -675,7 +675,7 @@ export function HomePage() {
       <p className="orbit-home__note">
         <ShieldCheck size={16} aria-hidden="true" />
         <span>
-          {t("home.note.body")} <Link to="/settings">{t("home.note.undo")}</Link>
+          {t("home.note.body")} <Link to="/settings#undo">{t("home.note.undo")}</Link>
         </span>
       </p>
     </div>

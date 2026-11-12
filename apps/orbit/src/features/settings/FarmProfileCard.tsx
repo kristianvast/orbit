@@ -1,9 +1,9 @@
-import type { Species } from "@orbit/schema";
+import { Warehouse } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
-import { Badge, Button, Card, Input, useToast } from "../../design";
+import { Button, Card, Input, useToast } from "../../design";
 import { useT } from "../../i18n";
 import { useOrion, useOrionQuery } from "../../lib/orion";
-import { useFarmSpecies } from "../../lib/species";
+import { SettingsTitle } from "./parts";
 
 function detectSystemTimezone(): string {
   try {
@@ -17,19 +17,13 @@ export function FarmProfileCard() {
   const t = useT();
   const { client } = useOrion();
   const { pushToast } = useToast();
-  const { species, setSpecies } = useFarmSpecies();
   const { data: summary, refetch } = useOrionQuery("farm.summary", undefined, {
     refetchTables: ["farms"],
   });
 
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(() => detectSystemTimezone());
-  const [selectedSpecies, setSelectedSpecies] = useState<Species>(species);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setSelectedSpecies(species);
-  }, [species]);
 
   useEffect(() => {
     if (!summary?.farm) return;
@@ -52,7 +46,6 @@ export function FarmProfileCard() {
           ...(trimmedTz ? { timezone: trimmedTz } : {}),
         });
       }
-      await setSpecies(selectedSpecies);
       await refetch();
       pushToast({ title: t("settings.toast.farmSaved"), tone: "ok" });
     } catch (err) {
@@ -70,16 +63,7 @@ export function FarmProfileCard() {
     <Card
       id="farm-profile"
       data-testid="settings-farm-profile-card"
-      title={t("settings.farm.title")}
-      actions={
-        <Badge variant="neutral">
-          {t(
-            selectedSpecies === "horse"
-              ? "settings.farm.species.horse"
-              : "settings.farm.species.cattle",
-          )}
-        </Badge>
-      }
+      title={<SettingsTitle icon={Warehouse}>{t("settings.farm.title")}</SettingsTitle>}
     >
       <form
         onSubmit={(e) => void handleSubmit(e)}
@@ -99,37 +83,6 @@ export function FarmProfileCard() {
             onChange={(e) => setTimezone(e.target.value)}
             data-testid="settings-farm-timezone-input"
           />
-        </div>
-
-        <div className="orbit-field">
-          <span className="orbit-label">{t("settings.farm.species")}</span>
-          <div
-            className="orbit-tablist"
-            role="tablist"
-            aria-label={t("settings.farm.species")}
-            style={{ alignSelf: "flex-start" }}
-          >
-            {(["cattle", "horse"] as const).map((option) => {
-              const active = selectedSpecies === option;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  className="orbit-tab"
-                  data-testid={`settings-farm-species-${option}`}
-                  onClick={() => setSelectedSpecies(option)}
-                >
-                  {t(
-                    option === "horse"
-                      ? "settings.farm.species.horse"
-                      : "settings.farm.species.cattle",
-                  )}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>

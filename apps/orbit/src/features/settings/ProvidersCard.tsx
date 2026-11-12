@@ -11,6 +11,7 @@ import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Badge, Button, Card, Dialog, Input, useToast } from "../../design";
 import { useT } from "../../i18n";
 import { useOrion } from "../../lib/orion";
+import { SettingsTitle } from "./parts";
 
 type Tab = "subscriptions" | "apiKeys";
 
@@ -425,7 +426,7 @@ export function ProvidersCard({
   return (
     <Card
       id="providers"
-      title={t("providers.card.title")}
+      title={<SettingsTitle icon={KeyRound}>{t("providers.card.title")}</SettingsTitle>}
       actions={
         <Badge
           variant={connectedCount > 0 ? "ok" : "neutral"}

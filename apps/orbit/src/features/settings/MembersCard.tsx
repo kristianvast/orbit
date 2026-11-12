@@ -1,9 +1,11 @@
 import type { FarmInvite, FarmMember, FarmRole } from "@orbit/protocol";
 import { assignableRoles, canManageMember, canManageMembers } from "@orbit/schema/roles";
+import { Users } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Badge, Button, Card, Input, Select, useToast } from "../../design";
 import { useI18n } from "../../i18n";
 import { useOrion } from "../../lib/orion";
+import { SettingsTitle } from "./parts";
 
 const column = { display: "flex", flexDirection: "column", gap: "var(--space-3)" } as const;
 const row = {
@@ -92,7 +94,7 @@ export function MembersCard({
   };
 
   return (
-    <Card title={t("account.members.title")}>
+    <Card title={<SettingsTitle icon={Users}>{t("account.members.title")}</SettingsTitle>}>
       <div style={column}>
         <ul
           style={{ ...column, listStyle: "none", margin: 0, padding: 0 }}

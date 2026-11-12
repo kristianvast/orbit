@@ -1,9 +1,11 @@
 import type { LocalUiStatus } from "@orbit/protocol";
+import { AppWindow } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, useToast } from "../../design";
 import { useT } from "../../i18n";
 import { localUiBasename, localUiReturnUrl, openLocalUi } from "../../lib/local-ui";
 import { useOrion } from "../../lib/orion";
+import { SettingsTitle } from "./parts";
 
 const BADGE = { none: "neutral", ready: "ok", broken: "warn" } as const;
 
@@ -66,7 +68,7 @@ export function YourOrbitCard() {
 
   return (
     <Card
-      title={t("localUi.title")}
+      title={<SettingsTitle icon={AppWindow}>{t("localUi.title")}</SettingsTitle>}
       actions={
         <Badge variant={status ? BADGE[status.state] : "neutral"} data-testid="local-ui-badge">
           {isLocal

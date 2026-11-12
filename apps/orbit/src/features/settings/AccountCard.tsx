@@ -1,4 +1,5 @@
 import type { AccountStatus } from "@orbit/protocol";
+import { UserRound } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { Badge, Button, Card, Input, useToast } from "../../design";
@@ -6,6 +7,7 @@ import { useT } from "../../i18n";
 import { calmAccountSyncState, useOrion, useOrionEvent } from "../../lib/orion";
 import { BillingSection, openExternalUrl } from "./BillingSection";
 import { MembersCard } from "./MembersCard";
+import { SettingsTitle } from "./parts";
 
 export { BillingSection, openExternalUrl } from "./BillingSection";
 export { MembersCard } from "./MembersCard";
@@ -166,7 +168,7 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
   const signedIn = status.state === "signed_in";
   return (
     <Card
-      title={t("account.title")}
+      title={<SettingsTitle icon={UserRound}>{t("account.title")}</SettingsTitle>}
       data-testid="account-card"
       actions={
         <Badge variant={signedIn ? "ok" : "neutral"} data-testid="account-badge">

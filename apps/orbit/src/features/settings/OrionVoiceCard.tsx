@@ -2,13 +2,14 @@ import { AudioLines } from "lucide-react";
 import { Card, Select } from "../../design";
 import { useT } from "../../i18n";
 import { type OrionVoiceChoice, useVoiceChoice } from "../voice";
+import { SettingsTitle } from "./parts";
 
 export function OrionVoiceCard() {
   const t = useT();
   const [choice, setChoice] = useVoiceChoice();
 
   return (
-    <Card title={t("voice.settings.title")} actions={<AudioLines size={16} aria-hidden="true" />}>
+    <Card title={<SettingsTitle icon={AudioLines}>{t("voice.settings.title")}</SettingsTitle>}>
       <Select
         label={t("voice.settings.label")}
         value={choice}
