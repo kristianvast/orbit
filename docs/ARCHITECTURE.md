@@ -198,7 +198,7 @@ mapped resource against them.
   `x-orbit-farm` header (membership required; `/v1/changes` rejects rows the role may not change),
   or a legacy per-farm api token, which keeps owner rights.
 - **Orion** (`--core-url` / `ORBIT_CORE_URL`) relays `account.*`, `members.*` and `invites.*` for the
-  UI, keeps the session in the secret store (OS keychain), links the local farm (member: use the
+  UI, keeps the session encrypted in the data dir (`account-session.enc.json`, so it lasts as long as the farm's data; Windows drops keychain entries when an admin resets the user's password), links the local farm (member: use the
   role; unknown to the cloud: claim it as owner; someone else's: stay local with `linkError` until an
   invite is accepted), runs `@orbit/sync` with the session, and applies the same role matrix to
   `db.mutate` and the agent's farm tools (`forbidden`).

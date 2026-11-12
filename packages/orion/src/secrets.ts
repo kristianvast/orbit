@@ -44,8 +44,8 @@ export class EncryptedFileStore implements SecretStore {
   private readonly file: string;
   private readonly key: Buffer;
 
-  constructor(dataDir: string) {
-    this.file = join(dataDir, "secrets.enc.json");
+  constructor(dataDir: string, fileName = "secrets.enc.json") {
+    this.file = join(dataDir, fileName);
     const keyFile = join(dataDir, "secrets.key");
     if (!existsSync(keyFile)) {
       writeFileSync(keyFile, randomBytes(32).toString("base64"), { mode: 0o600 });

@@ -2,7 +2,7 @@
 // sync, the cloud model and local role enforcement. Electric and the LLM provider are faked at
 // Core's upstream fetch.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type CoreDb,
@@ -19,6 +19,7 @@ import { pg } from "@orbit/schema";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { type OrionApp, startOrion } from "../src/app";
+import { EncryptedFileStore } from "../src/secrets";
 import { connect, removeDir, TOKEN, tempDir, waitFor } from "./helpers";
 
 const PASSWORD = "correct horse battery";
@@ -271,6 +272,50 @@ describe("Orion account", () => {
       params: { animal: newAnimal },
     });
     expect(local.ids).toHaveLength(1);
+  });
+
+  test("the sign-in lives in the data folder, survives losing the keychain, and moves an old keychain one there", async () => {
+    let c = await boot();
+    await c.request("account.register", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    const restart = async () => {
+      client?.close();
+      await orion?.stop();
+      c = await boot();
+      return c.request("account.status", {});
+    };
+    // Tests run the secret store as secrets.enc.json; it stands in for the OS keychain here.
+    const keychain = () => new EncryptedFileStore(dir);
+    const dataFolder = () => new EncryptedFileStore(dir, "account-session.enc.json");
+    const token = await dataFolder().get("core-session");
+    expect(token).toStartWith("orb_s_");
+    expect(await keychain().get("core-session")).toBeNull();
+
+    client?.close();
+    await orion?.stop();
+    rmSync(join(dir, "secrets.enc.json"), { force: true });
+    c = await boot();
+    expect(await c.request("account.status", {})).toMatchObject({
+      state: "signed_in",
+      user: { email: "kari@farm.test" },
+    });
+
+    // An Orbit from before this change kept the token in the keychain only.
+    client?.close();
+    await orion?.stop();
+    await dataFolder().delete("core-session");
+    await keychain().set("core-session", token as string);
+    c = await boot();
+    expect(await c.request("account.status", {})).toMatchObject({ state: "signed_in" });
+    expect(await dataFolder().get("core-session")).toBe(token);
+    expect(await keychain().get("core-session")).toBeNull();
+
+    await c.request("account.logout", {});
+    expect(await dataFolder().get("core-session")).toBeNull();
+    expect(await restart()).toMatchObject({ state: "signed_out", user: null });
   });
 
   test("a plan bought on the website before Orbit was installed follows the account into Orbit", async () => {

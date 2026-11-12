@@ -1,8 +1,10 @@
 // Orbit account: signs this install in to Core, links the local farm to the account, runs
 // @orbit/sync with the user's session, and points the model at Core's metered cloud gateway.
 // Signed out (or with no Core configured) Orbit keeps working fully locally.
-// The session token lives in the secret store (OS keychain); account.json keeps only the
-// non-secret view so the status survives restarts and offline starts.
+// The session token lives encrypted in the data folder (account-session.enc.json), so it lasts
+// exactly as long as the farm's data: an update keeps it, deleting the data signs out. It is not
+// in the OS keychain, which Windows empties when an admin resets the user's password.
+// account.json keeps only the non-secret view so the status survives restarts and offline starts.
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
@@ -20,11 +22,12 @@ import { createSyncEngine, type SyncEngine, type SyncStatus } from "@orbit/sync"
 import { GATEWAY_PROVIDER } from "../agent/hub";
 import { GATEWAY_TITLE_MODEL } from "../agent/title";
 import type { Repository } from "../db/repo";
-import type { SecretStore } from "../secrets";
+import { EncryptedFileStore, type SecretStore } from "../secrets";
 import type { SettingsStore } from "../settings";
 
 export const GATEWAY_MODEL = "orbit-default";
 const SESSION_REF = "core-session";
+const SESSION_FILE = "account-session.enc.json";
 const FARM_HEADER = "x-orbit-farm";
 
 export class AccountError extends Error {
@@ -93,11 +96,13 @@ export class AccountService {
   private engine: SyncEngine | null = null;
   private unsubscribe: (() => void)[] = [];
   private readonly file: string;
+  private readonly session: SecretStore;
   private readonly coreUrl: string | null;
   private readonly doFetch: typeof fetch;
 
   constructor(private readonly opts: AccountServiceOptions) {
     this.file = join(opts.dataDir, "account.json");
+    this.session = new EncryptedFileStore(opts.dataDir, SESSION_FILE);
     this.coreUrl = opts.coreUrl?.replace(/\/+$/, "") ?? null;
     this.doFetch = opts.fetch ?? fetch;
     if (existsSync(this.file)) {
@@ -107,7 +112,7 @@ export class AccountService {
 
   async start(): Promise<void> {
     if (!this.coreUrl) return;
-    this.token = await this.opts.secrets.get(SESSION_REF);
+    this.token = await this.readSession();
     if (!this.token) {
       if (this.stored.user) this.save({ user: null, farm: null });
       return;
@@ -290,7 +295,7 @@ export class AccountService {
   private async signIn(result: unknown): Promise<AccountStatus> {
     const { user, session } = result as { user: AccountUser; session: { token: string } };
     if (this.stored.user && this.stored.user.id !== user.id) await this.stopSync();
-    await this.opts.secrets.set(SESSION_REF, session.token);
+    await this.session.set(SESSION_REF, session.token);
     this.token = session.token;
     this.save({ user, farm: null });
     await this.link();
@@ -433,8 +438,27 @@ export class AccountService {
     this.opts.onSync(this.syncStatus());
   }
 
+  /** The saved session; one an older Orbit kept in the secret store moves to the data folder. */
+  private async readSession(): Promise<string | null> {
+    let token: string | null;
+    try {
+      token = await this.session.get(SESSION_REF);
+    } catch (error) {
+      // An unreadable file (e.g. its key was deleted) means signing in again, not a crashed start.
+      process.stderr.write(`orion: saved sign-in unreadable: ${(error as Error).message}\n`);
+      return null;
+    }
+    if (token) return token;
+    const legacy = await this.opts.secrets.get(SESSION_REF);
+    if (!legacy) return null;
+    await this.session.set(SESSION_REF, legacy);
+    await this.opts.secrets.delete(SESSION_REF);
+    return legacy;
+  }
+
   private async clearSession(): Promise<void> {
     await this.stopSync();
+    await this.session.delete(SESSION_REF);
     await this.opts.secrets.delete(SESSION_REF);
     this.token = null;
     await this.opts.runtime.removeRuntimeApiKey(GATEWAY_PROVIDER).catch(() => undefined);
