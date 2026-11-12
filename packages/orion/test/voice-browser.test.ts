@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { waitFor } from "./helpers";
+import { removeLockedDir, waitFor } from "./helpers";
 import { voiceFixture } from "./voice-helpers";
 
 test("voice browser open and highlight emit JPEG views and close clears the image", async () => {
@@ -64,5 +64,10 @@ test("voice browser open and highlight emit JPEG views and close clears the imag
     expect(await closed).toMatchObject({ image: null, highlight: null });
   } finally {
     server.stop(true);
+    // Edge keeps the profile locked until its process is gone; closeAll ends it, and waiting for the
+    // folder here keeps that wait inside this test's budget instead of the shorter cleanup hook.
+    await f.stop();
+    Bun.WebView.closeAll();
+    await removeLockedDir(f.dir);
   }
 }, 60000);
