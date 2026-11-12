@@ -1,11 +1,5 @@
 import { expect, test } from "@playwright/test";
-import {
-  activeSession,
-  assistantMessages,
-  setComputerAccess,
-  startChat,
-  toolCard,
-} from "./helpers";
+import { activeSession, assistantMessages, setToolAccess, startChat, toolCard } from "./helpers";
 
 test("list cows streams an answer with a completed herd_query tool card", async ({ page }) => {
   await startChat(page, "list cows");
@@ -21,8 +15,10 @@ test("find cameras runs camera_discover without an approval prompt", async ({ pa
   await expect(assistantMessages(page).last()).toContainText("No ONVIF cameras answered");
 });
 
-test("the first shell command asks once, and Allow lets it run from then on", async ({ page }) => {
-  await setComputerAccess(page, false);
+test("the first command asks about commands only, and Allow lets them run from then on", async ({
+  page,
+}) => {
+  await setToolAccess(page, "shell", false);
   await startChat(page, "check git");
   const dialog = page.getByTestId("access-dialog");
   await expect(dialog).toHaveAttribute("data-tool", "shell");
@@ -34,17 +30,19 @@ test("the first shell command asks once, and Allow lets it run from then on", as
   await expect(toolCard(page, "bash")).toHaveAttribute("data-tool-status", "done");
   await expect(dialog).toHaveCount(0);
   await page.goto("/settings");
-  await expect(page.getByTestId("settings-computer-access")).toBeChecked();
+  await expect(page.getByTestId("settings-access-shell")).toBeChecked();
+  await expect(page.getByTestId("settings-access-browser")).not.toBeChecked();
+  await expect(page.getByTestId("settings-access-computer")).not.toBeChecked();
 });
 
 test("Not now keeps the shell closed for that request", async ({ page }) => {
-  await setComputerAccess(page, false);
+  await setToolAccess(page, "shell", false);
   await startChat(page, "check git");
   await page.getByTestId("access-decline").click();
   await expect(page.getByTestId("access-dialog")).toHaveCount(0);
   await expect(toolCard(page, "bash")).toHaveAttribute("data-tool-status", "error");
   await page.goto("/settings");
-  await expect(page.getByTestId("settings-computer-access")).not.toBeChecked();
+  await expect(page.getByTestId("settings-access-shell")).not.toBeChecked();
 });
 
 test("a new session appears in the sidebar and survives a reload", async ({ page }) => {

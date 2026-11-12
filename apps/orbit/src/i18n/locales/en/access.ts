@@ -1,18 +1,23 @@
 import type { Messages } from "../../core";
 
 export const access = {
-  title: "Let Orion lend a hand on this computer?",
-  "lead.shell": "To get this done, Orion would like to run a command on your computer.",
-  "lead.browser": "To get this done, Orion would like to use a web browser.",
-  "lead.computer":
-    "To get this done, Orion would like to see your screen and use the mouse and keyboard.",
-  "point.commands": "Run commands and small programs to build and fix things for your farm.",
-  "point.browser": "Use a web browser to look things up and fill in forms.",
-  "point.screen":
-    "Operate other programs on screen when there is no other way in, just like you would.",
-  "point.asks":
-    "Orion tells you what it is doing and checks with you before anything big, like deleting or installing.",
-  risk: "Orbit is free, open-source software, provided as is. Orion is helpful but can make mistakes, so by allowing it you accept the risk of what it does on this computer. You can turn this off any time in Settings.",
-  allow: "Allow Orion",
+  lead: "Orion needs this to get your request done. It only asks once.",
+  "shell.title": "Let Orion run commands?",
+  "shell.what":
+    "Orion runs commands and small programs on this computer to build and fix things for your farm, like checking that a tool is installed.",
+  "shell.care":
+    "It says what each command is for and checks with you before anything big, like deleting files or installing software.",
+  "browser.title": "Let Orion use a web browser?",
+  "browser.what":
+    "Orion opens web pages in its own browser to look things up, fill in forms and sign in where you ask it to.",
+  "browser.care":
+    "Sign-ins stay on this computer, and Orion never saves your passwords in its memory.",
+  "computer.title": "Let Orion use your screen, mouse and keyboard?",
+  "computer.what":
+    "Orion can look at your screen and operate another program, like a herd or milking program, when there is no other way in.",
+  "computer.care":
+    "It only does this for the job you asked for, and you can stop it any time from the chat.",
+  risk: "Orbit is free, open-source software, provided as is. Orion is helpful but can make mistakes, so by allowing this you accept the risk of what it does on this computer. You can turn it off any time in Settings.",
+  allow: "Allow",
   decline: "Not now",
 } satisfies Messages;

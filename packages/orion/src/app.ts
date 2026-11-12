@@ -5,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import {
+  type AccessTool,
   type ClientMessage,
   CloseCode,
   decodeClientMessage,
@@ -313,7 +314,7 @@ export async function startOrion(
       model: useMock ? MOCK_MODEL : s.model,
       thinkingLevel: s.thinkingLevel,
       shareAnonymousData: s.shareAnonymousData,
-      computerAccess: s.computerAccess,
+      toolAccess: s.toolAccess,
       ...(s.species ? { species: s.species } : {}),
       apiKeys,
       availableModels: hub.availableModels(),
@@ -338,12 +339,12 @@ export async function startOrion(
       ...(u.model !== undefined ? { model: u.model } : {}),
       ...(u.thinkingLevel ? { thinkingLevel: u.thinkingLevel } : {}),
       ...(u.shareAnonymousData !== undefined ? { shareAnonymousData: u.shareAnonymousData } : {}),
-      ...(u.computerAccess !== undefined ? { computerAccess: u.computerAccess } : {}),
+      ...(u.toolAccess ? { toolAccess: { ...settings.get().toolAccess, ...u.toolAccess } } : {}),
       ...(u.species ? { species: u.species } : {}),
     });
-    // Allowing it in Settings also answers a question Orion is waiting on.
-    const waiting = access.pending();
-    if (u.computerAccess && waiting) access.respond(waiting.requestId, true);
+    // Allowing a tool in Settings also answers the question Orion is waiting on for it.
+    for (const [tool, on] of Object.entries(u.toolAccess ?? {}))
+      if (on) access.allowed(tool as AccessTool);
     return settingsView();
   };
 
@@ -621,8 +622,7 @@ export async function startOrion(
           ws.data.authed = true;
           ws.send(encodeResult(msg.id, await handle(msg, ws)));
           ws.send(encodeEvent("sync.status", account.syncStatus()));
-          const waiting = access.pending();
-          if (waiting) ws.send(encodeEvent("access.request", waiting));
+          for (const waiting of access.pending()) ws.send(encodeEvent("access.request", waiting));
           return;
         }
         try {

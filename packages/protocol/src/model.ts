@@ -124,14 +124,24 @@ export type TranscriptItem = Static<typeof TranscriptItem>;
 export const ThinkingLevel = Type.Enum(["off", "minimal", "low", "medium", "high", "xhigh"]);
 export type ThinkingLevel = Static<typeof ThinkingLevel>;
 
+/** The tools that need the farmer's yes before Orion first uses them. */
+export const AccessTool = Type.Enum(["shell", "browser", "computer"]);
+export type AccessTool = Static<typeof AccessTool>;
+export const ToolAccess = Type.Object({
+  shell: Type.Boolean(),
+  browser: Type.Boolean(),
+  computer: Type.Boolean(),
+});
+export type ToolAccess = Static<typeof ToolAccess>;
+
 export const Settings = Type.Object({
   provider: Type.Union([Type.String(), Type.Null()]),
   model: Type.Union([Type.String(), Type.Null()]),
   thinkingLevel: ThinkingLevel,
   /** Share anonymised footage and outcomes to improve the models. On by default; opt out in settings. */
   shareAnonymousData: Type.Boolean(),
-  /** The farmer let Orion run commands, use the browser and operate the screen (asked once, on first use). */
-  computerAccess: Type.Boolean(),
+  /** Which of Orion's tools the farmer allowed; each is asked once, on its own first use. */
+  toolAccess: ToolAccess,
   species: Type.Optional(Type.Enum([...SPECIES])),
   /** Per provider: whether a key is stored (in the OS keychain) and a masked hint. Never the key. */
   apiKeys: Type.Record(
@@ -149,7 +159,7 @@ export const SettingsUpdate = Type.Object({
   model: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   thinkingLevel: Type.Optional(ThinkingLevel),
   shareAnonymousData: Type.Optional(Type.Boolean()),
-  computerAccess: Type.Optional(Type.Boolean()),
+  toolAccess: Type.Optional(Type.Partial(ToolAccess)),
   species: Type.Optional(Type.Enum([...SPECIES])),
   /** key null removes the stored key. */
   apiKey: Type.Optional(

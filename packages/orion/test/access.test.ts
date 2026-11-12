@@ -2,7 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createOrionClient, type OrionClient } from "@orbit/protocol/client";
+import { AccessDenied, AccessGate } from "../src/agent/access";
 import type { OrionApp } from "../src/app";
+import { SettingsStore } from "../src/settings";
 import { connect, record, removeDir, startApp, TOKEN, tempDir, waitFor } from "./helpers";
 
 const cleanup: Array<() => void | Promise<void>> = [];
@@ -47,7 +49,7 @@ test("the shell waits for one yes, a no refuses it, and a yes is remembered", as
   expect(refused.isError).toBe(true);
   expect(refused.result).toContain("has not given Orion access");
   await first.settled;
-  expect((await client.request("settings.get")).computerAccess).toBe(false);
+  expect((await client.request("settings.get")).toolAccess.shell).toBe(false);
 
   const askedAgain = waitFor(client, "access.request");
   const second = await checkGit(client, sessionId);
@@ -57,8 +59,12 @@ test("the shell waits for one yes, a no refuses it, and a yes is remembered", as
   expect(ran.isError).toBe(false);
   expect(ran.result).toContain("git version");
   await second.settled;
-  expect((await client.request("settings.get")).computerAccess).toBe(true);
-  expect(JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).computerAccess).toBe(true);
+  expect((await client.request("settings.get")).toolAccess).toEqual({
+    shell: true,
+    browser: false,
+    computer: false,
+  });
+  expect(JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")).toolAccess.shell).toBe(true);
 
   const events = record(client);
   const third = await checkGit(client, sessionId);
@@ -88,5 +94,35 @@ test("an open question reaches a client that connects later and is dropped when 
     (await client.request("access.respond", { requestId: request.requestId, allow: true }))
       .accepted,
   ).toBe(false);
-  expect((await client.request("settings.get")).computerAccess).toBe(false);
+  expect((await client.request("settings.get")).toolAccess.shell).toBe(false);
+});
+
+test("each tool gets its own question, and a yes or a no for one leaves the others asking", async () => {
+  const dir = tempDir();
+  cleanup.push(() => removeDir(dir));
+  const settings = new SettingsStore(dir);
+  const asked: Array<{ type: string; tool?: string; requestId?: string }> = [];
+  const gate = new AccessGate(settings, (type, body) => asked.push({ type, ...body }));
+  const request = (tool: string) => {
+    const found = asked.find((e) => e.type === "access.request" && e.tool === tool);
+    if (!found?.requestId) throw new Error(`no question for ${tool}`);
+    return found.requestId;
+  };
+
+  const shell = gate.ensure("shell", "s1");
+  const browser = gate.ensure("browser", "s1");
+  expect(gate.pending().map((p) => p.tool)).toEqual(["shell", "browser"]);
+  gate.respond(request("shell"), true);
+  await shell;
+  gate.respond(request("browser"), false);
+  await expect(browser).rejects.toBeInstanceOf(AccessDenied);
+  expect(settings.get().toolAccess).toEqual({ shell: true, browser: false, computer: false });
+
+  await gate.ensure("shell", "s1");
+  await expect(gate.ensure("browser", "s1")).rejects.toThrow("use the web browser");
+  const computer = gate.ensure("computer", "s1");
+  expect(gate.pending().map((p) => p.tool)).toEqual(["computer"]);
+  gate.allowed("computer");
+  await computer;
+  expect(settings.get().toolAccess).toEqual({ shell: true, browser: false, computer: true });
 });

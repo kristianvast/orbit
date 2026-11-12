@@ -77,7 +77,7 @@ export interface HubOptions {
   repo: Repository;
   settings: SettingsStore;
   tools: ToolDefinition[];
-  /** Asks the farmer once before the shell, browser and computer tools first run. */
+  /** Asks the farmer before the shell, the browser and the computer tool each first run. */
   access: AccessGate;
   emit: Emit;
   mockModel: boolean;
@@ -616,7 +616,7 @@ export class SessionHub {
       // A new request may repeat commands from the last one; their results can differ now.
       if (event.type === "agent_start") {
         repeats.reset();
-        this.opts.access.forgetDecline(live.id);
+        this.opts.access.forgetDeclines(live.id);
       }
       this.onEvent(live, event);
     });

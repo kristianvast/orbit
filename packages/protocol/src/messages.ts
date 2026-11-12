@@ -7,6 +7,7 @@ import { BillingRequests } from "./billing";
 import { DbMutateRequest, DbMutateResult, DbQueryRequest } from "./db";
 import { FeedbackRequests } from "./feedback";
 import {
+  AccessTool,
   AssistantItem,
   AuthMethod,
   AuthNotice,
@@ -54,10 +55,6 @@ export const ModulesState = Type.Object({ modules: Type.Array(OrbitModule) });
 export type ModulesState = Static<typeof ModulesState>;
 // Not `id`: request frames are flat and `id` is the request id.
 const ModuleRef = Type.Object({ moduleId: ModuleId });
-
-/** The tools that need the farmer's one-time yes before Orion uses them. */
-export const AccessTool = Type.Enum(["shell", "browser", "computer"]);
-export type AccessTool = Static<typeof AccessTool>;
 
 const SessionRef = Type.Object({ sessionId: Type.String() });
 const Accepted = Type.Object({ accepted: Type.Boolean() });
@@ -132,7 +129,7 @@ export const Requests = {
   "modules.enable": { params: ModuleRef, result: ModulesState },
   /** The farmer switches a module off. */
   "modules.disable": { params: ModuleRef, result: ModulesState },
-  /** Answers an access.request; allow is remembered as Settings.computerAccess. */
+  /** Answers an access.request; allow is remembered for that tool in Settings.toolAccess. */
   "access.respond": {
     params: Type.Object({ requestId: Type.String(), allow: Type.Boolean() }),
     result: Accepted,
@@ -263,8 +260,8 @@ export const Events = {
     errorMessage: Type.Optional(Type.String()),
   }),
   /**
-   * Orion wants to use the shell, the browser or the screen for the first time and waits for the
-   * farmer's yes (access.respond). Sent again to a client that connects while it is still open.
+   * Orion wants to use one of these tools for the first time and waits for the farmer's yes for
+   * that tool (access.respond). Sent again to a client that connects while it is still open.
    */
   "access.request": Type.Object({
     ...Chat,

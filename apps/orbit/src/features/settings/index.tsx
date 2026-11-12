@@ -1,4 +1,4 @@
-import type { Settings, SnapshotSummary, ThinkingLevel } from "@orbit/protocol";
+import type { AccessTool, Settings, SnapshotSummary, ThinkingLevel } from "@orbit/protocol";
 import {
   Clock,
   Cpu,
@@ -40,6 +40,16 @@ const THINKING_OPTIONS: { value: ThinkingLevel; labelKey: MessageKey }[] = [
   { value: "medium", labelKey: "settings.thinking.medium" },
   { value: "high", labelKey: "settings.thinking.high" },
   { value: "xhigh", labelKey: "settings.thinking.xhigh" },
+];
+
+const ACCESS_SWITCHES: { tool: AccessTool; labelKey: MessageKey; hintKey: MessageKey }[] = [
+  { tool: "shell", labelKey: "settings.access.shell", hintKey: "settings.access.shellHint" },
+  { tool: "browser", labelKey: "settings.access.browser", hintKey: "settings.access.browserHint" },
+  {
+    tool: "computer",
+    labelKey: "settings.access.computer",
+    hintKey: "settings.access.computerHint",
+  },
 ];
 
 const COMMON_PROVIDERS = ["orbit-gateway", "anthropic", "openai", "google"];
@@ -86,7 +96,7 @@ export default function SettingsPage() {
 
   const [undoingId, setUndoingId] = useState<string | null>(null);
   const [savingSharing, setSavingSharing] = useState(false);
-  const [savingAccess, setSavingAccess] = useState(false);
+  const [savingAccess, setSavingAccess] = useState<AccessTool | null>(null);
 
   const loadAll = useCallback(async (): Promise<Settings | null> => {
     if (!client) return null;
@@ -221,11 +231,11 @@ export default function SettingsPage() {
     }
   };
 
-  const handleAccessChange = async (computerAccess: boolean) => {
+  const handleAccessChange = async (tool: AccessTool, allowed: boolean) => {
     if (!client) return;
-    setSavingAccess(true);
+    setSavingAccess(tool);
     try {
-      setSettings(await client.request("settings.update", { computerAccess }));
+      setSettings(await client.request("settings.update", { toolAccess: { [tool]: allowed } }));
     } catch (err) {
       pushToast({
         title: t("settings.access.saveFailed"),
@@ -233,7 +243,7 @@ export default function SettingsPage() {
         tone: "danger",
       });
     } finally {
-      setSavingAccess(false);
+      setSavingAccess(null);
     }
   };
 
@@ -548,27 +558,41 @@ export default function SettingsPage() {
       <FeedbackCard />
 
       <Card title={t("settings.access.title")}>
-        <label
+        <p
           style={{
-            display: "flex",
-            gap: "var(--space-2)",
-            alignItems: "flex-start",
+            margin: "0 0 var(--space-3)",
             fontSize: "var(--text-sm)",
+            color: "var(--text-secondary)",
           }}
         >
-          <input
-            type="checkbox"
-            checked={settings?.computerAccess ?? false}
-            disabled={!settings || savingAccess}
-            onChange={(e) => void handleAccessChange(e.target.checked)}
-            data-testid="settings-computer-access"
-          />
-          <span>
-            {t("settings.access.label")}
-            <br />
-            <span style={{ color: "var(--text-secondary)" }}>{t("settings.access.hint")}</span>
-          </span>
-        </label>
+          {t("settings.access.hint")}
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          {ACCESS_SWITCHES.map(({ tool, labelKey, hintKey }) => (
+            <label
+              key={tool}
+              style={{
+                display: "flex",
+                gap: "var(--space-2)",
+                alignItems: "flex-start",
+                fontSize: "var(--text-sm)",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={settings?.toolAccess?.[tool] ?? false}
+                disabled={!settings || savingAccess !== null}
+                onChange={(e) => void handleAccessChange(tool, e.target.checked)}
+                data-testid={`settings-access-${tool}`}
+              />
+              <span>
+                {t(labelKey)}
+                <br />
+                <span style={{ color: "var(--text-secondary)" }}>{t(hintKey)}</span>
+              </span>
+            </label>
+          ))}
+        </div>
       </Card>
 
       <Card title={t("settings.privacy.title")}>

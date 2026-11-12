@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ThinkingLevel } from "@orbit/protocol";
+import type { ThinkingLevel, ToolAccess } from "@orbit/protocol";
 import type { Species } from "@orbit/schema/enums";
 
 export interface StoredSettings {
@@ -9,8 +9,8 @@ export interface StoredSettings {
   thinkingLevel: ThinkingLevel;
   /** Anonymised footage and outcomes may be shared to improve the models; on unless turned off. */
   shareAnonymousData: boolean;
-  /** The farmer's one-time yes to Orion using the shell, the browser and the screen. */
-  computerAccess: boolean;
+  /** The farmer's yes per tool (shell, browser, computer), each given on that tool's first use. */
+  toolAccess: ToolAccess;
   species?: Species;
   /** Masked hints only ("…abcd"); keys live in Pi's credential store (<data-dir>/pi/auth.json). */
   keyHints: Record<string, string>;
@@ -25,7 +25,7 @@ const DEFAULTS: StoredSettings = {
   model: null,
   thinkingLevel: "medium",
   shareAnonymousData: true,
-  computerAccess: false,
+  toolAccess: { shell: false, browser: false, computer: false },
   keyHints: {},
   version: VERSION,
 };
@@ -40,9 +40,13 @@ export class SettingsStore {
     if (existsSync(this.file)) {
       const raw = JSON.parse(readFileSync(this.file, "utf8")) as Partial<StoredSettings> &
         Record<string, unknown>;
-      // Drop keys from the removed approval flow so they are not written back.
-      const { approvalMode: _mode, alwaysAllow: _allow, ...kept } = raw;
-      this.value = { ...DEFAULTS, ...kept };
+      // Drop keys from the removed approval flow and the one-switch access so they are not written back.
+      const { approvalMode: _mode, alwaysAllow: _allow, computerAccess: _access, ...kept } = raw;
+      this.value = {
+        ...DEFAULTS,
+        ...kept,
+        toolAccess: { ...DEFAULTS.toolAccess, ...kept.toolAccess },
+      };
       // Older files stored the old "off" default on any save, so it is not a farmer's choice.
       if ((kept.version ?? 1) < VERSION) {
         if (this.value.thinkingLevel === "off") this.value.thinkingLevel = "medium";

@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { E2E_ORION_PORT, E2E_TOKEN, SEED } from "../src/index";
-import { setComputerAccess } from "./helpers";
+import { setToolAccess } from "./helpers";
 
 const HERD_ANSWER = `There are ${SEED.cattle + SEED.horses} animals in your herd.`;
 const HERD_PAGE = `http://127.0.0.1:${E2E_ORION_PORT}/pages/${E2E_TOKEN}/herd/index.html`;
@@ -97,7 +97,7 @@ test("Orion points at Settings, opens it, and the call follows to that page", as
 });
 
 test("Orion shows the page it opened in its browser and marks where to start", async ({ page }) => {
-  await setComputerAccess(page, false);
+  await setToolAccess(page, "browser", false);
   const stage = await startCallInChat(page);
 
   await sayInChat(page, `open ${HERD_PAGE}`);

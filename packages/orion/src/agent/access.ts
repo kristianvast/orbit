@@ -1,5 +1,6 @@
-// The farmer's one-time yes before Orion first runs commands, uses the browser or operates the
-// screen. One question covers all three; the yes is kept in settings, a no lasts for the request.
+// The farmer's yes before Orion first runs commands, first uses the browser and first operates the
+// screen: one question per tool, each asked on that tool's first use. A yes is kept in settings;
+// a no lasts for the rest of the request.
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AccessTool, EventBody } from "@orbit/protocol";
 import type { SettingsStore } from "../settings";
@@ -13,10 +14,16 @@ export const ACCESS_TOOLS: Readonly<Record<string, AccessTool>> = {
   computer: "computer",
 };
 
+const WHAT: Record<AccessTool, string> = {
+  shell: "run commands",
+  browser: "use the web browser",
+  computer: "operate the screen, mouse and keyboard",
+};
+
 export class AccessDenied extends Error {
-  constructor() {
+  constructor(tool: AccessTool) {
     super(
-      "Not run: the farmer has not given Orion access to run commands, use the browser or operate the screen on this computer. Do not try again in this request or work around it with other tools. Finish what you can without it, and tell the farmer in one friendly line that you can do more if they allow it (in Settings, or when you ask next time).",
+      `Not run: the farmer has not given Orion access to ${WHAT[tool]} on this computer. Do not try again in this request or work around it with other tools. Finish what you can without it, and tell the farmer in one friendly line that you can do more if they allow it (in Settings, or when you ask next time).`,
     );
   }
 }
@@ -29,7 +36,7 @@ interface Ask {
 }
 
 export class AccessGate {
-  private ask: Ask | null = null;
+  private asks = new Map<AccessTool, Ask>();
   private declined = new Set<string>();
 
   constructor(
@@ -37,12 +44,13 @@ export class AccessGate {
     private readonly emit: Emit,
   ) {}
 
-  /** Resolves once access is granted; throws AccessDenied on a no or when the wait is aborted. */
+  /** Resolves once this tool is allowed; throws AccessDenied on a no or when the wait is aborted. */
   async ensure(tool: AccessTool, sessionId: string, signal?: AbortSignal): Promise<void> {
-    if (this.settings.get().computerAccess) return;
-    if (this.declined.has(sessionId)) throw new AccessDenied();
+    if (this.settings.get().toolAccess[tool]) return;
+    const declineKey = `${sessionId}\n${tool}`;
+    if (this.declined.has(declineKey)) throw new AccessDenied(tool);
     signal?.throwIfAborted();
-    const ask = this.ask ?? this.open(tool, sessionId);
+    const ask = this.asks.get(tool) ?? this.open(tool, sessionId);
     ask.waiters++;
     let onAbort: (() => void) | undefined;
     const aborted = new Promise<never>((_, reject) => {
@@ -52,33 +60,42 @@ export class AccessGate {
     try {
       const allow = await Promise.race([ask.done, aborted]);
       if (!allow) {
-        this.declined.add(sessionId);
-        throw new AccessDenied();
+        this.declined.add(declineKey);
+        throw new AccessDenied(tool);
       }
     } finally {
       if (onAbort) signal?.removeEventListener("abort", onAbort);
       ask.waiters--;
       // Nobody waits for the answer any more (every run stopped): drop the question.
-      if (ask.waiters === 0 && this.ask === ask) this.close(false);
+      if (ask.waiters === 0 && this.asks.get(tool) === ask) this.close(tool, false);
     }
   }
 
   /** The farmer answered. False when the question is no longer open. */
   respond(requestId: string, allow: boolean): boolean {
-    if (this.ask?.body.requestId !== requestId) return false;
-    if (allow) this.settings.update({ computerAccess: true });
-    this.close(allow);
+    const tool = [...this.asks].find(([, ask]) => ask.body.requestId === requestId)?.[0];
+    if (!tool) return false;
+    if (allow)
+      this.settings.update({ toolAccess: { ...this.settings.get().toolAccess, [tool]: true } });
+    this.close(tool, allow);
     return true;
   }
 
-  /** The open question, for a client that connects while Orion waits. */
-  pending(): EventBody<"access.request"> | null {
-    return this.ask ? { ...this.ask.body } : null;
+  /** Answers the open question for a tool the farmer just allowed in Settings. */
+  allowed(tool: AccessTool): void {
+    const ask = this.asks.get(tool);
+    if (ask) this.respond(ask.body.requestId, true);
+  }
+
+  /** The open questions, for a client that connects while Orion waits. */
+  pending(): EventBody<"access.request">[] {
+    return [...this.asks.values()].map((ask) => ({ ...ask.body }));
   }
 
   /** A new request from the farmer may be asked again after a no. */
-  forgetDecline(sessionId: string): void {
-    this.declined.delete(sessionId);
+  forgetDeclines(sessionId: string): void {
+    for (const key of this.declined)
+      if (key.startsWith(`${sessionId}\n`)) this.declined.delete(key);
   }
 
   /** Wraps the tools that need access; every other tool is returned as it is. */
@@ -106,15 +123,15 @@ export class AccessGate {
       done,
       settle,
     };
-    this.ask = ask;
+    this.asks.set(tool, ask);
     this.emit("access.request", ask.body);
     return ask;
   }
 
-  private close(allow: boolean): void {
-    const ask = this.ask;
+  private close(tool: AccessTool, allow: boolean): void {
+    const ask = this.asks.get(tool);
     if (!ask) return;
-    this.ask = null;
+    this.asks.delete(tool);
     ask.settle(allow);
     this.emit("access.resolved", { requestId: ask.body.requestId, allow });
   }
