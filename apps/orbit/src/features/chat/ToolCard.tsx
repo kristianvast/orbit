@@ -112,6 +112,12 @@ function toolMetaKey(name: string): {
         runningKey: "chat.toolRunning.connectorRun",
         icon: Play,
       };
+    case "connector_remove":
+      return {
+        key: "chat.tool.connectorRemove",
+        runningKey: "chat.toolRunning.connectorRemove",
+        icon: Plug,
+      };
     case "camera_discover":
       return {
         key: "chat.tool.cameraDiscover",

@@ -425,6 +425,25 @@ export function createFarmTools(
       },
     }),
     tool({
+      name: "connector_remove",
+      label: "Remove a connector",
+      description:
+        "Remove a connector the farmer asked to remove. It disappears from Connections, its stored password is deleted and its folder under connectors/ is removed. The farmer can undo it.",
+      parameters: Type.Object({
+        id: Type.String({ description: "Connector id from connectors_list" }),
+      }),
+      async run(p, origin) {
+        farm.guard?.("connectors.upsert");
+        const r = await farm.connectors.remove(p.id, origin);
+        const folder = r.removedPath ? ` Its folder ${r.removedPath} is removed.` : "";
+        const problems = r.problems.length ? ` But ${r.problems.join("; ")}.` : "";
+        return text(
+          `Removed connector ${r.name}.${folder}${problems} The farmer can undo this.`,
+          r,
+        );
+      },
+    }),
+    tool({
       name: "camera_discover",
       label: "Find cameras",
       description:
@@ -754,6 +773,7 @@ export const FARM_TOOL_NAMES = [
   "connector_scaffold",
   "connector_configure",
   "connector_run",
+  "connector_remove",
   "camera_discover",
   "camera_add",
   "orbit_source",

@@ -12,14 +12,19 @@ export interface StoredSettings {
   species?: Species;
   /** Masked hints only ("…abcd"); keys live in Pi's credential store (<data-dir>/pi/auth.json). */
   keyHints: Record<string, string>;
+  /** 2 once the thinking default moved from off to medium; absent in older files. */
+  version?: number;
 }
+
+const VERSION = 2;
 
 const DEFAULTS: StoredSettings = {
   provider: null,
   model: null,
-  thinkingLevel: "off",
+  thinkingLevel: "medium",
   shareAnonymousData: true,
   keyHints: {},
+  version: VERSION,
 };
 
 export class SettingsStore {
@@ -35,6 +40,11 @@ export class SettingsStore {
       // Drop keys from the removed approval flow so they are not written back.
       const { approvalMode: _mode, alwaysAllow: _allow, ...kept } = raw;
       this.value = { ...DEFAULTS, ...kept };
+      // Older files stored the old "off" default on any save, so it is not a farmer's choice.
+      if ((kept.version ?? 1) < VERSION) {
+        if (this.value.thinkingLevel === "off") this.value.thinkingLevel = "medium";
+        this.value.version = VERSION;
+      }
     }
   }
 

@@ -720,6 +720,18 @@ export class Repository {
     return { ids: [id], snapshotId: r.snapshotId };
   }
 
+  /** Soft-deletes a connector; undoing the snapshot brings it back. */
+  removeConnector(id: string, origin?: Partial<WriteOrigin>): DbMutateResult {
+    const current = this.getConnector(id);
+    const r = this.write(
+      "connectors",
+      id,
+      { deletedAt: this.iso() },
+      { description: `Removed connector ${current.name ?? current.vendor}`, ...origin },
+    );
+    return { ids: [id], snapshotId: r.snapshotId };
+  }
+
   /**
    * Creates or patches animals a connector reported, in one transaction and without an undo
    * snapshot (like other connector imports). An animal is matched by national id, then ear tag.

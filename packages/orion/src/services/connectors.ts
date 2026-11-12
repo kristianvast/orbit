@@ -1,5 +1,5 @@
-import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import type { AnimalInput } from "@orbit/protocol";
 import type { Connector } from "@orbit/schema";
 import {
@@ -157,6 +157,57 @@ export class ConnectorService {
       path: rel,
       usedTemplate,
       files: ENTRY_CANDIDATES.filter((f) => existsSync(join(dest, f))),
+    };
+  }
+
+  /**
+   * Removes a connector: its row (undoable), its stored password, and its folder under connectors/
+   * unless another connector uses it. The run's workspace snapshot keeps the folder undoable, and a
+   * connector with the same name can be created again. Cleanup failures are reported, not thrown,
+   * because the connector is already gone by then.
+   */
+  async remove(
+    id: string,
+    origin: Partial<WriteOrigin>,
+  ): Promise<{
+    name: string;
+    snapshotId: string | null;
+    removedPath: string | null;
+    problems: string[];
+  }> {
+    const connector = this.repo.getConnector(id);
+    const { credentialRef, path } = connector.config as Record<string, unknown>;
+    const result = this.repo.removeConnector(id, origin);
+    const problems: string[] = [];
+    if (typeof credentialRef === "string") {
+      try {
+        await this.secrets.delete(credentialRef);
+      } catch (error) {
+        problems.push(`its stored password could not be deleted: ${(error as Error).message}`);
+      }
+    }
+    let removedPath: string | null = null;
+    const dir = typeof path === "string" ? resolve(this.workspace, path) : null;
+    const shared = this.repo
+      .listConnectors()
+      .some((c) => (c.config as Record<string, unknown>).path === path);
+    if (
+      dir?.startsWith(resolve(this.workspace, "connectors") + sep) &&
+      !shared &&
+      existsSync(dir)
+    ) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+        removedPath = path as string;
+      } catch (error) {
+        problems.push(`its folder ${path} could not be removed: ${(error as Error).message}`);
+      }
+    }
+    return {
+      name: connector.name ?? connector.vendor,
+      snapshotId: result.snapshotId,
+      removedPath,
+      problems,
     };
   }
 

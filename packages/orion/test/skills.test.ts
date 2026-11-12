@@ -333,6 +333,50 @@ export default (ctx) => syncWith(source, ctx);
     expect(await farm.connectors.run(id)).toMatchObject({ imported: 0, animalsUpdated: 1 });
   });
 
+  test("remove takes the connector, its password and its folder away, and the name can be used again", async () => {
+    const { workspace, db, farm, call } = setup();
+    const scaffolded = await call("connector_scaffold", { name: "delpro" });
+    const id = (scaffolded?.details as { id?: string } | undefined)?.id ?? "";
+    await farm.mutate({
+      mutation: "connectors.upsert",
+      params: { connector: { id, vendor: "custom", kind: "custom", secret: "pw" } },
+    });
+    const ref = (db.repo.getConnector(id).config as { credentialRef?: string }).credentialRef ?? "";
+    expect(await farm.secrets.get(ref)).toBe("pw");
+
+    const removed = await call("connector_remove", { id });
+    expect(removed?.isError).toBeUndefined();
+    expect(db.repo.listConnectors()).toEqual([]);
+    expect(await farm.secrets.get(ref)).toBeNull();
+    expect(existsSync(join(workspace, "connectors", "delpro"))).toBe(false);
+    expect((await call("connector_scaffold", { name: "delpro" }))?.isError).toBeUndefined();
+
+    const snapshotId = (removed?.details as { snapshotId?: string } | undefined)?.snapshotId ?? "";
+    db.repo.undoDbSnapshot(snapshotId);
+    expect(db.repo.getConnector(id).name).toBe("delpro");
+
+    const missing = await call("connector_remove", { id: "missing" });
+    expect(missing?.isError).toBe(true);
+    expect(textOf(missing)).toContain("not found");
+  });
+
+  test("remove leaves a folder outside connectors/ and a folder another connector uses", async () => {
+    const { workspace, db, call } = setup();
+    mkdirSync(join(workspace, "keep"));
+    const idOf = (r: unknown) => (r as { details?: { id?: string } })?.details?.id ?? "";
+    const outside = idOf(await call("connector_scaffold", { name: "outside" }));
+    await call("connector_configure", { id: outside, config: { path: "keep" } });
+    await call("connector_remove", { id: outside });
+    expect(existsSync(join(workspace, "keep"))).toBe(true);
+
+    const first = idOf(await call("connector_scaffold", { name: "shared" }));
+    const second = idOf(await call("connector_scaffold", { name: "second" }));
+    await call("connector_configure", { id: second, config: { path: "connectors/shared" } });
+    await call("connector_remove", { id: first });
+    expect(existsSync(join(workspace, "connectors", "shared"))).toBe(true);
+    expect(db.repo.listConnectors().map((c) => c.id)).toEqual([second]);
+  });
+
   test("scaffold refuses a skill that is not installed", async () => {
     const { call } = setup();
     const result = await call("connector_scaffold", { name: "x", fromSkill: "missing" });

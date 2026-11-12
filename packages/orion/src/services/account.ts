@@ -445,7 +445,8 @@ export class AccountService {
         {
           id: GATEWAY_MODEL,
           name: "Orbit (cloud)",
-          reasoning: false,
+          // Sends the thinking level as reasoning_effort; the default is medium.
+          reasoning: true,
           // Without "image" Pi strips screenshots, and the computer tool would act blind.
           input: ["text", "image"],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },

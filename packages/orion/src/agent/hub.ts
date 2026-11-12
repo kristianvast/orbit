@@ -28,7 +28,7 @@ import { billingError } from "./billing-error";
 import { FileCredentialStore } from "./credentials";
 import { MEMORY_SCOPES, memoryFile } from "./memory";
 import { MOCK_MODEL, MOCK_PROVIDER, registerMockProvider } from "./mock-model";
-import { bundledShell, shellTools, useBundledShell } from "./shell";
+import { bundledShell, RepeatGuard, shellTools, useBundledShell } from "./shell";
 import { cleanTitle, GATEWAY_TITLE_MODEL, pickTitleModel, titleRequest } from "./title";
 import { assistantItem, buildTranscript, contentText, toolStatus, userItem } from "./transcript";
 import { type TaskOutcome, voiceMessage } from "./voice-history";
@@ -215,7 +215,8 @@ export class SessionHub {
           {
             id: "orbit-default",
             name: "Orbit (subscription)",
-            reasoning: false,
+            // Sends the thinking level as reasoning_effort; the default is medium.
+            reasoning: true,
             // Without "image" Pi strips screenshots, and the computer tool would act blind.
             input: ["text", "image"],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -555,6 +556,7 @@ export class SessionHub {
     const agentsFile = join(this.opts.resourcesDir, "AGENTS.md");
     const workspaceAgents = join(this.opts.workspace.dir, "AGENTS.md");
     const shellPath = useBundledShell();
+    const repeats = new RepeatGuard();
     const loader = new DefaultResourceLoader({
       cwd: this.opts.workspace.dir,
       agentDir: this.agentDir,
@@ -600,10 +602,17 @@ export class SessionHub {
         retry: { provider: { maxRetries: 0 } },
         ...(shellPath ? { shellPath } : {}),
       }),
-      customTools: [...shellTools(this.opts.workspace.dir, shellPath), ...this.opts.tools],
+      customTools: [
+        ...shellTools(this.opts.workspace.dir, shellPath, process.platform, repeats),
+        ...this.opts.tools,
+      ],
     });
     live.agent = session;
-    live.unsubscribe = session.subscribe((event) => this.onEvent(live, event));
+    live.unsubscribe = session.subscribe((event) => {
+      // A new request may repeat commands from the last one; their results can differ now.
+      if (event.type === "agent_start") repeats.reset();
+      this.onEvent(live, event);
+    });
     return session;
   }
 

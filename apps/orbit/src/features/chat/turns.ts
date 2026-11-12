@@ -143,6 +143,7 @@ export function classifyToolKind(name: string): ToolActivityKind {
     case "connector_scaffold":
     case "connector_configure":
     case "connector_run":
+    case "connector_remove":
     case "camera_discover":
     case "camera_add":
     case "db_query":
