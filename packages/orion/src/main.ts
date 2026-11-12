@@ -27,8 +27,19 @@ try {
     await app.stop();
     process.exit(0);
   };
-  // The desktop shell (--parent-watch) starts Orion again whenever it exits, so a clean exit is a restart.
-  const app = await startOrion(config.parentWatch ? { ...config, restart: shutdown } : config);
+  // The desktop shell (--parent-watch) starts Orion again whenever it exits, so a clean exit is a
+  // restart. Run on its own (dev), Orion reopens itself in this process on the same port to switch
+  // farm folders; that never loads new code, so `restart` (updates) stays shell-only.
+  const reopenHere = async () => {
+    if (stopping) return;
+    await app.stop();
+    app = await startOrion({ ...config, port: app.port, reopen: () => void reopenHere() });
+  };
+  let app = await startOrion(
+    config.parentWatch
+      ? { ...config, restart: shutdown, reopen: shutdown }
+      : { ...config, reopen: () => void reopenHere() },
+  );
   process.stdout.write(`${READY_LINE_PREFIX}${JSON.stringify({ port: app.port })}\n`);
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);

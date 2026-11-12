@@ -21,11 +21,15 @@ export function readInstallId(dataDir: string): string {
   return id;
 }
 
-export function openDatabase(dataDir: string, options: { seed: boolean }): OpenedDb {
+/** installId: the install's id when the database is in a farm folder below the data folder. */
+export function openDatabase(
+  dataDir: string,
+  options: { seed: boolean; installId?: string },
+): OpenedDb {
   mkdirSync(dataDir, { recursive: true });
   const db = openLocalDb(join(dataDir, "orbit.sqlite"));
   migrate(db);
-  const repo = new Repository(db, readInstallId(dataDir));
+  const repo = new Repository(db, options.installId ?? readInstallId(dataDir));
   let seeded = false;
   if (options.seed) {
     const empty =

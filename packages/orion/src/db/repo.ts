@@ -30,6 +30,7 @@ import {
   devices,
   type Farm,
   farms,
+  formatHlc,
   type Hlc,
   isWearableKind,
   type JsonObject,
@@ -141,6 +142,29 @@ export class Repository {
       this.db.delete(farms).where(eq(farms.id, id)).run();
       return true;
     });
+  }
+
+  /**
+   * Starts an empty folder for a cloud farm opened on this PC: its farm row goes in at the oldest
+   * possible clock and never into the outbox, so the cloud's own row replaces it on the first sync
+   * and local writes before that still belong to the right farm.
+   */
+  placeCloudFarm(id: string, name: string | null): void {
+    if (this.farm()) return;
+    const ts = this.iso();
+    this.db
+      .insert(farms)
+      .values({
+        id,
+        farmId: id,
+        name: name ?? "Farm",
+        timezone: "UTC",
+        createdAt: ts,
+        updatedAt: ts,
+        hlc: formatHlc({ wallMs: 0, counter: 0, node: this.installId }),
+        originDevice: this.installId,
+      })
+      .run();
   }
 
   /** The farm every local write belongs to; creates "My farm" on first use. */

@@ -30,7 +30,7 @@ import { createFarmTools, createFeedbackTools } from "./agent/tools";
 import { createWebTools } from "./agent/web";
 import { Workspace } from "./agent/workspace";
 import type { OrionConfig } from "./config";
-import { openDatabase } from "./db/open";
+import { openDatabase, readInstallId } from "./db/open";
 import { RepoError } from "./db/repo";
 import { FONT_FILES, materializeResources, PAGE_KIT_CSS } from "./resources";
 import { openSecretStore } from "./secrets";
@@ -43,6 +43,7 @@ import {
   serveCamera,
 } from "./services/camera-proxy";
 import { FarmService } from "./services/farm";
+import { farmDir, readFarmFolders, writeFarmFolders } from "./services/farm-folders";
 import { FeedbackService } from "./services/feedback";
 import { serveGoogleCallback } from "./services/google-callback";
 import { LOCAL_UI_PREFIX, LocalUiService } from "./services/local-ui";
@@ -115,10 +116,16 @@ export async function startOrion(
   voiceOptions: Pick<VoiceOptions, "transport" | "toolBudgetMs"> = {},
 ): Promise<OrionApp> {
   mkdirSync(config.dataDir, { recursive: true });
-  const workspace = new Workspace(join(config.dataDir, "workspace"));
+  // The open farm's database, workspace, screens and chats; install-wide state stays in dataDir.
+  const folders = readFarmFolders(config.dataDir);
+  const farmFolder = farmDir(config.dataDir, folders);
+  const workspace = new Workspace(join(farmFolder, "workspace"));
   await workspace.init();
 
-  const db = openDatabase(config.dataDir, { seed: config.seed });
+  const db = openDatabase(farmFolder, {
+    seed: config.seed && !folders.active,
+    installId: readInstallId(config.dataDir),
+  });
   const repo = db.repo;
   const secrets = await openSecretStore(config.dataDir, repo.installId);
   const settings = new SettingsStore(config.dataDir);
@@ -139,7 +146,7 @@ export async function startOrion(
       }
     }
   };
-  const modules = new ModulesStore(config.dataDir, liveRowsIn(repo.db), (state) =>
+  const modules = new ModulesStore(farmFolder, liveRowsIn(repo.db), (state) =>
     emit("modules.updated", state),
   );
   const dbChanged = (table: string, ids: string[]) => {
@@ -170,6 +177,7 @@ export async function startOrion(
   let restartOrion: () => boolean = () => false;
   const hub = await SessionHub.create({
     dataDir: config.dataDir,
+    farmDir: farmFolder,
     workspace,
     resourcesDir: resources.dir,
     repo,
@@ -195,6 +203,7 @@ export async function startOrion(
 
   const account = new AccountService({
     dataDir: config.dataDir,
+    folders,
     coreUrl: config.coreUrl ?? null,
     siteUrl: config.siteUrl ?? null,
     repo,
@@ -202,14 +211,28 @@ export async function startOrion(
     settings,
     runtime: hub.runtime,
     deviceName: `Orbit on ${hostname()}`,
-    onStatus: (status) => emit("account.updated", status),
+    onStatus: (status) => {
+      emit("account.updated", status);
+      void hub.setOwner(status.user?.id ?? "local");
+    },
     onSync: (status) => emit("sync.status", status),
     onRemoteChange: dbChanged,
   });
   farm.guard = (mutation) => account.assertCanMutate(mutation);
   feedback.account = account;
   await account.start();
+  // Each person sees only their own chats.
+  await hub.setOwner(account.status().user?.id ?? "local");
   const billing = new BillingService(account);
+
+  /** Points this PC at another farm folder; Orion starts again on it once this reply is out. */
+  const openFarm = (target: ReturnType<AccountService["openTarget"]>) => {
+    if (!target) return { restarting: false };
+    writeFarmFolders(config.dataDir, target);
+    if (!config.reopen) return { restarting: false };
+    setTimeout(config.reopen, 0);
+    return { restarting: true };
+  };
   const voice = new VoiceSessions({
     farm,
     account,
@@ -472,10 +495,17 @@ export async function startOrion(
         return billing.status();
       case "billing.plans":
         return billing.plans();
+      case "billing.setSource":
+        await account.setUsageSource(msg.source);
+        return billing.status();
       case "billing.checkout":
-        return billing.checkout({ plan: msg.plan, interval: msg.interval });
+        return billing.checkout({ plan: msg.plan, interval: msg.interval, account: msg.account });
       case "billing.portal":
-        return billing.portal();
+        return billing.portal({ account: msg.account });
+      case "farms.create":
+        return account.createFarm(msg.name);
+      case "farms.open":
+        return openFarm(account.openTarget(msg.farmId));
       case "feedback.send":
         return feedback.send({
           kind: msg.kind,
@@ -503,11 +533,23 @@ export async function startOrion(
       case "members.list":
         return account.members();
       case "members.update":
-        return account.updateMember(msg.userId, msg.role);
-      case "members.remove":
-        return account.removeMember(msg.userId);
+        return account.updateMember(msg.userId, {
+          role: msg.role,
+          useFarmPlan: msg.useFarmPlan,
+          monthlyTokenLimit: msg.monthlyTokenLimit,
+        });
+      case "members.remove": {
+        const leaving = msg.userId === account.status().user?.id;
+        const result = await account.removeMember(msg.userId);
+        // Leaving the farm open in its own folder goes back to this PC's own farm.
+        if (leaving && folders.active) openFarm(account.openTarget("local"));
+        return result;
+      }
       case "invites.create":
-        return account.createInvite(msg.email, msg.role);
+        return account.createInvite(msg.email, msg.role, {
+          useFarmPlan: msg.useFarmPlan,
+          monthlyTokenLimit: msg.monthlyTokenLimit,
+        });
       case "invites.revoke":
         return account.revokeInvite(msg.inviteId);
       case "db.mutate":

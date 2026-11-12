@@ -24,6 +24,8 @@ export interface OrionConfig {
   parentWatch?: boolean;
   /** Shuts Orion down cleanly so its parent starts it again; set only when a parent will. */
   restart?: () => void;
+  /** Starts Orion again on the same port (another farm folder); the shell's restart or in-process. */
+  reopen?: () => void;
 }
 
 /** OS application-data directory for Orbit (Windows %APPDATA%, macOS Application Support, XDG on Linux). */

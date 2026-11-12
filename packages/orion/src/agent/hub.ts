@@ -1,5 +1,7 @@
 // Owns every conversation: one Pi AgentSession per Orbit session, persisted as JSONL under
-// <data-dir>/sessions, with Pi events translated into @orbit/protocol events.
+// <farm folder>/sessions, with Pi events translated into @orbit/protocol events. Each person keeps
+// their own chats: the first person seen (signed out counts as "local") keeps sessions/ itself, so
+// chats from before accounts stay where they were; everyone else gets sessions/people/<id>/.
 // allow: SIZE_OK -- Pi lifecycle callbacks, settlement and deferred file writes share this conversation state machine.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -72,6 +74,10 @@ interface LiveSession {
 
 export interface HubOptions {
   dataDir: string;
+  /** The open farm's folder (its database and chats); the data folder for this PC's own farm. */
+  farmDir?: string;
+  /** Whose chats to show: the signed-in person's id, or "local" while signed out. */
+  owner?: string;
   workspace: Workspace;
   resourcesDir: string;
   repo: Repository;
@@ -174,8 +180,10 @@ function sameMessage(a: Record<string, unknown>, b: Record<string, unknown>): bo
 export class SessionHub {
   readonly runtime: ModelRuntime;
   readonly credentials: FileCredentialStore;
-  private readonly sessionsDir: string;
-  private readonly indexFile: string;
+  private readonly sessionsRoot: string;
+  private sessionsDir: string;
+  private indexFile: string;
+  private owner: string;
   private readonly agentDir: string;
   private index = new Map<string, IndexEntry>();
   private live = new Map<string, LiveSession>();
@@ -189,15 +197,53 @@ export class SessionHub {
   ) {
     this.runtime = runtime;
     this.credentials = credentials;
-    this.sessionsDir = join(opts.dataDir, "sessions");
-    this.indexFile = join(this.sessionsDir, "index.json");
+    this.sessionsRoot = join(opts.farmDir ?? opts.dataDir, "sessions");
     this.agentDir = join(opts.dataDir, "pi");
-    mkdirSync(this.sessionsDir, { recursive: true });
-    if (existsSync(this.indexFile)) {
-      for (const e of JSON.parse(readFileSync(this.indexFile, "utf8")) as IndexEntry[]) {
-        this.index.set(e.id, e);
-      }
+    this.owner = opts.owner ?? "local";
+    this.sessionsDir = this.ownerDir(this.owner);
+    this.indexFile = join(this.sessionsDir, "index.json");
+    this.loadIndex();
+  }
+
+  /** sessions/ belongs to the first person seen; signing in takes over chats made signed out. */
+  private ownerDir(owner: string): string {
+    mkdirSync(this.sessionsRoot, { recursive: true });
+    const file = join(this.sessionsRoot, "owner.json");
+    let first = existsSync(file)
+      ? (JSON.parse(readFileSync(file, "utf8")) as { owner: string }).owner
+      : null;
+    if (first === null || (first === "local" && owner !== "local")) {
+      first = owner;
+      writeFileSync(file, `${JSON.stringify({ owner })}\n`);
     }
+    const dir =
+      owner === first
+        ? this.sessionsRoot
+        : join(this.sessionsRoot, "people", encodeURIComponent(owner));
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  private loadIndex() {
+    this.index.clear();
+    if (!existsSync(this.indexFile)) return;
+    for (const e of JSON.parse(readFileSync(this.indexFile, "utf8")) as IndexEntry[]) {
+      this.index.set(e.id, e);
+    }
+  }
+
+  /**
+   * Shows another person's chats (someone signed in or out). Running conversations stop first, and
+   * the app is told to reload its chat list.
+   */
+  async setOwner(owner: string): Promise<void> {
+    if (owner === this.owner) return;
+    await this.dispose();
+    this.owner = owner;
+    this.sessionsDir = this.ownerDir(owner);
+    this.indexFile = join(this.sessionsDir, "index.json");
+    this.loadIndex();
+    this.opts.emit("sessions.reset", {});
   }
 
   static async create(opts: HubOptions): Promise<SessionHub> {
@@ -568,6 +614,7 @@ export class SessionHub {
         ORION_SYSTEM_PROMPT +
         computerPrompt({
           ...this.opts,
+          dataDir: this.opts.farmDir ?? this.opts.dataDir,
           workspaceDir: this.opts.workspace.dir,
           localOrionError: this.opts.localOrionError?.() ?? null,
         }) +

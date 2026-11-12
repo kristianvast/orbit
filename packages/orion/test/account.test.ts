@@ -3,7 +3,7 @@
 // Core's upstream fetch.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { webcrypto } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type CoreDb,
@@ -11,6 +11,7 @@ import {
   createApp,
   createLogMailer,
   createTokenResolver,
+  farmMembers,
   llmUsage,
   migrate,
 } from "@core/api";
@@ -20,6 +21,7 @@ import { pg } from "@orbit/schema";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { type OrionApp, startOrion } from "../src/app";
+import type { OrionConfig } from "../src/config";
 import { EncryptedFileStore } from "../src/secrets";
 import { connect, removeDir, TOKEN, tempDir, waitFor } from "./helpers";
 
@@ -137,7 +139,7 @@ afterEach(async () => {
   removeDir(dir);
 });
 
-async function boot(): Promise<OrionClient> {
+async function boot(extra: Partial<OrionConfig> = {}): Promise<OrionClient> {
   orion = await startOrion({
     port: 0,
     token: TOKEN,
@@ -147,6 +149,7 @@ async function boot(): Promise<OrionClient> {
     gatewayUrl: null,
     appSource: null,
     coreUrl,
+    ...extra,
   });
   client = await connect(orion);
   return client;
@@ -193,10 +196,9 @@ describe("Orion account", () => {
     expect((await db.select().from(pg.animals)).length).toBe(0);
   });
 
-  test("register claims the local farm, syncs writes to Core and a paid plan runs on the cloud model", async () => {
+  test("register leaves the farm on this PC; farms.create puts it in the cloud, syncs writes and a paid plan runs on the cloud model", async () => {
     const c = await boot();
     const farmId = c.server?.farmId as string;
-    const upToDate = waitFor(c, "sync.status", (s) => s.state === "up_to_date");
     const status = await c.request("account.register", {
       email: "kari@farm.test",
       password: PASSWORD,
@@ -206,7 +208,19 @@ describe("Orion account", () => {
     expect(status).toMatchObject({
       state: "signed_in",
       user: { email: "kari@farm.test" },
-      farm: { id: farmId, role: "owner" },
+      farm: null,
+      farms: [],
+      localFarm: { id: farmId },
+    });
+    expect(await db.select().from(pg.farms)).toEqual([]);
+    expect(await db.select().from(farmMembers)).toEqual([]);
+
+    const upToDate = waitFor(c, "sync.status", (s) => s.state === "up_to_date");
+    const shared = await c.request("farms.create", { name: "Hill farm" });
+    expect(shared).toMatchObject({
+      farm: { id: farmId, name: "Hill farm", role: "owner" },
+      farms: [{ id: farmId, role: "owner" }],
+      localFarm: null,
     });
     await upToDate;
 
@@ -281,8 +295,8 @@ describe("Orion account", () => {
       password: PASSWORD,
       acceptTerms: true,
     });
-    expect(unlinked).toMatchObject({ state: "signed_in", farm: null });
-    expect(unlinked.linkError).toContain("ask one of its owners for an invite");
+    expect(unlinked).toMatchObject({ state: "signed_in", farm: null, farms: [] });
+    expect(unlinked.linkError).toBeUndefined();
 
     expect(unlinked.user?.emailVerified).toBe(false);
     await verifyEmail("ola@farm.test");
@@ -403,7 +417,7 @@ describe("Orion account", () => {
     expect((await updated).user?.email).toBe("google@farm.test");
     expect(await c.request("account.status", {})).toMatchObject({
       state: "signed_in",
-      farm: { role: "owner" },
+      farm: null,
     });
 
     expect((await post(callback, { credential: await googleCredential() })).status).toBe(410);
@@ -431,12 +445,18 @@ describe("Orion account", () => {
     const c = await boot();
     const localFarmId = c.server?.farmId as string;
     expect(localFarmId).not.toBe(farm.id);
-    const upToDate = waitFor(c, "sync.status", (s) => s.state === "up_to_date");
     const status = await c.request("account.login", {
       email: "kari@farm.test",
       password: PASSWORD,
     });
-    expect(status).toMatchObject({ state: "signed_in", farm: { id: localFarmId, role: "owner" } });
+    expect(status).toMatchObject({
+      state: "signed_in",
+      farm: null,
+      farms: [{ id: farm.id, name: "Website farm", role: "owner" }],
+    });
+    const upToDate = waitFor(c, "sync.status", (s) => s.state === "up_to_date");
+    const shared = await c.request("farms.create", {});
+    expect(shared).toMatchObject({ farm: { id: localFarmId, role: "owner" } });
     await upToDate;
     expect(await c.request("billing.status", {})).toMatchObject({ plan: "cam2", status: "active" });
 
@@ -543,6 +563,7 @@ describe("Orion account", () => {
       password: PASSWORD,
       acceptTerms: true,
     });
+    await c.request("farms.create", {});
     await db.execute(sql`
       INSERT INTO farm_subscriptions (farm_id, plan, interval, status)
       VALUES (${farmId}, 'cam2', 'month', 'active')
@@ -638,6 +659,186 @@ describe("Orion account", () => {
     const stored = (await db.execute(sql`SELECT files FROM submissions`)) as { rows: unknown[] };
     expect(stored.rows).toEqual([
       { files: [{ path: "index.html", content: "<h1>Morning round</h1>" }] },
+    ]);
+  });
+
+  test("a member runs on their own plan until the owner allows the farm plan, then switches", async () => {
+    const c = await boot();
+    const farmId = c.server?.farmId as string;
+    const owner = await coreCall<{ session: { token: string } }>("POST", "/v1/auth/register", {
+      email: "owner@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    await coreCall("POST", "/v1/farms", { id: farmId, name: "Hill farm" }, owner.session.token);
+    await db.execute(sql`
+      INSERT INTO farm_subscriptions (farm_id, plan, interval, status)
+      VALUES (${farmId}, 'cam2', 'month', 'active')
+    `);
+    const { code } = await coreCall<{ code: string }>(
+      "POST",
+      `/v1/farms/${farmId}/invites`,
+      { email: "kari@farm.test", role: "worker" },
+      owner.session.token,
+    );
+    const signedIn = await c.request("account.register", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    const kari = signedIn.user?.id as string;
+    await verifyEmail("kari@farm.test");
+    await c.request("account.refresh", {});
+    expect(await c.request("account.acceptInvite", { code })).toMatchObject({
+      farm: { id: farmId, role: "worker" },
+    });
+
+    const ask = async (text: string) => {
+      const { session } = await c.request("sessions.create", { title: text });
+      const settled = waitFor(c, "agent.settled", (e) => e.sessionId === session.id, 15_000);
+      await c.request("chat.prompt", { sessionId: session.id, text });
+      expect((await settled).reason).toBe("completed");
+    };
+    expect(await c.request("billing.status", {})).toMatchObject({
+      account: "personal",
+      farmPlanAllowed: false,
+      farm: { plan: "cam2" },
+    });
+    await ask("On my own plan");
+    expect(
+      (await db.select().from(llmUsage)).every((u) => u.accountId === kari && u.userId === kari),
+    ).toBe(true);
+
+    await coreCall(
+      "PATCH",
+      `/v1/farms/${farmId}/members/${kari}`,
+      { useFarmPlan: true },
+      owner.session.token,
+    );
+    expect(await c.request("billing.setSource", { source: "farm" })).toMatchObject({
+      account: "farm",
+      plan: "cam2",
+      usageSource: "farm",
+      farmPlanAllowed: true,
+    });
+    await db.delete(llmUsage);
+    await ask("On the farm plan");
+    const rows = await db.select().from(llmUsage);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((u) => u.accountId === farmId && u.userId === kari)).toBe(true);
+    const { members } = await c.request("members.list", {});
+    expect(members.find((m) => m.userId === kari)).toMatchObject({
+      useFarmPlan: true,
+      usageSource: "farm",
+      usage: { farmTokens: rows.reduce((n, u) => n + u.totalTokens, 0), ownTokens: 0 },
+    });
+  });
+
+  test("each person on this PC sees only their own chats", async () => {
+    const c = await boot();
+    const titles = async () =>
+      (await c.request("sessions.list", {})).sessions.map((s) => s.title).sort();
+    await c.request("sessions.create", { title: "Before signing in" });
+
+    // The first person to sign in keeps the chats made before accounts.
+    const toKari = waitFor(c, "sessions.reset", () => true);
+    await c.request("account.register", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    await toKari;
+    expect(await titles()).toEqual(["Before signing in"]);
+    await c.request("sessions.create", { title: "Kari's" });
+
+    await c.request("account.logout", {});
+    expect(await titles()).toEqual([]);
+    await c.request("account.register", {
+      email: "ola@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    expect(await titles()).toEqual([]);
+    await c.request("sessions.create", { title: "Ola's" });
+    await c.request("account.logout", {});
+
+    await c.request("account.login", { email: "kari@farm.test", password: PASSWORD });
+    expect(await titles()).toEqual(["Before signing in", "Kari's"]);
+    client?.close();
+    await orion?.stop();
+    const again = await boot();
+    expect((await again.request("sessions.list", {})).sessions.map((s) => s.title).sort()).toEqual([
+      "Before signing in",
+      "Kari's",
+    ]);
+  });
+
+  test("a member opens another farm in its own folder and goes back to this PC's farm", async () => {
+    const owner = await coreCall<{ session: { token: string } }>("POST", "/v1/auth/register", {
+      email: "owner@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    const { farm: hill } = await coreCall<{ farm: { id: string } }>(
+      "POST",
+      "/v1/farms",
+      { name: "Hill farm" },
+      owner.session.token,
+    );
+    const { code } = await coreCall<{ code: string }>(
+      "POST",
+      `/v1/farms/${hill.id}/invites`,
+      { email: "kari@farm.test", role: "worker" },
+      owner.session.token,
+    );
+
+    let reopened = Promise.withResolvers<void>();
+    const reopen = () => reopened.resolve();
+    let c = await boot({ reopen });
+    const ownFarm = c.server?.farmId as string;
+    await c.request("account.register", {
+      email: "kari@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    await verifyEmail("kari@farm.test");
+    await c.request("account.refresh", {});
+    const joined = await c.request("account.acceptInvite", { code });
+    expect(joined).toMatchObject({
+      farm: null,
+      farms: [{ id: hill.id, name: "Hill farm", role: "worker" }],
+      localFarm: { id: ownFarm },
+    });
+    await c.request("sessions.create", { title: "On my own farm" });
+
+    expect(await c.request("farms.open", { farmId: hill.id })).toEqual({ restarting: true });
+    await reopened.promise;
+    client?.close();
+    await orion?.stop();
+    reopened = Promise.withResolvers<void>();
+    c = await boot({ reopen });
+    expect(c.server?.farmId).toBe(hill.id);
+    expect(await c.request("account.status", {})).toMatchObject({
+      farm: { id: hill.id, role: "worker" },
+      localFarm: { id: ownFarm },
+    });
+    expect(existsSync(join(dir, "farms", hill.id, "orbit.sqlite"))).toBe(true);
+    expect((await c.request("sessions.list", {})).sessions).toEqual([]);
+    // Open again: nothing to do.
+    expect(await c.request("farms.open", { farmId: hill.id })).toEqual({ restarting: false });
+    const stranger = await c
+      .request("farms.open", { farmId: crypto.randomUUID() })
+      .catch((e: unknown) => e);
+    expect(stranger).toMatchObject({ code: "not_found" });
+
+    expect(await c.request("farms.open", { farmId: "local" })).toEqual({ restarting: true });
+    await reopened.promise;
+    client?.close();
+    await orion?.stop();
+    c = await boot({ reopen });
+    expect(c.server?.farmId).toBe(ownFarm);
+    expect((await c.request("sessions.list", {})).sessions.map((s) => s.title)).toEqual([
+      "On my own farm",
     ]);
   });
 });

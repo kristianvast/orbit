@@ -38,8 +38,8 @@ export class BillingService {
     return this.link("checkout", params);
   }
 
-  async portal(): Promise<{ url: string }> {
-    return this.link("portal", {});
+  async portal(params: RequestParams<"billing.portal"> = {}): Promise<{ url: string }> {
+    return this.link("portal", params);
   }
 
   private async link(path: "checkout" | "portal", body: unknown): Promise<{ url: string }> {

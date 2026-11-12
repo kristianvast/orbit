@@ -1,6 +1,7 @@
-// Orbit account: signs this install in to Core, links the local farm to the account, runs
+// Orbit account: signs this install in to Core, links the open farm to the account, runs
 // @orbit/sync with the user's session, and points the model at Core's metered cloud gateway.
-// Signed out (or with no Core configured) Orbit keeps working fully locally.
+// Signed out (or with no Core configured) Orbit keeps working fully locally. An account needs no
+// farm: signing in never puts this PC's farm in the cloud; createFarm does, on request.
 // The session token lives encrypted in the data folder (account-session.enc.json), so it lasts
 // exactly as long as the farm's data: an update keeps it, deleting the data signs out. It is not
 // in the OS keychain, which Windows empties when an admin resets the user's password.
@@ -10,6 +11,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type {
+  AccountFarm,
   AccountStatus,
   AccountUser,
   ErrorCode,
@@ -17,6 +19,7 @@ import type {
   FarmMember,
   FarmRole,
   SyncState,
+  UsageSource,
 } from "@orbit/protocol";
 import { canWriteTable, type SyncedTable } from "@orbit/schema";
 import { createSyncEngine, type SyncEngine, type SyncStatus } from "@orbit/sync";
@@ -25,6 +28,7 @@ import { GATEWAY_TITLE_MODEL } from "../agent/title";
 import type { Repository } from "../db/repo";
 import { EncryptedFileStore, type SecretStore } from "../secrets";
 import type { SettingsStore } from "../settings";
+import type { FarmFolders } from "./farm-folders";
 
 export const GATEWAY_MODEL = "orbit-default";
 const SESSION_REF = "core-session";
@@ -45,8 +49,27 @@ export class AccountError extends Error {
 interface Stored {
   user: AccountUser | null;
   farm: AccountStatus["farm"];
+  farms?: AccountFarm[];
   linkError?: string;
 }
+
+interface MeFarm {
+  farmId: string;
+  role: FarmRole;
+  name: string | null;
+  plan?: string;
+  useFarmPlan?: boolean;
+  usageSource?: UsageSource | null;
+}
+
+const accountFarm = (f: MeFarm): AccountFarm => ({
+  id: f.farmId,
+  name: f.name,
+  role: f.role,
+  plan: f.plan ?? "free",
+  useFarmPlan: f.useFarmPlan ?? true,
+  usageSource: f.usageSource ?? null,
+});
 
 interface SyncEvent {
   state: SyncState;
@@ -57,6 +80,8 @@ interface SyncEvent {
 
 export interface AccountServiceOptions {
   dataDir: string;
+  /** Which farm folder is open (this PC's own farm when `active` is null). */
+  folders?: FarmFolders;
   coreUrl: string | null;
   /** Website that runs Google sign-in for the app; https://pecorva.com when null or unset. */
   siteUrl?: string | null;
@@ -142,13 +167,43 @@ export class AccountService {
 
   status(): AccountStatus {
     const state = !this.coreUrl ? "unavailable" : this.token ? "signed_in" : "signed_out";
+    const farm = this.token ? this.stored.farm : null;
+    const farms = this.token ? (this.stored.farms ?? []) : [];
     return {
       state,
       coreUrl: this.coreUrl,
       user: this.token ? this.stored.user : null,
-      farm: this.token ? this.stored.farm : null,
+      farm,
+      farms,
+      localFarm: this.localFarm(farm, farms),
       ...(this.token && this.stored.linkError ? { linkError: this.stored.linkError } : {}),
     };
+  }
+
+  /** This PC's own farm when the picker should offer it: not open as, or listed as, a cloud farm. */
+  private localFarm(
+    open: AccountStatus["farm"],
+    farms: AccountFarm[],
+  ): { id: string; name: string | null } | null {
+    const folders = this.opts.folders;
+    const local = folders?.active ? folders.root : this.opts.repo.farm();
+    if (!local || local.id === open?.id || farms.some((f) => f.id === local.id)) return null;
+    return { id: local.id, name: local.name };
+  }
+
+  /** Where `farms.open` should point the farm folders, or null when that farm is already open. */
+  openTarget(farmId: string): FarmFolders | null {
+    const folders = this.opts.folders ?? { active: null, root: null };
+    const here = folders.active ? folders.root : this.opts.repo.farm();
+    const root = here ? { id: here.id, name: here.name } : null;
+    if (farmId === "local" || farmId === root?.id) {
+      return folders.active ? { active: null, root } : null;
+    }
+    if (farmId === folders.active) return null;
+    if (!(this.token ? (this.stored.farms ?? []) : []).some((f) => f.id === farmId)) {
+      throw new AccountError("not_found", "You are not a member of that farm.");
+    }
+    return { active: farmId, root };
   }
 
   syncStatus(): SyncEvent {
@@ -158,11 +213,16 @@ export class AccountService {
 
   /** Server-only connection credentials; never included in account status or protocol frames. */
   cloudConnection(): { url: string; headers: Record<string, string> } {
-    const farm = this.requireFarm();
+    this.requireSession();
     if (!this.coreUrl || !this.token) throw new AccountError("unauthorized", "Sign in first.");
+    // Without a farm the request runs on the person's own plan.
+    const farm = this.stored.farm;
     return {
       url: this.coreUrl,
-      headers: { authorization: `Bearer ${this.token}`, [FARM_HEADER]: farm.id },
+      headers: {
+        authorization: `Bearer ${this.token}`,
+        ...(farm ? { [FARM_HEADER]: farm.id } : {}),
+      },
     };
   }
 
@@ -279,30 +339,88 @@ export class AccountService {
     return { members, invites };
   }
 
-  async updateMember(userId: string, role: FarmRole) {
+  async updateMember(
+    userId: string,
+    patch: { role?: FarmRole; useFarmPlan?: boolean; monthlyTokenLimit?: number | null },
+  ) {
     const farmId = this.requireFarm().id;
-    await this.call("PATCH", `/v1/farms/${farmId}/members/${encodeURIComponent(userId)}`, { role });
+    await this.call("PATCH", `/v1/farms/${farmId}/members/${encodeURIComponent(userId)}`, patch);
     if (userId === this.stored.user?.id) await this.refreshRole();
     return this.members();
   }
 
-  async removeMember(userId: string) {
+  /** Removing yourself leaves the farm: you stay signed in, and the farm closes on this PC. */
+  async removeMember(userId: string): Promise<{ members: FarmMember[]; invites: FarmInvite[] }> {
     const farmId = this.requireFarm().id;
     await this.call("DELETE", `/v1/farms/${farmId}/members/${encodeURIComponent(userId)}`);
     if (userId === this.stored.user?.id) {
-      await this.clearSession();
+      await this.link();
+      this.activate();
       this.publish();
       return { members: [], invites: [] };
     }
     return this.members();
   }
 
-  async createInvite(email: string, role: FarmRole): Promise<{ invite: FarmInvite; code: string }> {
+  async createInvite(
+    email: string,
+    role: FarmRole,
+    extra: { useFarmPlan?: boolean; monthlyTokenLimit?: number | null } = {},
+  ): Promise<{ invite: FarmInvite; code: string }> {
     const farmId = this.requireFarm().id;
-    return (await this.call("POST", `/v1/farms/${farmId}/invites`, { email, role })) as {
-      invite: FarmInvite;
-      code: string;
-    };
+    return (await this.call("POST", `/v1/farms/${farmId}/invites`, {
+      email,
+      role,
+      ...extra,
+    })) as { invite: FarmInvite; code: string };
+  }
+
+  /** Chooses whether this person's Orion runs on the open farm's plan or their own. */
+  async setUsageSource(source: UsageSource | null): Promise<void> {
+    const farmId = this.requireFarm().id;
+    await this.call("PATCH", `/v1/farms/${farmId}/me`, { usageSource: source });
+    await this.link();
+    this.publish();
+  }
+
+  /**
+   * Puts this PC's own farm in the cloud, owned by the signed-in person, so others can be invited.
+   * An empty cloud farm the person already owns (a plan bought on the website before Orbit was
+   * installed) is taken over, with its plan, instead of starting a second farm.
+   */
+  async createFarm(name?: string): Promise<AccountStatus> {
+    this.requireSession();
+    if (this.opts.folders?.active) {
+      throw new AccountError("not_ready", "Open this PC's own farm first.");
+    }
+    if (this.stored.farm) throw new AccountError("conflict", "This farm is already in the cloud.");
+    const me = (await this.call("GET", "/v1/me")) as { user: AccountUser; farms: MeFarm[] };
+    const trimmed = name?.trim();
+    if (trimmed) this.opts.repo.updateFarm({ name: trimmed });
+    const farm = this.opts.repo.ensureFarm();
+    const owned = me.farms
+      .filter((f) => f.role === "owner")
+      .sort(
+        (a, b) => Number((b.plan ?? "free") !== "free") - Number((a.plan ?? "free") !== "free"),
+      );
+    let claimed = false;
+    for (const target of owned) {
+      try {
+        await this.call("POST", "/v1/farms", {
+          id: farm.id,
+          name: farm.name,
+          adopt: target.farmId,
+        });
+        claimed = true;
+        break;
+      } catch (error) {
+        if (!(error instanceof AccountError) || error.code !== "conflict") throw error;
+      }
+    }
+    if (!claimed) await this.call("POST", "/v1/farms", { id: farm.id, name: farm.name });
+    await this.link();
+    this.activate();
+    return this.publish();
   }
 
   async revokeInvite(inviteId: string) {
@@ -343,60 +461,39 @@ export class AccountService {
   }
 
   /**
-   * Links the local farm to the account: already a member -> use that role. A farm the cloud does
-   * not know -> take over a cloud farm the account owns (e.g. bought on the website, paid plans
-   * first) when that one is still empty; when it already holds data and this install has none of
-   * its own, open the cloud farm here instead; otherwise claim the local farm as a new cloud farm.
-   * Owned by someone else -> keep working locally with linkError. A fresh install without a local
-   * farm adopts the account's first farm and syncs it down.
+   * Finds which of the account's farms is open here. A farm opened in its own folder -> that
+   * membership (gone -> linkError). This PC's own farm -> its membership when it is in the cloud,
+   * else no farm (it stays local until createFarm). A fresh install with no farm of its own opens
+   * the account's first farm and syncs it down. Nothing is ever created in the cloud here.
    */
   private async link(): Promise<void> {
-    const me = (await this.call("GET", "/v1/me")) as {
-      user: AccountUser;
-      farms: { farmId: string; role: FarmRole; name: string | null; plan?: string }[];
-    };
+    const me = (await this.call("GET", "/v1/me")) as { user: AccountUser; farms: MeFarm[] };
+    const farms = me.farms.map(accountFarm);
+    const active = this.opts.folders?.active ?? null;
     const local = this.opts.repo.farm();
-    const mine = local ? me.farms.find((f) => f.farmId === local.id) : me.farms[0];
-    if (mine) {
+    if (active) {
+      const mine = me.farms.find((f) => f.farmId === active);
+      if (!mine) {
+        this.save({
+          user: me.user,
+          farm: null,
+          farms,
+          linkError: "You are no longer a member of this farm.",
+        });
+        return;
+      }
+      this.opts.repo.placeCloudFarm(mine.farmId, mine.name);
       const name = mine.name ?? local?.name ?? null;
-      this.save({ user: me.user, farm: { id: mine.farmId, name, role: mine.role } });
+      this.save({ user: me.user, farm: { id: mine.farmId, name, role: mine.role }, farms });
       return;
     }
-    const farm = local ?? this.opts.repo.ensureFarm();
-    const owned = me.farms
-      .filter((f) => f.role === "owner")
-      .sort(
-        (a, b) => Number((b.plan ?? "free") !== "free") - Number((a.plan ?? "free") !== "free"),
-      );
-    for (const target of owned) {
-      try {
-        await this.call("POST", "/v1/farms", {
-          id: farm.id,
-          name: farm.name,
-          adopt: target.farmId,
-        });
-        this.save({ user: me.user, farm: { id: farm.id, name: farm.name, role: "owner" } });
-        return;
-      } catch (error) {
-        if (!(error instanceof AccountError) || error.code !== "conflict") throw error;
-        if (this.opts.repo.discardEmptyFarm(farm.id)) {
-          this.save({
-            user: me.user,
-            farm: { id: target.farmId, name: target.name, role: target.role },
-          });
-          return;
-        }
-      }
+    const mine = local ? me.farms.find((f) => f.farmId === local.id) : me.farms[0];
+    if (!mine) {
+      this.save({ user: me.user, farm: null, farms });
+      return;
     }
-    try {
-      const claimed = (await this.call("POST", "/v1/farms", { id: farm.id, name: farm.name })) as {
-        farm: { id: string; role: FarmRole };
-      };
-      this.save({ user: me.user, farm: { id: farm.id, name: farm.name, role: claimed.farm.role } });
-    } catch (error) {
-      if (!(error instanceof AccountError) || error.code !== "conflict") throw error;
-      this.save({ user: me.user, farm: null, linkError: error.message });
-    }
+    const name = mine.name ?? local?.name ?? null;
+    this.save({ user: me.user, farm: { id: mine.farmId, name, role: mine.role }, farms });
   }
 
   private async refreshRole(): Promise<void> {
@@ -406,11 +503,15 @@ export class AccountService {
 
   private activate(): void {
     const farm = this.stored.farm;
-    if (!this.coreUrl || !this.token || !farm) {
+    if (!this.coreUrl || !this.token) {
       void this.stopSync();
       return;
     }
-    this.configureGateway(farm.id, this.token);
+    this.configureGateway(farm?.id ?? null, this.token);
+    if (!farm) {
+      void this.stopSync();
+      return;
+    }
     if (this.engine) {
       this.engine.setToken(this.token);
       return;
@@ -434,13 +535,14 @@ export class AccountService {
     engine.start();
   }
 
-  private configureGateway(farmId: string, token: string): void {
+  /** Without a farm Core bills the person's own plan. */
+  private configureGateway(farmId: string | null, token: string): void {
     const { runtime, settings } = this.opts;
     runtime.registerProvider(GATEWAY_PROVIDER, {
       name: "Orbit cloud",
       baseUrl: `${this.coreUrl}/v1/llm/v1`,
       api: "openai-completions",
-      headers: { [FARM_HEADER]: farmId },
+      headers: farmId ? { [FARM_HEADER]: farmId } : {},
       models: [
         {
           id: GATEWAY_MODEL,
