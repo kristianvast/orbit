@@ -26,7 +26,7 @@ import type {
 import type { Repository } from "../db/repo";
 import { assertNever } from "../services/camera-proxy";
 import type { SettingsStore } from "../settings";
-import type { AccessGate } from "./access";
+import { type AccessGate, protectedFileTools } from "./access";
 import { billingError } from "./billing-error";
 import {
   type ChatHistory,
@@ -732,6 +732,7 @@ export class SessionHub {
       }),
       customTools: [
         ...shellTools(this.opts.workspace.dir, shellPath, process.platform, repeats),
+        ...protectedFileTools(this.opts.workspace.dir, this.opts.settings.file),
         ...this.opts.tools,
       ].map((tool) => this.opts.access.wrap(tool, live.id)),
     });

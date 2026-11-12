@@ -1,7 +1,14 @@
 // The farmer's yes before Orion first runs commands, first uses the browser and first operates the
 // screen: one question per tool, each asked on that tool's first use. A yes is kept in settings;
 // a no lasts for the rest of the request.
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
+import {
+  createEditToolDefinition,
+  createWriteToolDefinition,
+  type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import type { AccessTool, EventBody } from "@orbit/protocol";
 import type { SettingsStore } from "../settings";
 import type { Emit } from "./hub";
@@ -10,6 +17,12 @@ import type { Emit } from "./hub";
 export const ACCESS_TOOLS: Readonly<Record<string, AccessTool>> = {
   bash: "shell",
   powershell: "shell",
+  // These run code Orion wrote (connector code, install scripts, its own edited build), so they
+  // are commands too and wait for the same yes.
+  connector_run: "shell",
+  connector_scaffold: "shell",
+  local_ui_build: "shell",
+  orbit_update: "shell",
   browser: "browser",
   computer: "computer",
 };
@@ -140,4 +153,47 @@ export class AccessGate {
     ask.settle(allow);
     this.emit("access.resolved", { requestId: ask.body.requestId, allow });
   }
+}
+
+function realPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    try {
+      return join(realpathSync(dirname(path)), basename(path));
+    } catch {
+      return path;
+    }
+  }
+}
+
+/** Whether a file tool's path (relative, absolute, ~ or @-prefixed, as Pi accepts) is that file. */
+export function isSameFile(cwd: string, raw: string, file: string): boolean {
+  const bare = raw.startsWith("@") ? raw.slice(1) : raw;
+  const expanded = bare === "~" || bare.startsWith("~/") ? join(homedir(), bare.slice(1)) : bare;
+  const a = realPath(resolve(cwd, expanded));
+  const b = realPath(file);
+  return process.platform === "linux" ? a === b : a.toLowerCase() === b.toLowerCase();
+}
+
+/**
+ * Pi's write and edit, refusing Orbit's settings file: it holds the farmer's switches for what
+ * Orion may use, so Orion must not be able to turn them on by editing it.
+ */
+export function protectedFileTools(cwd: string, settingsFile: string): ToolDefinition[] {
+  return [createWriteToolDefinition(cwd), createEditToolDefinition(cwd)].map((tool) => {
+    const base = tool as unknown as ToolDefinition;
+    return {
+      ...base,
+      async execute(toolCallId, params, ...rest) {
+        const path = (params as { path?: unknown }).path;
+        if (typeof path === "string" && isSameFile(cwd, path, settingsFile)) {
+          throw new Error(
+            "Not changed: this is Orbit's own settings file. It holds the farmer's choices, including what Orion may use, and only the farmer changes it in Orbit's Settings. Do not try again or work around it.",
+          );
+        }
+        return base.execute(toolCallId, params, ...rest);
+      },
+    } as ToolDefinition;
+  });
 }

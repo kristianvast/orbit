@@ -34,7 +34,8 @@ const DEFAULTS: StoredSettings = {
 };
 
 export class SettingsStore {
-  private file: string;
+  /** settings.json; file tools refuse it so Orion cannot change the farmer's choices. */
+  readonly file: string;
   private value: StoredSettings;
 
   constructor(dataDir: string) {

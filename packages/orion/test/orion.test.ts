@@ -573,6 +573,8 @@ describe("local UI build", () => {
     fakeCheckout(dir, { typecheck: "true", "build:local": BUILD_OK });
     const { app, client } = await setup(dir);
     const { session } = await client.request("sessions.create", {});
+    // Building runs the checkout's scripts, so it needs the farmer's yes to running commands.
+    await client.request("settings.update", { toolAccess: { shell: true } });
     const updated = waitFor(client, "localUi.updated", () => true);
     const firstBuild = waitFor(client, "tool.end", (e) => e.sessionId === session.id);
     const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
@@ -605,11 +607,34 @@ describe("local UI build", () => {
     expect((await fetch(`${origin}/app/${TOKEN}/`)).status).toBe(404);
   });
 
+  test("with Run commands off, a build waits for the yes and Not now builds nothing", async () => {
+    const dir = tempDir();
+    fakeCheckout(dir, { typecheck: "true", "build:local": BUILD_OK });
+    const { client } = await setup(dir);
+    const { session } = await client.request("sessions.create", {});
+    const asked = waitFor(client, "access.request", (e) => e.sessionId === session.id);
+    const toolEnd = waitFor(client, "tool.end", (e) => e.sessionId === session.id);
+    const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
+    await client.request("chat.prompt", { sessionId: session.id, text: "build my orbit" });
+    const request = await asked;
+    expect(request.tool).toBe("shell");
+    expect((await client.request("localUi.status", {})).state).toBe("none");
+    await client.request("access.respond", { requestId: request.requestId, allow: false });
+    const end = await toolEnd;
+    await settled;
+    expect(end.isError).toBe(true);
+    expect(end.result).toContain("has not given Orion access to run commands");
+    expect((await client.request("localUi.status", {})).state).toBe("none");
+    expect(existsSync(join(dir, "app", "apps", "orbit", "dist"))).toBe(false);
+  });
+
   test("a failing typecheck reports the step and leaves the original app in use", async () => {
     const dir = tempDir();
     fakeCheckout(dir, { typecheck: "echo 'TS2322 nope' && exit 1", "build:local": BUILD_OK });
     const { client } = await setup(dir);
     const { session } = await client.request("sessions.create", {});
+    // Building runs the checkout's scripts, so it needs the farmer's yes to running commands.
+    await client.request("settings.update", { toolAccess: { shell: true } });
     const toolEnd = waitFor(client, "tool.end", (e) => e.sessionId === session.id);
     const settled = waitFor(client, "agent.settled", (e) => e.sessionId === session.id);
     await client.request("chat.prompt", { sessionId: session.id, text: "build my orbit" });

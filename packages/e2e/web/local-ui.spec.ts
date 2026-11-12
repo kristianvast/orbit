@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E_ORION_PORT, E2E_TOKEN, E2E_VITE_PORT, SEED } from "../src/index";
-import { startChat, toolCard } from "./helpers";
+import { setToolAccess, startChat, toolCard } from "./helpers";
 
 const LOCAL_BASE = `http://127.0.0.1:${E2E_ORION_PORT}/app/${E2E_TOKEN}/`;
 const SHIPPED_ORIGIN = `http://127.0.0.1:${E2E_VITE_PORT}`;
@@ -12,6 +12,8 @@ test("Orion builds your own Orbit, the app opens it, safe mode skips it, and you
 }) => {
   // local_ui_build runs the real typecheck and vite build of apps/orbit.
   test.setTimeout(300_000);
+  // Building runs the checkout's scripts, so it needs the yes to running commands.
+  await setToolAccess(page, "shell", true);
   await startChat(page, "build my orbit");
   await expect(toolCard(page, "local_ui_build")).toHaveAttribute("data-tool-status", "done", {
     timeout: 240_000,

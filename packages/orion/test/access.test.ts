@@ -1,8 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { createOrionClient, type OrionClient } from "@orbit/protocol/client";
-import { AccessDenied, AccessGate } from "../src/agent/access";
+import {
+  ACCESS_TOOLS,
+  AccessDenied,
+  AccessGate,
+  isSameFile,
+  protectedFileTools,
+} from "../src/agent/access";
 import type { OrionApp } from "../src/app";
 import { SettingsStore } from "../src/settings";
 import { connect, record, removeDir, startApp, TOKEN, tempDir, waitFor } from "./helpers";
@@ -145,4 +152,127 @@ test("an allowed question is remembered as accepted, and turning a switch off ke
   const on = await client.request("settings.update", { toolAccess: { browser: true } });
   expect(on.toolAccess).toEqual({ shell: false, browser: true, computer: false });
   expect(on.toolAccessAccepted).toEqual({ shell: true, browser: true, computer: false });
+});
+
+test("tools that run code Orion wrote wait for the yes to running commands, and a no runs nothing", async () => {
+  const dir = tempDir();
+  cleanup.push(() => removeDir(dir));
+  const asked: Array<{ type: string; tool?: string; requestId?: string }> = [];
+  const gate = new AccessGate(new SettingsStore(dir), (type, body) =>
+    asked.push({ type, ...body }),
+  );
+  for (const name of ["connector_run", "connector_scaffold", "local_ui_build", "orbit_update"]) {
+    expect(ACCESS_TOOLS[name]).toBe("shell");
+    let ran = 0;
+    const tool = gate.wrap(
+      {
+        name,
+        label: name,
+        description: name,
+        parameters: {},
+        execute: async () => {
+          ran++;
+          return { content: [{ type: "text", text: "ran" }], details: undefined };
+        },
+      } as unknown as Parameters<AccessGate["wrap"]>[0],
+      `s-${name}`,
+    );
+    const call = tool.execute("call", {}, undefined, undefined, undefined as never);
+    const request = asked.findLast((e) => e.type === "access.request");
+    expect(request?.tool).toBe("shell");
+    expect(ran).toBe(0);
+    gate.respond(request?.requestId ?? "", false);
+    await expect(call).rejects.toBeInstanceOf(AccessDenied);
+    expect(ran).toBe(0);
+  }
+});
+
+test("Orion's write and edit refuse Orbit's settings file by any spelling of its path", async () => {
+  const dir = tempDir();
+  cleanup.push(() => removeDir(dir));
+  const workspace = join(dir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const file = join(dir, "settings.json");
+  writeFileSync(file, '{"toolAccess":{"shell":false,"browser":false,"computer":false}}\n');
+  const before = readFileSync(file, "utf8");
+  const [write, edit] = protectedFileTools(workspace, file);
+  if (!write || !edit) throw new Error("no file tools");
+  expect([write.name, edit.name]).toEqual(["write", "edit"]);
+  for (const path of ["../settings.json", file, `@${file}`, `${workspace}/../SETTINGS.json`]) {
+    await expect(
+      write.execute(
+        "w",
+        { path, content: '{"toolAccess":{"shell":true}}' },
+        undefined,
+        undefined,
+        undefined as never,
+      ),
+    ).rejects.toThrow("Orbit's own settings file");
+  }
+  await expect(
+    edit.execute(
+      "e",
+      { path: "../settings.json", edits: [{ oldText: "false", newText: "true" }] },
+      undefined,
+      undefined,
+      undefined as never,
+    ),
+  ).rejects.toThrow("Orbit's own settings file");
+  expect(readFileSync(file, "utf8")).toBe(before);
+  expect(
+    isSameFile(workspace, "~/orbit/settings.json", join(homedir(), "orbit", "settings.json")),
+  ).toBe(true);
+
+  await write.execute(
+    "ok",
+    { path: "notes.md", content: "fine" },
+    undefined,
+    undefined,
+    undefined as never,
+  );
+  expect(readFileSync(join(workspace, "notes.md"), "utf8")).toBe("fine");
+});
+
+test("a live session has one bash, write and edit, and its write refuses the settings file", async () => {
+  const { dir, app, client, sessionId } = await fixture();
+  const settled = waitFor(client, "agent.settled", (e) => e.sessionId === sessionId);
+  await client.request("chat.prompt", { sessionId, text: "hello" });
+  await settled;
+  const live = (
+    app.hub as unknown as {
+      live: Map<
+        string,
+        {
+          agent: {
+            agent: {
+              state: {
+                tools: Array<{ name: string; execute: (...a: unknown[]) => Promise<unknown> }>;
+              };
+            };
+          } | null;
+        }
+      >;
+    }
+  ).live;
+  const tools = live.get(sessionId)?.agent?.agent.state.tools ?? [];
+  for (const name of ["bash", "write", "edit"])
+    expect(tools.filter((t) => t.name === name)).toHaveLength(1);
+  const write = tools.find((t) => t.name === "write");
+  // A fresh Orbit has no settings.json yet; creating one is refused too.
+  const settingsFile = join(dir, "settings.json");
+  expect(existsSync(settingsFile)).toBe(false);
+  await expect(
+    write?.execute(
+      "w",
+      {
+        path: settingsFile,
+        content: '{"toolAccess":{"shell":true,"browser":true,"computer":true}}',
+      },
+      undefined,
+      undefined,
+      undefined,
+    ),
+  ).rejects.toThrow("Orbit's own settings file");
+  expect(existsSync(settingsFile)).toBe(false);
+  expect((await client.request("settings.get")).toolAccess.shell).toBe(false);
 });
