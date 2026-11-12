@@ -20,7 +20,7 @@ import { AccountError } from "../services/account";
 import type { ConnectorSource } from "../services/connectors";
 import type { FarmService } from "../services/farm";
 import type { FeedbackService } from "../services/feedback";
-import type { LocalUiService } from "../services/local-ui";
+import type { FarmChange, LocalUiService } from "../services/local-ui";
 import { describeModules, type ModulesStore } from "../services/modules";
 import type { SkillService } from "../services/skills";
 import { forgetFacts, MEMORY_SCOPES, rememberFact } from "./memory";
@@ -547,6 +547,95 @@ export function createFarmTools(
       },
     }),
     tool({
+      name: "orbit_update",
+      label: "Update your Orbit",
+      description: `Move the farm's own Orbit (the source at ${localUi.checkoutDir}) to a newer release with the farm's changes kept: pulls the release from git, puts each of the farm's changes on top, installs what changed, then checks and builds it like local_ui_build. Nothing changes unless every step passes; a failure puts everything back. Read the updating-orbit skill first.`,
+      parameters: Type.Object({
+        version: OptStr('Release to move to, e.g. "0.1.7"; leave out for the newest'),
+        leaveOut: Type.Optional(
+          Type.Array(Type.String(), {
+            description: "Ids of farm changes to leave out, only after the farmer agreed",
+          }),
+        ),
+      }),
+      async run(p, _origin, signal) {
+        const moved = await localUi.update({ version: p.version, leaveOut: p.leaveOut }, signal);
+        if (!moved.ok) {
+          if (moved.step === "current")
+            return text(`Nothing to do: ${moved.output}`, { step: moved.step });
+          const why =
+            moved.step === "clash"
+              ? `the farm's change "${moved.clash?.summary}" (id ${moved.clash?.id.slice(0, 10)}) clashes with the new version in ${moved.clash?.files.join(", ")}`
+              : moved.step === "fetch"
+                ? "the new version could not be downloaded"
+                : moved.step === "install"
+                  ? "installing what the new version needs failed"
+                  : `the ${moved.step} step failed`;
+          return text(
+            `Not done: ${why}. Nothing changed; Orbit keeps running as before.\n${moved.output}`,
+            { step: moved.step, clash: moved.clash },
+            true,
+          );
+        }
+        const changes = (list: FarmChange[]) =>
+          list
+            .map((c) => `- ${c.summary} (id ${c.id.slice(0, 10)}): ${c.files.join(", ")}`)
+            .join("\n");
+        const built = await localUi.build(signal);
+        if (!built.ok) {
+          const undo = await localUi.restore(moved.previous);
+          const after =
+            built.status.state === "none"
+              ? "Orbit runs the original app until local_ui_build builds the farm's version again."
+              : "Orbit keeps the previous build.";
+          return text(
+            [
+              `Not done: the ${built.step} step failed on ${moved.to}, so the update was undone${undo ? ` (but putting it back also failed: ${undo})` : ""}. ${after}`,
+              "The farm's changes and the files they touch:",
+              changes(moved.carried),
+              built.output,
+            ].join("\n"),
+            { step: built.step, from: moved.from, to: moved.to, carried: moved.carried },
+            true,
+          );
+        }
+        const orion =
+          built.orion === "unchanged"
+            ? ""
+            : restartOrion()
+              ? " Orion moves to the new version by itself a few seconds after this reply is finished, so finish the reply now and start nothing else."
+              : " Orion moves to the new version the next time Orbit starts.";
+        const how = built.reloads
+          ? "The open Orbit window is reloading with it now."
+          : 'Tell the farmer to press "Open new version" in the bar at the top of Orbit (or close and open Orbit) to see it.';
+        return text(
+          [
+            `Updated the farm's Orbit from ${moved.from} to ${moved.to}, checked and built. ${how}${orion}`,
+            moved.carried.length
+              ? `The farm's changes kept on top:\n${changes(moved.carried)}`
+              : "The farm had no changes of its own to carry.",
+            moved.alreadyIncluded.length
+              ? `Already in the new version, so not needed any more:\n${changes(moved.alreadyIncluded)}`
+              : "",
+            moved.leftOut.length
+              ? `Left out as agreed, to redo on the new version:\n${changes(moved.leftOut)}`
+              : "",
+            'To finish, the farmer presses "Restart to update" in the bar at the top of Orbit, so the rest of Orbit moves to the new version too.',
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          {
+            from: moved.from,
+            to: moved.to,
+            carried: moved.carried,
+            alreadyIncluded: moved.alreadyIncluded,
+            leftOut: moved.leftOut,
+            status: built.status,
+          },
+        );
+      },
+    }),
+    tool({
       name: "local_ui_disable",
       label: "Use the original Orbit",
       description:
@@ -779,6 +868,7 @@ export const FARM_TOOL_NAMES = [
   "orbit_source",
   "local_ui_build",
   "local_ui_disable",
+  "orbit_update",
   "memory_remember",
   "memory_forget",
 ] as const;

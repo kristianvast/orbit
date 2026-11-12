@@ -2,9 +2,10 @@
 import { join } from "node:path";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { READY_LINE_PREFIX } from "@orbit/protocol";
-import { startOrion } from "./app";
+import { SERVER_VERSION, startOrion } from "./app";
 import { ConfigError, parseConfig } from "./config";
 import { LocalOrion } from "./services/local-orion";
+import { retireStaleFarmBuild } from "./services/local-ui";
 
 // pi-ai loads OAuth flows through a variable import that `bun build --compile` cannot embed.
 registerBunOAuthFlows();
@@ -16,6 +17,8 @@ try {
   const local = config.appSource
     ? null
     : new LocalOrion(config.dataDir, join(config.dataDir, "app"));
+  // After an update that did not move the farm's changes, the farm build would hide the new version.
+  if (local) retireStaleFarmBuild(config.dataDir, SERVER_VERSION);
   if (local?.shouldStart()) await local.supervise(argv);
   let stopping = false;
   const shutdown = async () => {

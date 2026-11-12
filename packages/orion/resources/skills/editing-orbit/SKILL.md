@@ -52,10 +52,8 @@ Orbit. Wait for a yes. After that first time you do not need to ask again for ea
 
 ## After an Orbit update
 
-The installed app changes version, so move the farm's changes onto the new one:
-`git -C "<source>" fetch --tags && git -C "<source>" rebase v<new version>` (the version is under
-"This computer" in your instructions). Resolve conflicts keeping the farmer's intent, then run
-`local_ui_build`. Until it passes, Orbit runs the original.
+A new Orbit version does not reach the farm's own build by itself. Follow updating-orbit: one
+`orbit_update` moves the farm's changes onto the new version, checks and builds it.
 
 ## Undo
 

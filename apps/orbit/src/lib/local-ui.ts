@@ -93,6 +93,31 @@ export function useLocalUiLifecycle(): void {
   }, [client, state]);
 }
 
+/** The farm's own build as Orion reports it, kept current while `enabled`; null until known. */
+export function useLocalUiStatus(enabled: boolean): LocalUiStatus | null {
+  const { client, state } = useOrion();
+  const [status, setStatus] = useState<LocalUiStatus | null>(null);
+  useEffect(() => {
+    if (!enabled || !client || state !== "open") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const current = await client.request("localUi.status", {});
+        if (!cancelled) setStatus(current);
+      } catch (error) {
+        // Without it Update just installs, as it did before farm builds could be updated.
+        console.warn("orbit: could not read the farm build status:", error);
+      }
+    })();
+    const off = client.on("localUi.updated", (ev) => setStatus(ev));
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [enabled, client, state]);
+  return status;
+}
+
 export function useLocalUiReady(): { ready: boolean; open: () => void } {
   const { client, endpoint } = useOrion();
   const [ready, setReady] = useState(false);

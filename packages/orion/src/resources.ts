@@ -36,6 +36,7 @@ import customPagesSkill from "../resources/skills/custom-pages/SKILL.md" with { 
 import editingOrbitSkill from "../resources/skills/editing-orbit/SKILL.md" with { type: "text" };
 import herdDataSkill from "../resources/skills/herd-data/SKILL.md" with { type: "text" };
 import uiDesignSkill from "../resources/skills/ui-design/SKILL.md" with { type: "text" };
+import updatingOrbitSkill from "../resources/skills/updating-orbit/SKILL.md" with { type: "text" };
 
 // The text loader yields a string, but TypeScript types a .ts import as its module shape.
 const asText = (value: unknown): string => value as string;
@@ -50,6 +51,7 @@ export const EMBEDDED_RESOURCES: Readonly<Record<string, string>> = {
   "skills/editing-orbit/SKILL.md": asText(editingOrbitSkill),
   "skills/herd-data/SKILL.md": asText(herdDataSkill),
   "skills/ui-design/SKILL.md": asText(uiDesignSkill),
+  "skills/updating-orbit/SKILL.md": asText(updatingOrbitSkill),
   "connector-template/README.md": asText(templateReadme),
   "connector-template/fixture.csv": asText(templateFixture),
   "connector-template/index.ts": asText(templateIndex),

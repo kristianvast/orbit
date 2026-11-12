@@ -382,6 +382,12 @@ a {
   font-size: var(--text-sm);
 }
 
+.orbit-update-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .orbit-rail__feedback {
   display: flex;
   margin-block-start: auto;

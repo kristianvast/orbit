@@ -11,17 +11,17 @@ import {
   Tag,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router";
+import { NavLink, Outlet, useNavigate } from "react-router";
 import { Badge, BrandMark, Button } from "../design";
 import { GuideOverlay } from "../features/guide";
 import { CUSTOM_PAGE_ICON, useCustomPages } from "../features/pages";
 import { VoiceDock } from "../features/voice";
 import { type MessageKey, useT } from "../i18n";
-import { useLocalUiLifecycle, useLocalUiReady } from "../lib/local-ui";
+import { useLocalUiLifecycle, useLocalUiReady, useLocalUiStatus } from "../lib/local-ui";
 import { MODULE_IDS, type ModuleId, useModules } from "../lib/modules";
 import { OrionConnectionBanner, resolveSyncNotice, useOrion, useOrionQuery } from "../lib/orion";
 import { useFarmSpecies } from "../lib/species";
-import { useAppUpdate } from "../lib/updater";
+import { updateAction, useAppUpdate } from "../lib/updater";
 import { useTheme } from "./providers";
 
 export interface NavItem {
@@ -115,6 +115,12 @@ export function AppShell() {
   useLocalUiLifecycle();
   const localUiReady = useLocalUiReady();
   const appUpdate = useAppUpdate();
+  const farmBuild = useLocalUiStatus(appUpdate.ready);
+  const navigate = useNavigate();
+  const updateInChat = () => {
+    const prompt = t("shell.update.prompt", { version: appUpdate.version ?? "" });
+    navigate(`/chat?prompt=${encodeURIComponent(prompt)}&send=1`, { state: { prefill: prompt } });
+  };
 
   const farmName = summary?.farm?.name ?? t("shell.farm.fallbackName");
   const alertCount = summary?.recentAlerts?.length ?? 0;
@@ -264,9 +270,35 @@ export function AppShell() {
         {appUpdate.ready && (
           <div className="orbit-update-bar" role="status" data-testid="app-update-bar">
             <span>{t("shell.update.ready")}</span>
-            <Button variant="primary" size="sm" onClick={appUpdate.restart}>
-              {t("shell.update.restart")}
-            </Button>
+            {updateAction(appUpdate.version, farmBuild) === "chat" ? (
+              <span className="orbit-update-bar__actions">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={updateInChat}
+                  data-testid="app-update-chat"
+                >
+                  {t("shell.update.withChanges")}
+                </Button>
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  onClick={appUpdate.restart}
+                  data-testid="app-update-without"
+                >
+                  {t("shell.update.withoutChanges")}
+                </Button>
+              </span>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={appUpdate.restart}
+                data-testid="app-update-restart"
+              >
+                {t("shell.update.restart")}
+              </Button>
+            )}
           </div>
         )}
         {localUiReady.ready && (

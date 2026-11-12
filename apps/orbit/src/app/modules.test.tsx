@@ -1,6 +1,7 @@
 import {
   type ConnectionState,
   type CustomPage,
+  type LocalUiStatus,
   MODULE_IDS,
   type ModuleId,
   type ModulesState,
@@ -14,6 +15,18 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { OrbitModulesCard } from "../features/settings";
+
+// The release feed only exists inside the desktop shell, so tests set what it found.
+const appUpdate = vi.hoisted(() => ({
+  ready: false,
+  version: null as string | null,
+  restart: vi.fn(),
+}));
+vi.mock("../lib/updater", async (original) => ({
+  ...(await original<typeof import("../lib/updater")>()),
+  useAppUpdate: () => appUpdate,
+}));
+
 import { AppProviders } from "./providers";
 import { AppRoutes } from "./routes";
 
@@ -27,6 +40,8 @@ function createMinimalTestClient(options?: {
   pages?: CustomPage[];
   /** A fresh install: cloud reachable, nobody signed in, no AI model usable. */
   needsSetup?: boolean;
+  /** The farm's own build, as localUi.status reports it. */
+  localUi?: LocalUiStatus;
 }) {
   const listeners = new Map<string, Set<(ev: ServerEvent) => void>>();
   let pages = options?.pages ?? [];
@@ -98,6 +113,13 @@ function createMinimalTestClient(options?: {
         }
         case "pages.list":
           return { pages } as RequestResult<T>;
+        case "localUi.status":
+          return (options?.localUi ?? {
+            state: "none",
+            path: null,
+            builtAt: null,
+            commit: null,
+          }) as RequestResult<T>;
         case "sessions.list":
           return { sessions: [] } as RequestResult<T>;
         case "sessions.create":
@@ -139,8 +161,6 @@ function createMinimalTestClient(options?: {
           } as RequestResult<T>;
         case "snapshots.list":
           return { snapshots: [] } as RequestResult<T>;
-        case "localUi.status":
-          return { state: "none", path: null, builtAt: null, commit: null } as RequestResult<T>;
         case "localUi.launched":
           return {
             state: "ready",
@@ -577,6 +597,60 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
         configurable: true,
         value: origLocation,
       });
+    }
+  });
+});
+
+describe("update bar", () => {
+  const farmBuild = (baseVersion: string): LocalUiStatus => ({
+    state: "broken",
+    path: null,
+    builtAt: "2026-11-12T08:00:00.000Z",
+    commit: "abc123",
+    baseVersion,
+  });
+  const renderHome = (client: OrionClient) =>
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProviders initialClient={client}>
+          <AppRoutes />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+
+  it("on a farm with its own build, Update asks Orion to move the farm's changes to the new version", async () => {
+    Object.assign(appUpdate, { ready: true, version: "0.1.7" });
+    appUpdate.restart.mockClear();
+    try {
+      const { client, requestMock } = createMinimalTestClient({ localUi: farmBuild("0.1.6") });
+      renderHome(client);
+      fireEvent.click(await screen.findByTestId("app-update-chat"));
+      await waitFor(() => {
+        expect(requestMock).toHaveBeenCalledWith("chat.prompt", {
+          sessionId: "session-1",
+          text: "Update Orbit to version 0.1.7 and keep my changes.",
+        });
+      });
+      expect(appUpdate.restart).not.toHaveBeenCalled();
+    } finally {
+      Object.assign(appUpdate, { ready: false, version: null });
+    }
+  });
+
+  it("once the farm's build is on the new version, or there is none, it restarts to update", async () => {
+    Object.assign(appUpdate, { ready: true, version: "0.1.7" });
+    try {
+      for (const localUi of [farmBuild("0.1.7"), undefined]) {
+        const { client } = createMinimalTestClient({ localUi });
+        const view = renderHome(client);
+        expect(await screen.findByTestId("app-update-restart")).toHaveTextContent(
+          "Restart to update",
+        );
+        expect(screen.queryByTestId("app-update-chat")).not.toBeInTheDocument();
+        view.unmount();
+      }
+    } finally {
+      Object.assign(appUpdate, { ready: false, version: null });
     }
   });
 });

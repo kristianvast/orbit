@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { READY_LINE_PREFIX } from "@orbit/protocol";
-import { startOrion as startApp } from "../src/app";
+import { createFarmTools } from "../src/agent/tools";
+import { SERVER_VERSION, startOrion as startApp } from "../src/app";
+import { openDatabase } from "../src/db/open";
+import { EncryptedFileStore } from "../src/secrets";
+import { FarmService } from "../src/services/farm";
 import { LocalOrion } from "../src/services/local-orion";
-import { LocalUiService } from "../src/services/local-ui";
+import { LocalUiService, retireStaleFarmBuild } from "../src/services/local-ui";
 import { connect, removeDir, TOKEN, tempDir, waitFor } from "./helpers";
 
 const VERSION = "9.9.9";
@@ -190,6 +195,10 @@ function installFarmOrion(dataDir: string, source: string): LocalOrion {
   mkdirSync(join(local.entry, ".."), { recursive: true });
   writeFileSync(local.entry, source);
   local.enable("abc123");
+  writeFileSync(
+    join(dataDir, "local-ui.json"),
+    JSON.stringify({ enabled: true, baseVersion: SERVER_VERSION }),
+  );
   return local;
 }
 
@@ -248,5 +257,183 @@ describe("restarting after a change to Orion", () => {
     const app = await startApp(config(temp()));
     expect(app.hub.restartWhenIdle()).toBe(false);
     await app.stop();
+  });
+});
+
+/** Publishes a newer release in the pretend Orbit's repository. */
+async function nextRelease(repo: string, version: string, files: Record<string, string>) {
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(join(repo, path, ".."), { recursive: true });
+    writeFileSync(join(repo, path), content);
+  }
+  await git(repo, "add", "-A");
+  await git(repo, "commit", "--quiet", "-m", `release ${version}`);
+  await git(repo, "tag", `v${version}`);
+}
+
+const toolCtx = {
+  sessionManager: { getSessionId: () => "test-session" },
+} as unknown as ExtensionToolContext;
+
+/** A farm on release 9.9.9 that changed Orbit once, with the orbit_update tool to call. */
+async function farmWithChange(change: Record<string, string>, shared: Record<string, string> = {}) {
+  const dataDir = temp();
+  const repo = await release();
+  for (const [path, content] of Object.entries(shared)) {
+    writeFileSync(join(repo, path), content);
+  }
+  if (Object.keys(shared).length) {
+    await git(repo, "add", "-A");
+    await git(repo, "commit", "--quiet", "-m", "shared files");
+    await git(repo, "tag", "-f", `v${VERSION}`);
+  }
+  const localUi = service(dataDir, repo);
+  await localUi.source();
+  const app = join(dataDir, "app");
+  for (const [path, content] of Object.entries(change)) writeFileSync(join(app, path), content);
+  expect(await localUi.build(undefined, "The farm's change")).toMatchObject({ ok: true });
+  const db = openDatabase(dataDir, { seed: false });
+  dirs.push(dataDir);
+  const farm = new FarmService(
+    db.repo,
+    new EncryptedFileStore(dataDir),
+    join(dataDir, "workspace"),
+  );
+  const tools = createFarmTools(farm, localUi, null, undefined, () => false);
+  const update = async (args: Record<string, unknown> = {}) => {
+    const result = await tools
+      .find((t) => t.name === "orbit_update")
+      ?.execute("call", args, undefined, undefined, toolCtx);
+    return { ...result, text: result?.content[0]?.type === "text" ? result.content[0].text : "" };
+  };
+  return { dataDir, repo, app, localUi, update, close: () => db.close() };
+}
+
+describe("updating the farm's own Orbit", () => {
+  test("the newest release is pulled and the farm's change is put back on top, checked and built", async () => {
+    const farm = await farmWithChange({ "apps/orbit/farm.txt": "our own screen" });
+    try {
+      await nextRelease(farm.repo, "9.10.0", { "apps/orbit/new.txt": "9.10" });
+      // 10.0.0 also needs a new dependency, so the update has to install it.
+      writeFileSync(join(farm.repo, "helper.js"), "export const helper = 1;\n");
+      writeFileSync(
+        join(farm.repo, "package.json"),
+        JSON.stringify({
+          name: "fake-root",
+          private: true,
+          dependencies: { helper: "file:./helper-pkg" },
+        }),
+      );
+      mkdirSync(join(farm.repo, "helper-pkg"));
+      writeFileSync(
+        join(farm.repo, "helper-pkg", "package.json"),
+        JSON.stringify({ name: "helper", version: "1.0.0" }),
+      );
+      const lock = Bun.spawn([process.execPath, "install"], {
+        cwd: farm.repo,
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+      expect(await lock.exited).toBe(0);
+      await nextRelease(farm.repo, "10.0.0", {
+        "apps/orbit/new.txt": "10",
+        // What bun installed stays out of the release, as in the real repository.
+        ".gitignore": "dist\nnode_modules\n",
+      });
+      const result = await farm.update();
+      expect(result.isError).toBeUndefined();
+      expect(result.text).toContain("from 9.9.9 to 10.0.0");
+      expect(await git(farm.app, "describe", "--tags", "--abbrev=0")).toBe("v10.0.0");
+      expect(await git(farm.app, "log", "-1", "--format=%s")).toBe("The farm's change");
+      expect(await git(farm.app, "branch", "--show-current")).toBe("farm");
+      expect(readFileSync(join(farm.app, "apps/orbit/new.txt"), "utf8")).toBe("10");
+      expect(readFileSync(join(farm.app, "apps/orbit/farm.txt"), "utf8")).toBe("our own screen");
+      expect(farm.localUi.status()).toMatchObject({ state: "ready", baseVersion: "10.0.0" });
+      expect(existsSync(join(farm.app, "node_modules", "helper", "package.json"))).toBe(true);
+      expect((await farm.update()).text).toContain("Nothing to do");
+    } finally {
+      farm.close();
+    }
+  });
+
+  test("a change that clashes stops it with nothing changed, and leaving it out lets it through", async () => {
+    const farm = await farmWithChange(
+      { "apps/orbit/title.txt": "Our farm" },
+      { "apps/orbit/title.txt": "Orbit" },
+    );
+    try {
+      const before = await git(farm.app, "rev-parse", "HEAD");
+      await nextRelease(farm.repo, "10.0.0", { "apps/orbit/title.txt": "Orbit 10" });
+      const clash = await farm.update({ version: "10.0.0" });
+      expect(clash.isError).toBe(true);
+      expect(clash.text).toContain("The farm's change");
+      expect(clash.text).toContain("apps/orbit/title.txt");
+      expect(await git(farm.app, "rev-parse", "HEAD")).toBe(before);
+      expect(await git(farm.app, "branch", "--show-current")).toBe("farm");
+      expect(await git(farm.app, "status", "--porcelain")).toBe("");
+      expect(existsSync(join(farm.app, ".git", "CHERRY_PICK_HEAD"))).toBe(false);
+
+      const id = (clash.details as { clash: { id: string } }).clash.id;
+      const through = await farm.update({ version: "10.0.0", leaveOut: [id.slice(0, 10)] });
+      expect(through.isError).toBeUndefined();
+      expect(through.text).toContain("Left out as agreed");
+      expect(readFileSync(join(farm.app, "apps/orbit/title.txt"), "utf8")).toBe("Orbit 10");
+    } finally {
+      farm.close();
+    }
+  });
+
+  test("a new release that fails its checks is undone and the previous build stays", async () => {
+    const farm = await farmWithChange({ "apps/orbit/farm.txt": "our own screen" });
+    try {
+      const before = await git(farm.app, "rev-parse", "HEAD");
+      const built = farm.localUi.status();
+      await nextRelease(farm.repo, "10.0.0", {
+        "apps/orbit/package.json": JSON.stringify({
+          name: "fake-orbit",
+          scripts: { typecheck: "false", "build:local": "true" },
+        }),
+      });
+      const result = await farm.update();
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain("typecheck step failed on 10.0.0");
+      expect(result.text).toContain("apps/orbit/farm.txt");
+      expect(await git(farm.app, "rev-parse", "HEAD")).toBe(before);
+      expect(await git(farm.app, "describe", "--tags", "--abbrev=0")).toBe(`v${VERSION}`);
+      expect(farm.localUi.status()).toEqual(built);
+    } finally {
+      farm.close();
+    }
+  });
+});
+
+describe("starting after an update without the farm's changes", () => {
+  const marker = (dataDir: string, baseVersion?: string) => {
+    writeFileSync(join(dataDir, "local-ui.json"), JSON.stringify({ enabled: true, baseVersion }));
+    new LocalOrion(dataDir, join(dataDir, "app")).enable("abc123");
+  };
+  const enabled = (dataDir: string) =>
+    (JSON.parse(readFileSync(join(dataDir, "local-ui.json"), "utf8")) as { enabled: boolean })
+      .enabled;
+
+  test("a farm build on an older release, or one that does not say, is switched off with the reason", () => {
+    for (const base of ["0.1.9", undefined]) {
+      const dataDir = temp();
+      marker(dataDir, base);
+      const reason = retireStaleFarmBuild(dataDir, "0.1.10");
+      expect(reason).toContain("updated to 0.1.10");
+      expect(enabled(dataDir)).toBe(false);
+      const orion = new LocalOrion(dataDir, join(dataDir, "app")).status();
+      expect(orion).toMatchObject({ enabled: false, lastError: reason });
+    }
+  });
+
+  test("a farm build on the installed release or a newer one keeps running", () => {
+    for (const base of ["0.1.10", "0.2.0"]) {
+      const dataDir = temp();
+      marker(dataDir, base);
+      expect(retireStaleFarmBuild(dataDir, "0.1.10")).toBeNull();
+      expect(enabled(dataDir)).toBe(true);
+    }
   });
 });

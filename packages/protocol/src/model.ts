@@ -186,6 +186,8 @@ export const LocalUiStatus = Type.Object({
   builtAt: Type.Union([Type.String(), Type.Null()]),
   /** git HEAD of the checkout the build came from, when known. */
   commit: Type.Union([Type.String(), Type.Null()]),
+  /** Orbit release the build's source sits on (e.g. "0.1.6"); absent from older Orions. */
+  baseVersion: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 });
 export type LocalUiStatus = Static<typeof LocalUiStatus>;
 
