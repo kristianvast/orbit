@@ -86,6 +86,7 @@ export default function SettingsPage() {
 
   const [undoingId, setUndoingId] = useState<string | null>(null);
   const [savingSharing, setSavingSharing] = useState(false);
+  const [savingAccess, setSavingAccess] = useState(false);
 
   const loadAll = useCallback(async (): Promise<Settings | null> => {
     if (!client) return null;
@@ -217,6 +218,22 @@ export default function SettingsPage() {
       });
     } finally {
       setSavingSharing(false);
+    }
+  };
+
+  const handleAccessChange = async (computerAccess: boolean) => {
+    if (!client) return;
+    setSavingAccess(true);
+    try {
+      setSettings(await client.request("settings.update", { computerAccess }));
+    } catch (err) {
+      pushToast({
+        title: t("settings.access.saveFailed"),
+        description: err instanceof Error ? err.message : String(err),
+        tone: "danger",
+      });
+    } finally {
+      setSavingAccess(false);
     }
   };
 
@@ -529,6 +546,30 @@ export default function SettingsPage() {
       <YourOrbitCard />
 
       <FeedbackCard />
+
+      <Card title={t("settings.access.title")}>
+        <label
+          style={{
+            display: "flex",
+            gap: "var(--space-2)",
+            alignItems: "flex-start",
+            fontSize: "var(--text-sm)",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={settings?.computerAccess ?? false}
+            disabled={!settings || savingAccess}
+            onChange={(e) => void handleAccessChange(e.target.checked)}
+            data-testid="settings-computer-access"
+          />
+          <span>
+            {t("settings.access.label")}
+            <br />
+            <span style={{ color: "var(--text-secondary)" }}>{t("settings.access.hint")}</span>
+          </span>
+        </label>
+      </Card>
 
       <Card title={t("settings.privacy.title")}>
         <label

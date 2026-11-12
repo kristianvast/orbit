@@ -68,6 +68,11 @@ export const settings: Catalog<typeof en> = {
   "undo.undoneAt": " · Angret {time}",
   "undo.alreadyUndone": "Allerede angret",
   "undo.undo": "Angre",
+  "access.title": "Orions tilgang til denne datamaskinen",
+  "access.label": "La Orion kjøre kommandoer, bruke en nettleser og bruke andre programmer",
+  "access.hint":
+    "Orion spør første gang den trenger dette. Slå det av når som helst, så spør den igjen neste gang.",
+  "access.saveFailed": "Kunne ikke lagre Orions tilgang",
   "privacy.title": "Hjelp til å forbedre Orbit",
   "privacy.shareData": "Del anonymiserte opptak og utfall for å forbedre modellene",
   "privacy.shareDataHint": "På som standard. Slå av når som helst for å slutte å dele.",

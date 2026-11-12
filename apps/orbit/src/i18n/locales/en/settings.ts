@@ -67,6 +67,11 @@ export const settings = {
   "undo.undoneAt": " · Undone {time}",
   "undo.alreadyUndone": "Already undone",
   "undo.undo": "Undo",
+  "access.title": "Orion's access to this computer",
+  "access.label": "Let Orion run commands, use a web browser and operate other programs",
+  "access.hint":
+    "Orion asks the first time it needs this. Turn it off any time and it will ask again next time.",
+  "access.saveFailed": "Could not save Orion's access",
   "privacy.title": "Help Improve Orbit",
   "privacy.shareData": "Share anonymised footage and outcomes to help improve the models",
   "privacy.shareDataHint": "On by default. Turn this off at any time to stop sharing.",

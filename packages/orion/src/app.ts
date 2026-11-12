@@ -19,6 +19,7 @@ import {
   type SettingsUpdate,
 } from "@orbit/protocol";
 import type { ServerWebSocket } from "bun";
+import { AccessGate } from "./agent/access";
 import { AuthFlows, systemBrowserOpener } from "./agent/auth";
 import { createBrowserTool } from "./agent/browser";
 import { createComputerTool } from "./agent/computer";
@@ -163,6 +164,7 @@ export async function startOrion(
   );
   const feedback = new FeedbackService(workspace.dir, SERVER_VERSION);
   const browser = createBrowserTool(config.dataDir);
+  const access = new AccessGate(settings, emit);
   // The tools are created before the hub they ask to restart.
   let restartOrion: () => boolean = () => false;
   const hub = await SessionHub.create({
@@ -178,6 +180,7 @@ export async function startOrion(
       browser.tool,
       createComputerTool(),
     ],
+    access,
     emit,
     mockModel: config.mockModel,
     gatewayUrl: config.gatewayUrl,
@@ -212,6 +215,7 @@ export async function startOrion(
     billing,
     hub,
     browser: browser.session,
+    access,
     token: config.token,
     emit,
     mockModel: config.mockModel,
@@ -309,6 +313,7 @@ export async function startOrion(
       model: useMock ? MOCK_MODEL : s.model,
       thinkingLevel: s.thinkingLevel,
       shareAnonymousData: s.shareAnonymousData,
+      computerAccess: s.computerAccess,
       ...(s.species ? { species: s.species } : {}),
       apiKeys,
       availableModels: hub.availableModels(),
@@ -333,8 +338,12 @@ export async function startOrion(
       ...(u.model !== undefined ? { model: u.model } : {}),
       ...(u.thinkingLevel ? { thinkingLevel: u.thinkingLevel } : {}),
       ...(u.shareAnonymousData !== undefined ? { shareAnonymousData: u.shareAnonymousData } : {}),
+      ...(u.computerAccess !== undefined ? { computerAccess: u.computerAccess } : {}),
       ...(u.species ? { species: u.species } : {}),
     });
+    // Allowing it in Settings also answers a question Orion is waiting on.
+    const waiting = access.pending();
+    if (u.computerAccess && waiting) access.respond(waiting.requestId, true);
     return settingsView();
   };
 
@@ -402,6 +411,8 @@ export async function startOrion(
         return modules.disable(msg.moduleId);
       case "pages.list":
         return { pages: listPages(workspace.dir, config.token) };
+      case "access.respond":
+        return { accepted: access.respond(msg.requestId, msg.allow) };
       case "settings.get":
         return settingsView();
       case "settings.update": {
@@ -610,6 +621,8 @@ export async function startOrion(
           ws.data.authed = true;
           ws.send(encodeResult(msg.id, await handle(msg, ws)));
           ws.send(encodeEvent("sync.status", account.syncStatus()));
+          const waiting = access.pending();
+          if (waiting) ws.send(encodeEvent("access.request", waiting));
           return;
         }
         try {

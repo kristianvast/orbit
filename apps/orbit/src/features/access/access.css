@@ -1,0 +1,52 @@
+.orbit-access__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.orbit-access {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.orbit-access__points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.orbit-access__points li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  line-height: var(--leading-normal, 1.5);
+}
+
+.orbit-access__points svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--accent-primary);
+}
+
+.orbit-access__risk {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal, 1.5);
+}
+
+.orbit-access__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  inline-size: 100%;
+}

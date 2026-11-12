@@ -24,6 +24,7 @@ import type {
 import type { Repository } from "../db/repo";
 import { assertNever } from "../services/camera-proxy";
 import type { SettingsStore } from "../settings";
+import type { AccessGate } from "./access";
 import { billingError } from "./billing-error";
 import { FileCredentialStore } from "./credentials";
 import { MEMORY_SCOPES, memoryFile } from "./memory";
@@ -76,6 +77,8 @@ export interface HubOptions {
   repo: Repository;
   settings: SettingsStore;
   tools: ToolDefinition[];
+  /** Asks the farmer once before the shell, browser and computer tools first run. */
+  access: AccessGate;
   emit: Emit;
   mockModel: boolean;
   gatewayUrl: string | null;
@@ -606,12 +609,15 @@ export class SessionHub {
       customTools: [
         ...shellTools(this.opts.workspace.dir, shellPath, process.platform, repeats),
         ...this.opts.tools,
-      ],
+      ].map((tool) => this.opts.access.wrap(tool, live.id)),
     });
     live.agent = session;
     live.unsubscribe = session.subscribe((event) => {
       // A new request may repeat commands from the last one; their results can differ now.
-      if (event.type === "agent_start") repeats.reset();
+      if (event.type === "agent_start") {
+        repeats.reset();
+        this.opts.access.forgetDecline(live.id);
+      }
       this.onEvent(live, event);
     });
     return session;

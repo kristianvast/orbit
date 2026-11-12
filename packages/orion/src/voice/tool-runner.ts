@@ -1,6 +1,7 @@
 import type { ToolItem, VoiceToolName } from "@orbit/protocol";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
+import { AccessDenied, type AccessGate } from "../agent/access";
 import { BrowserError, type BrowserSession } from "../agent/browser";
 import { type Emit, HubError, type SessionHub } from "../agent/hub";
 import type { TaskOutcome } from "../agent/voice-history";
@@ -26,6 +27,7 @@ export type ToolOptions = {
   readonly farm: FarmService;
   readonly hub: SessionHub;
   readonly browser: BrowserSession;
+  readonly access: AccessGate;
   readonly emit: Emit;
   readonly toolBudgetMs?: number;
 };
@@ -36,7 +38,8 @@ function failure(error: unknown): ToolAnswer {
     !(error instanceof RepoError) &&
     !(error instanceof AccountError) &&
     !(error instanceof HubError) &&
-    !(error instanceof BrowserError)
+    !(error instanceof BrowserError) &&
+    !(error instanceof AccessDenied)
   ) {
     process.stderr.write(
       `orion: voice tool failed: ${error instanceof Error ? error.stack : String(error)}\n`,
@@ -179,6 +182,7 @@ export class VoiceToolRunner {
         };
       }
       case "browser": {
+        await this.opts.access.ensure("browser", context.sessionId);
         const { result, view } = await this.opts.browser.runVoice(call.args);
         this.opts.emit("browser.view", { sessionId: context.sessionId, ...view });
         return { result, isError: false };

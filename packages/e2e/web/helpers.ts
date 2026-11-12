@@ -11,6 +11,16 @@ export async function startChat(page: Page, prompt: string): Promise<void> {
   await page.getByTestId("chat-send-button").click();
 }
 
+/** Sets Orion's computer access in Settings; specs share one Orion, so each sets what it needs. */
+export async function setComputerAccess(page: Page, allowed: boolean): Promise<void> {
+  await page.goto("/settings");
+  const toggle = page.getByTestId("settings-computer-access");
+  await expect(toggle).toBeEnabled();
+  // The box is controlled by Orion's answer, so it flips only after the update comes back.
+  if ((await toggle.isChecked()) !== allowed) await toggle.click();
+  await expect(toggle).toBeChecked({ checked: allowed });
+}
+
 export function toolCard(page: Page, toolName: string): Locator {
   return page.locator(`[data-testid^="tool-card-"][data-tool-name="${toolName}"]`);
 }

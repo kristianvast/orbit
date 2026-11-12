@@ -9,6 +9,8 @@ export interface StoredSettings {
   thinkingLevel: ThinkingLevel;
   /** Anonymised footage and outcomes may be shared to improve the models; on unless turned off. */
   shareAnonymousData: boolean;
+  /** The farmer's one-time yes to Orion using the shell, the browser and the screen. */
+  computerAccess: boolean;
   species?: Species;
   /** Masked hints only ("…abcd"); keys live in Pi's credential store (<data-dir>/pi/auth.json). */
   keyHints: Record<string, string>;
@@ -23,6 +25,7 @@ const DEFAULTS: StoredSettings = {
   model: null,
   thinkingLevel: "medium",
   shareAnonymousData: true,
+  computerAccess: false,
   keyHints: {},
   version: VERSION,
 };

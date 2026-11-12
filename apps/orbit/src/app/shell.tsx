@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { Badge, BrandMark, Button } from "../design";
+import { AccessDialog } from "../features/access";
 import { GuideOverlay } from "../features/guide";
 import { CUSTOM_PAGE_ICON, useCustomPages } from "../features/pages";
 import { VoiceDock } from "../features/voice";
@@ -318,6 +319,7 @@ export function AppShell() {
       </main>
       <VoiceDock />
       <GuideOverlay />
+      <AccessDialog />
     </div>
   );
 }

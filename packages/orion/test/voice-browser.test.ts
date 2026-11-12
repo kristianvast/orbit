@@ -17,12 +17,18 @@ test("voice browser open and highlight emit JPEG views and close clears the imag
   });
   try {
     const opened = waitFor(f.client, "browser.view", (event) => event.sessionId === f.sessionId);
+    // The browser is gated by the farmer's one-time yes, asked on its first use.
+    const allowed = waitFor(f.client, "access.request", (event) => event.tool === "browser").then(
+      (request) =>
+        f.client.request("access.respond", { requestId: request.requestId, allow: true }),
+    );
     const answer = await f.client.request("voice.tool", {
       voiceId: f.voiceId,
       toolCallId: "open-browser",
       name: "browser",
       args: { action: "open", url: `http://127.0.0.1:${server.port}/` },
     });
+    expect((await allowed).accepted).toBe(true);
     expect(answer.isError).toBe(false);
     expect(answer.result).toContain('[1] button "Start here"');
     const view = await opened;

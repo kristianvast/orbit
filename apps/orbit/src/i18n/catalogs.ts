@@ -6,6 +6,7 @@ import {
   selectMessage,
   type Vars,
 } from "./core";
+import { access as enAccess } from "./locales/en/access";
 import { account as enAccount } from "./locales/en/account";
 import { cameras as enCameras } from "./locales/en/cameras";
 import { chat as enChat } from "./locales/en/chat";
@@ -22,6 +23,7 @@ import { providers as enProviders } from "./locales/en/providers";
 import { settings as enSettings } from "./locales/en/settings";
 import { shell as enShell } from "./locales/en/shell";
 import { voice as enVoice } from "./locales/en/voice";
+import { access as nbAccess } from "./locales/nb/access";
 import { account as nbAccount } from "./locales/nb/account";
 import { cameras as nbCameras } from "./locales/nb/cameras";
 import { chat as nbChat } from "./locales/nb/chat";
@@ -40,6 +42,7 @@ import { shell as nbShell } from "./locales/nb/shell";
 import { voice as nbVoice } from "./locales/nb/voice";
 
 const en = {
+  access: enAccess,
   account: enAccount,
   cameras: enCameras,
   chat: enChat,
@@ -65,6 +68,7 @@ type Tree = { [N in keyof En]: Catalog<En[N]> };
 export type MessageKey = { [N in keyof En]: `${N & string}.${keyof En[N] & string}` }[keyof En];
 
 const nb: Tree = {
+  access: nbAccess,
   account: nbAccount,
   cameras: nbCameras,
   chat: nbChat,

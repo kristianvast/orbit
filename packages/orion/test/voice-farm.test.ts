@@ -1,11 +1,13 @@
 import { expect, spyOn, test } from "bun:test";
 import { canWriteTable } from "@orbit/schema/roles";
+import { AccessGate } from "../src/agent/access";
 import { BrowserSession } from "../src/agent/browser";
 import type { Emit } from "../src/agent/hub";
 import { openDatabase } from "../src/db/open";
 import { EncryptedFileStore } from "../src/secrets";
 import { AccountError } from "../src/services/account";
 import { FarmService } from "../src/services/farm";
+import { SettingsStore } from "../src/settings";
 import { VoiceSessions } from "../src/voice/session";
 import type { VoiceTransport } from "../src/voice/transport";
 import { bounded, voiceFixture } from "./voice-helpers";
@@ -27,6 +29,7 @@ async function farmFixture(transport?: VoiceTransport) {
     farm,
     hub: f.app.hub,
     browser,
+    access: new AccessGate(new SettingsStore(f.dir), emit),
     emit,
     token: "test",
     mockModel: true,
