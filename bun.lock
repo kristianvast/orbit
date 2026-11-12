@@ -42,9 +42,11 @@
       "name": "@core/api",
       "version": "0.1.0",
       "dependencies": {
+        "@orbit/protocol": "workspace:*",
         "@orbit/schema": "workspace:*",
         "drizzle-orm": "^0.45.4",
         "hono": "^4.13.16",
+        "typebox": "^1.4.3",
       },
       "devDependencies": {
         "@electric-sql/pglite": "^0.5.15",

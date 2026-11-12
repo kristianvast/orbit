@@ -14,6 +14,7 @@ import {
   llmUsage,
   voiceUsage,
 } from "./db";
+import { farmCodeHeads } from "./farm-code-db";
 export function registerFarmRoutes(routes: Hono<AccountEnv>, db: CoreDb, runtime: AccountRuntime) {
   const { now, requireSession, wrap } = runtime;
   /**
@@ -88,7 +89,15 @@ export function registerFarmRoutes(routes: Hono<AccountEnv>, db: CoreDb, runtime
                 pg.cameraLayouts,
               ].map((t) => tx.select({ id: t.id }).from(t).where(eq(t.farmId, from)).limit(1)),
             );
-            if (data.some((rows) => rows.length > 0)) {
+            const code = await tx
+              .select()
+              .from(farmCodeHeads)
+              .where(eq(farmCodeHeads.farmId, from))
+              .limit(1);
+            if (
+              data.some((rows) => rows.length > 0) ||
+              code.some((head) => head.commitId !== null)
+            ) {
               throw new ApiError(
                 409,
                 "farm_not_empty",

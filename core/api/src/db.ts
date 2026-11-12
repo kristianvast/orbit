@@ -16,6 +16,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { chatEntries, chatSessions } from "./chat-db";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "string" });
 
@@ -299,6 +300,8 @@ export const feedbackRateEvents = pgTable(
 
 export const coreSchema = {
   ...pg.pgSchema,
+  chatEntries,
+  chatSessions,
   apiTokens,
   farmBudgets,
   llmUsage,

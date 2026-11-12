@@ -13,6 +13,7 @@ import {
   loginFailures,
   users,
 } from "./db";
+import { farmCodeBlobs, farmCodeCommits, farmCodeHeads } from "./farm-code-db";
 export function registerDeleteRoute(routes: Hono<AccountEnv>, db: CoreDb, runtime: AccountRuntime) {
   const { requireSession, wrap } = runtime;
   /**
@@ -77,6 +78,9 @@ export function registerDeleteRoute(routes: Hono<AccountEnv>, db: CoreDb, runtim
           wipe.push(farmId);
         }
         for (const farmId of wipe) {
+          await tx.delete(farmCodeHeads).where(eq(farmCodeHeads.farmId, farmId));
+          await tx.delete(farmCodeCommits).where(eq(farmCodeCommits.farmId, farmId));
+          await tx.delete(farmCodeBlobs).where(eq(farmCodeBlobs.farmId, farmId));
           await tx.delete(pg.cameraLayouts).where(eq(pg.cameraLayouts.farmId, farmId));
           await tx.delete(pg.cameras).where(eq(pg.cameras.farmId, farmId));
           await tx.delete(pg.observations).where(eq(pg.observations.farmId, farmId));

@@ -2,7 +2,12 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { arch, release } from "node:os";
 import { join } from "node:path";
-import type { FeedbackKind, SharedBuild, SharedBuildKind } from "@orbit/protocol";
+import {
+  type FeedbackKind,
+  SECRET_PATTERNS,
+  type SharedBuild,
+  type SharedBuildKind,
+} from "@orbit/protocol";
 import { RepoError } from "../db/repo";
 import type { AccountService } from "./account";
 
@@ -15,12 +20,6 @@ const NAME = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const SKIPPED_DIRS = new Set(["node_modules", ".git", "dist", "build"]);
 const MAX_FILES = 60;
 const MAX_BYTES = 512 * 1024;
-
-// A quoted value assigned to a secret-looking name, or a token in a well-known key format.
-const SECRET_PATTERNS = [
-  /\b(pass(word|wd)?|secret|api[_-]?key|token|credential)\w*["']?\s*[:=]\s*["'`][^"'`\s]{6,}["'`]/i,
-  /\b(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{30,}|AIza[0-9A-Za-z_-]{30,})\b/,
-];
 
 export interface SharedFile {
   path: string;

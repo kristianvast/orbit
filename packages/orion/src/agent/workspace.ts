@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import * as git from "isomorphic-git";
 
 const author = { name: "Orion", email: "orion@orbit.local" } as const;
+export const WORKSPACE_AGENTS =
+  "# This farm\n\nNotes Orion keeps about this farm: routines, barn layout, devices and preferences.\n";
 
 class UndoConflict extends Error {
   constructor(files: string[]) {
@@ -13,6 +15,7 @@ class UndoConflict extends Error {
 }
 
 export class Workspace {
+  onCommitted: (() => void) | null = null;
   constructor(readonly dir: string) {}
 
   /** Creates the workspace, starter files and initial git commit once. */
@@ -22,10 +25,7 @@ export class Workspace {
     }
     const agents = join(this.dir, "AGENTS.md");
     if (!fs.existsSync(agents)) {
-      fs.writeFileSync(
-        agents,
-        "# This farm\n\nNotes Orion keeps about this farm: routines, barn layout, devices and preferences.\n",
-      );
+      fs.writeFileSync(agents, WORKSPACE_AGENTS);
     }
     if (!fs.existsSync(join(this.dir, ".git"))) {
       await git.init({ fs, dir: this.dir });
@@ -57,6 +57,7 @@ export class Workspace {
     if (files.length === 0) return null;
     const parent = await git.resolveRef({ fs, dir: this.dir, ref: "HEAD" });
     const commit = await git.commit({ fs, dir: this.dir, author, message });
+    this.onCommitted?.();
     return { commit, parent, files };
   }
 
@@ -134,6 +135,7 @@ export class Workspace {
       author,
       message: `Revert "${snapshot.commit.message.trim()}"\n\nThis reverts commit ${commit}.`,
     });
+    this.onCommitted?.();
     return changes.map(({ filepath }) => filepath);
   }
 }

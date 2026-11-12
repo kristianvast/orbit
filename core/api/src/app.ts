@@ -10,7 +10,9 @@ import {
   type IncomingChange,
   MAX_CHANGES_PER_REQUEST,
 } from "./changes";
+import { createChatRoutes } from "./chats";
 import type { CoreDb } from "./db";
+import { createFarmCodeRoutes } from "./farm-code";
 import { createFeedbackRoutes } from "./feedback";
 import { handleLlm, type LlmGatewayOptions } from "./llm";
 import { createLogMailer, type EmailLinks, type Mailer } from "./mailer";
@@ -88,6 +90,8 @@ export function createApp(options: AppOptions) {
     "/v1/voice/demo/*",
     "/v1/feedback",
     "/v1/submissions",
+    "/v1/farm-code/*",
+    "/v1/chat/*",
   ])
     app.use(path, websiteCors);
 
@@ -99,6 +103,7 @@ export function createApp(options: AppOptions) {
       return c.json({ ok: false, error: (err as Error).message }, 503);
     }
   };
+  app.route("/v1/chat", createChatRoutes(options.db, now));
   app.get("/healthz", health);
   // Cloud Run's front end reserves paths ending in "z", so /healthz never reaches the service there.
   app.get("/health", health);
@@ -175,6 +180,8 @@ export function createApp(options: AppOptions) {
   for (const path of ["/v1/billing/checkout", "/v1/billing/portal", "/v1/billing/status"]) {
     app.use(path, farmAuth);
   }
+  app.use("/v1/farm-code/*", farmAuth);
+  app.route("/", createFarmCodeRoutes(options.db));
   registerBillingRoutes(app, options.db, {
     ...options.billing,
     redirectOrigins: websiteOrigins,

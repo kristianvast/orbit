@@ -28,6 +28,7 @@ import { GATEWAY_TITLE_MODEL } from "../agent/title";
 import type { Repository } from "../db/repo";
 import { EncryptedFileStore, type SecretStore } from "../secrets";
 import type { SettingsStore } from "../settings";
+import type { FarmCodeSync } from "./farm-code";
 import type { FarmFolders } from "./farm-folders";
 
 export const GATEWAY_MODEL = "orbit-default";
@@ -121,6 +122,7 @@ const MUTATION_TABLE: Record<string, SyncedTable> = {
 };
 
 export class AccountService {
+  codeSync: FarmCodeSync | null = null;
   private stored: Stored = { user: null, farm: null };
   private token: string | null = null;
   private engine: SyncEngine | null = null;
@@ -162,7 +164,7 @@ export class AccountService {
       // broken cloud must never stop the farm PC from starting.
       process.stderr.write(`orion: account refresh failed: ${(error as Error).message}\n`);
     }
-    this.activate();
+    await this.activate();
   }
 
   status(): AccountStatus {
@@ -256,7 +258,7 @@ export class AccountService {
   async refresh(): Promise<AccountStatus> {
     this.requireSession();
     await this.link();
-    this.activate();
+    await this.activate();
     return this.publish();
   }
 
@@ -321,7 +323,7 @@ export class AccountService {
     this.requireSession();
     await this.call("POST", "/v1/invites/accept", { code: code.trim() });
     await this.link();
-    this.activate();
+    await this.activate();
     return this.publish();
   }
 
@@ -355,7 +357,7 @@ export class AccountService {
     await this.call("DELETE", `/v1/farms/${farmId}/members/${encodeURIComponent(userId)}`);
     if (userId === this.stored.user?.id) {
       await this.link();
-      this.activate();
+      await this.activate();
       this.publish();
       return { members: [], invites: [] };
     }
@@ -419,7 +421,7 @@ export class AccountService {
     }
     if (!claimed) await this.call("POST", "/v1/farms", { id: farm.id, name: farm.name });
     await this.link();
-    this.activate();
+    await this.activate();
     return this.publish();
   }
 
@@ -455,8 +457,10 @@ export class AccountService {
     await this.session.set(SESSION_REF, session.token);
     this.token = session.token;
     this.save({ user, farm: null });
+    // Hide the previous author's chats immediately, including when linking fails or is offline.
+    this.publish();
     await this.link();
-    this.activate();
+    await this.activate();
     return this.publish();
   }
 
@@ -501,7 +505,7 @@ export class AccountService {
     this.publish();
   }
 
-  private activate(): void {
+  private async activate(): Promise<void> {
     const farm = this.stored.farm;
     if (!this.coreUrl || !this.token) {
       void this.stopSync();
@@ -512,6 +516,7 @@ export class AccountService {
       void this.stopSync();
       return;
     }
+    await this.codeSync?.start();
     if (this.engine) {
       this.engine.setToken(this.token);
       return;
@@ -573,6 +578,7 @@ export class AccountService {
   }
 
   private async stopSync(): Promise<void> {
+    await this.codeSync?.stop();
     for (const off of this.unsubscribe.splice(0)) off();
     const engine = this.engine;
     this.engine = null;
@@ -636,6 +642,7 @@ export class AccountService {
         headers: {
           ...(body === undefined ? {} : { "content-type": "application/json" }),
           ...(anonymous ? {} : { authorization: `Bearer ${this.token}` }),
+          ...(!anonymous && this.stored.farm ? { [FARM_HEADER]: this.stored.farm.id } : {}),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       });

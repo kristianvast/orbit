@@ -16,6 +16,7 @@ import {
   migrate,
 } from "@core/api";
 import { PGlite } from "@electric-sql/pglite";
+import type { SessionSummary } from "@orbit/protocol";
 import type { OrionClient } from "@orbit/protocol/client";
 import { pg } from "@orbit/schema";
 import { eq, sql } from "drizzle-orm";
@@ -39,6 +40,7 @@ let pglite: PGlite;
 let db: CoreDb;
 let core: ReturnType<typeof Bun.serve>;
 let coreUrl: string;
+let chatAvailable = true;
 let upstream: { model: unknown; auth: string | null }[] = [];
 /** When set, answers model requests instead of the default SSE reply (one call per request). */
 let scriptedUpstream: ((body: { messages: Record<string, unknown>[] }) => Response) | null = null;
@@ -111,7 +113,13 @@ beforeAll(async () => {
       });
     },
   });
-  core = Bun.serve({ port: 0, fetch: app.fetch });
+  core = Bun.serve({
+    port: 0,
+    fetch: (request, server) =>
+      !chatAvailable && new URL(request.url).pathname.startsWith("/v1/chat/")
+        ? Response.json({ error: { message: "chat cloud offline" } }, { status: 503 })
+        : app.fetch(request, server),
+  });
   coreUrl = `http://127.0.0.1:${core.port}`;
 }, 60_000);
 afterAll(async () => {
@@ -124,11 +132,12 @@ let orion: OrionApp | null = null;
 let client: OrionClient | null = null;
 
 beforeEach(async () => {
+  chatAvailable = true;
   upstream = [];
   scriptedUpstream = null;
   dir = tempDir();
   await db.execute(
-    sql`TRUNCATE farms, animals, devices, device_bindings, connectors, observations, cameras, api_tokens, farm_budgets, llm_usage, farm_invites, farm_members, user_sessions, email_tokens, login_failures, farm_subscriptions, billing_customers, users CASCADE`,
+    sql`TRUNCATE farm_code_heads, farm_code_commits, farm_code_blobs, farms, animals, devices, device_bindings, connectors, observations, cameras, api_tokens, farm_budgets, llm_usage, farm_invites, farm_members, user_sessions, email_tokens, login_failures, farm_subscriptions, billing_customers, users CASCADE`,
   );
 });
 afterEach(async () => {
@@ -179,6 +188,134 @@ async function verifyEmail(email: string) {
 }
 
 const newAnimal = { species: "cattle" as const, name: "Skybert", earTagNumber: "7001" };
+
+test("two Orions recover private chats and catch up offline turns across a restart", async () => {
+  orion = await startOrion({
+    port: 0,
+    token: TOKEN,
+    dataDir: dir,
+    mockModel: true,
+    seed: true,
+    gatewayUrl: null,
+    appSource: null,
+    coreUrl,
+  });
+  const a = await connect(orion);
+  client = a;
+  await a.request("settings.update", { provider: "orion-mock", model: "mock-1" });
+  const { session } = await a.request("sessions.create", {});
+  const first = waitFor(a, "agent.settled", (e) => e.sessionId === session.id);
+  await a.request("chat.prompt", { sessionId: session.id, text: "Remember my private question" });
+  expect((await first).reason).toBe("completed");
+  await a.request("account.register", {
+    email: "chat@farm.test",
+    password: PASSWORD,
+    acceptTerms: true,
+  });
+  await verifyEmail("chat@farm.test");
+  const { farm } = await a.request("farms.create", {});
+  if (!farm) throw new Error("farms.create linked no farm");
+
+  // Waits for the session to reach a state, whether the sync already got there or is still on it.
+  const reaches = async (c: OrionClient, done: (s: SessionSummary) => boolean) => {
+    const event = waitFor(
+      c,
+      "session.updated",
+      (e) => e.sessionId === session.id && done(e.session),
+      25_000,
+    );
+    const now = (await c.request("sessions.list", {})).sessions.find((s) => s.id === session.id);
+    if (now && done(now)) {
+      event.catch(() => {});
+      return;
+    }
+    await event;
+  };
+
+  const secondDir = tempDir();
+  let reopened = Promise.withResolvers<void>();
+  const startSecond = () =>
+    startOrion({
+      port: 0,
+      token: TOKEN,
+      dataDir: secondDir,
+      mockModel: true,
+      seed: false,
+      gatewayUrl: null,
+      appSource: null,
+      coreUrl,
+      reopen: () => reopened.resolve(),
+    });
+  let second = await startSecond();
+  let b = await connect(second);
+  try {
+    await b.request("account.login", { email: "chat@farm.test", password: PASSWORD });
+    expect(await b.request("farms.open", { farmId: farm.id })).toEqual({ restarting: true });
+    await reopened.promise;
+    b.close();
+    await second.stop();
+    reopened = Promise.withResolvers<void>();
+    second = await startSecond();
+    b = await connect(second);
+    await b.request("settings.update", { provider: "orion-mock", model: "mock-1" });
+    await reaches(b, (s) => s.messageCount === 2);
+    const opened = await b.request("sessions.open", { sessionId: session.id });
+    expect(opened.items.filter((i) => i.kind === "user").map((i) => i.text)).toEqual([
+      "Remember my private question",
+    ]);
+
+    // Core is unreachable for chats while B continues; B catches up after its restart.
+    chatAvailable = false;
+    const continued = waitFor(b, "agent.settled", (e) => e.sessionId === session.id);
+    await b.request("chat.prompt", {
+      sessionId: session.id,
+      text: "Continue on my other computer",
+    });
+    expect((await continued).reason).toBe("completed");
+    b.close();
+    await second.stop();
+    chatAvailable = true;
+    second = await startSecond();
+    b = await connect(second);
+    await reaches(a, (s) => s.messageCount === 4);
+    expect(
+      (await a.request("sessions.open", { sessionId: session.id })).items
+        .filter((i) => i.kind === "user")
+        .map((i) => i.text),
+    ).toEqual(["Remember my private question", "Continue on my other computer"]);
+
+    await b.request("sessions.rename", { sessionId: session.id, title: "My recovered chat" });
+    await reaches(a, (s) => s.title === "My recovered chat");
+
+    // Another member of the same farm gets none of these chats from Core.
+    const invite = await a.request("invites.create", {
+      email: "other-chat@farm.test",
+      role: "viewer",
+    });
+    const other = await coreCall<{ session: { token: string } }>("POST", "/v1/auth/register", {
+      email: "other-chat@farm.test",
+      password: PASSWORD,
+      acceptTerms: true,
+    });
+    await verifyEmail("other-chat@farm.test");
+    await coreCall("POST", "/v1/invites/accept", { code: invite.code }, other.session.token);
+    const listed = await fetch(`${coreUrl}/v1/chat/sessions`, {
+      headers: { authorization: `Bearer ${other.session.token}`, "x-orbit-farm": farm.id },
+    });
+    expect(listed.status).toBe(200);
+    expect(((await listed.json()) as { sessions: unknown[] }).sessions).toEqual([]);
+
+    const deleted = waitFor(b, "session.updated", (e) => e.sessionId === session.id, 25_000);
+    await a.request("sessions.delete", { sessionId: session.id });
+    await deleted;
+    expect((await b.request("sessions.list", {})).sessions).toEqual([]);
+  } finally {
+    chatAvailable = true;
+    b.close();
+    await second.stop();
+    removeDir(secondDir);
+  }
+}, 100_000);
 
 describe("Orion account", () => {
   test("signed out, Orbit stays local: writes work and sync is disabled", async () => {

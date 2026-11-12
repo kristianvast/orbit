@@ -34,6 +34,8 @@ interface Marker {
   bootedAt: string | null;
   /** Release the build's source sits on, e.g. "0.1.6"; absent in builds from before updates. */
   baseVersion?: string | null;
+  syncError?: string | null;
+  recoveryPath?: string | null;
 }
 
 const NO_MARKER: Marker = {
@@ -167,6 +169,7 @@ async function run(cmd: string[], cwd: string, signal?: AbortSignal, tail = OUTP
 }
 
 export class LocalUiService {
+  onChanged: (() => void) | null = null;
   private readonly markerFile: string;
   readonly orion: LocalOrion;
 
@@ -206,6 +209,8 @@ export class LocalUiService {
       builtAt: m.builtAt,
       commit: m.commit,
       baseVersion: m.baseVersion ?? null,
+      syncError: m.syncError ?? null,
+      recoveryPath: m.recoveryPath ?? null,
     };
   }
 
@@ -220,6 +225,17 @@ export class LocalUiService {
   disable(): LocalUiStatus {
     if (this.orion.status().enabled) this.orion.disable();
     return this.write({ ...this.read(), enabled: false });
+  }
+
+  syncRecovery(reason: string | null, recoveryPath: string | null): void {
+    const status = this.write({
+      ...this.read(),
+      ...(reason ? { enabled: false } : {}),
+      syncError: reason,
+      recoveryPath,
+    });
+    if (reason) this.orion.disable(`Farm app sync: ${reason}. Recovery: ${recoveryPath}`);
+    this.onUpdated(status);
   }
 
   private hasCheckout(): boolean {
@@ -295,6 +311,7 @@ export class LocalUiService {
       this.checkoutDir,
       signal,
     );
+    if (commit.code === 0) this.onChanged?.();
     return commit.code === 0 ? null : commit.output;
   }
 
@@ -378,6 +395,7 @@ export class LocalUiService {
       baseVersion: await this.baseVersion(),
     });
     this.onUpdated(status);
+    this.onChanged?.();
     return {
       ok: true,
       status,
@@ -439,7 +457,7 @@ export class LocalUiService {
    * anything on: build() does that, and restore() undoes the move if the build fails.
    */
   async update(
-    opts: { version?: string; leaveOut?: string[] } = {},
+    opts: { version?: string; leaveOut?: string[]; receivedCommit?: string } = {},
     signal?: AbortSignal,
   ): Promise<UpdateResult> {
     if (!this.hasCheckout()) {
@@ -452,7 +470,9 @@ export class LocalUiService {
     const from = await this.baseVersion(signal);
     if (!from)
       return { ok: false, step: "version", output: "The source has no release tag to start from." };
-    const to = opts.version?.trim().replace(/^v/, "") || (await this.newestVersion(signal));
+    const to = opts.receivedCommit
+      ? (this.options.version ?? from)
+      : opts.version?.trim().replace(/^v/, "") || (await this.newestVersion(signal));
     if (!to)
       return {
         ok: false,
@@ -461,7 +481,7 @@ export class LocalUiService {
       };
     if (!RELEASE_TAG.test(`v${to}`))
       return { ok: false, step: "version", output: `${to} is not a release version.` };
-    if (compareVersions(to, from) <= 0) {
+    if (!opts.receivedCommit && compareVersions(to, from) <= 0) {
       return {
         ok: false,
         step: "current",
@@ -470,13 +490,14 @@ export class LocalUiService {
     }
     const pending = await this.commit("Changes not built yet", signal);
     if (pending) return { ok: false, step: "git", output: pending };
-    const fetched = await this.git(
-      ["fetch", "--quiet", "origin", `refs/tags/v${to}:refs/tags/v${to}`],
-      signal,
-    );
+    const fetched = opts.receivedCommit
+      ? { code: 0, output: "" }
+      : await this.git(["fetch", "--quiet", "origin", `refs/tags/v${to}:refs/tags/v${to}`], signal);
     if (fetched.code !== 0) return { ok: false, step: "fetch", output: fetched.output };
     const previous = (await this.git(["rev-parse", "HEAD"])).output.trim();
-    const changes = await this.farmChanges(`v${from}..HEAD`, signal);
+    const changes = opts.receivedCommit
+      ? await this.farmChanges(`${opts.receivedCommit}^..${opts.receivedCommit}`, signal)
+      : await this.farmChanges(`v${from}..HEAD`, signal);
     if (!changes)
       return {
         ok: false,

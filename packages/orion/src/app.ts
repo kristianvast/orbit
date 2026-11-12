@@ -42,7 +42,9 @@ import {
   type SocketData,
   serveCamera,
 } from "./services/camera-proxy";
+import { ChatSync } from "./services/chat-sync";
 import { FarmService } from "./services/farm";
+import { FarmCodeSync } from "./services/farm-code";
 import { farmDir, readFarmFolders, writeFarmFolders } from "./services/farm-folders";
 import { FeedbackService } from "./services/feedback";
 import { serveGoogleCallback } from "./services/google-callback";
@@ -130,8 +132,10 @@ export async function startOrion(
   const secrets = await openSecretStore(config.dataDir, repo.installId);
   const settings = new SettingsStore(config.dataDir);
   const sockets = new Set<ServerWebSocket<SocketData>>();
+  let codeSync: FarmCodeSync | null = null;
 
   const emit = <E extends EventType>(type: E, body: EventBody<E>) => {
+    if (type === "agent.settled") void codeSync?.sync();
     const frame = encodeEvent(type, body);
     for (const ws of sockets) {
       switch (ws.data.kind) {
@@ -197,10 +201,15 @@ export async function startOrion(
     version: SERVER_VERSION,
     checkoutDir: localUi.checkoutDir,
     localOrionError: () => localUi.orion.status().lastError,
+    farmCodeNotice: () => codeSync?.notice() ?? localUi.status().syncError ?? null,
+    beforePrompt: async () => {
+      await codeSync?.settled();
+    },
     ...(config.restart ? { restart: config.restart } : {}),
   });
   restartOrion = () => hub.restartWhenIdle();
 
+  let chats: ChatSync | undefined;
   const account = new AccountService({
     dataDir: config.dataDir,
     folders,
@@ -213,16 +222,40 @@ export async function startOrion(
     deviceName: `Orbit on ${hostname()}`,
     onStatus: (status) => {
       emit("account.updated", status);
-      void hub.setOwner(status.user?.id ?? "local");
+      // Sync only once the hub shows the new person's folder.
+      void hub.setOwner(status.user?.id ?? "local").then(() => chats?.accountChanged());
     },
     onSync: (status) => emit("sync.status", status),
     onRemoteChange: dbChanged,
   });
   farm.guard = (mutation) => account.assertCanMutate(mutation);
+  codeSync = new FarmCodeSync({
+    dataDir: config.dataDir,
+    stateDir: farmFolder,
+    workspace,
+    repo,
+    account,
+    localUi,
+    busy: () => hub.running,
+    changed: (files) => {
+      hub.reloadWorkspace();
+      dbChanged("workspace", files);
+      emit("modules.updated", modules.list());
+    },
+  });
+  account.codeSync = codeSync;
+  workspace.onCommitted = () => {
+    void codeSync?.sync();
+  };
+  localUi.onChanged = () => {
+    void codeSync?.sync();
+  };
   feedback.account = account;
   await account.start();
   // Each person sees only their own chats.
   await hub.setOwner(account.status().user?.id ?? "local");
+  chats = new ChatSync(hub, account);
+  chats.accountChanged();
   const billing = new BillingService(account);
 
   /** Points this PC at another farm folder; Orion starts again on it once this reply is out. */
@@ -697,6 +730,7 @@ export async function startOrion(
       await relay.stop();
       browser.session.close();
       auth.dispose();
+      await chats?.stop();
       await account.stop();
       await hub.dispose();
       server.stop(true);

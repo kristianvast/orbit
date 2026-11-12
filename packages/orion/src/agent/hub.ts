@@ -28,6 +28,12 @@ import { assertNever } from "../services/camera-proxy";
 import type { SettingsStore } from "../settings";
 import type { AccessGate } from "./access";
 import { billingError } from "./billing-error";
+import {
+  type ChatHistory,
+  type ChatMetadata,
+  type IncomingHistory,
+  mergeEntries,
+} from "./chat-history";
 import { FileCredentialStore } from "./credentials";
 import { MEMORY_SCOPES, memoryFile } from "./memory";
 import { MOCK_MODEL, MOCK_PROVIDER, registerMockProvider } from "./mock-model";
@@ -56,6 +62,7 @@ interface IndexEntry {
   updatedAt: string;
   file: string;
   parentSessionId: string | null;
+  deletedAt?: string | null;
 }
 
 interface LiveSession {
@@ -94,6 +101,8 @@ export interface HubOptions {
   checkoutDir: string;
   /** Why the farm's own build of Orion was switched off, if it was. */
   localOrionError?: () => string | null;
+  farmCodeNotice?: () => string | null;
+  beforePrompt?: () => Promise<void>;
   /** Ends this process so the desktop shell starts Orion again; absent when nothing would. */
   restart?: () => void;
 }
@@ -189,6 +198,62 @@ export class SessionHub {
   private live = new Map<string, LiveSession>();
   private naming = new Map<string, Promise<void>>();
   private restartWanted = false;
+  private starting = 0;
+  onHistoryChange: () => void = () => {};
+
+  /** The open person's conversations (setOwner switches folders), tombstones included. */
+  histories(): ChatHistory[] {
+    return [...this.index.values()].map((e) => {
+      const sm = e.deletedAt ? null : this.getLive(e.id).sm;
+      return {
+        session: {
+          id: e.id,
+          title: e.title,
+          createdAt: e.createdAt,
+          updatedAt: e.updatedAt,
+          parentSessionId: e.parentSessionId,
+          deletedAt: e.deletedAt ?? null,
+        },
+        header: sm?.getHeader() ?? null,
+        entries: sm?.getEntries() ?? [],
+      };
+    });
+  }
+
+  /** Called only between runs: Pi's in-memory branch must be rebuilt after changing its file. */
+  async mergeHistory(history: IncomingHistory): Promise<void> {
+    const remote = history.session;
+    const existing = this.index.get(remote.id);
+    if (this.isStreaming(remote.id)) return;
+    if (remote.deletedAt) {
+      if (existing && !existing.deletedAt) await this.delete(remote.id, true);
+      return;
+    }
+    if (existing?.deletedAt || !history.header) return;
+    const local = existing ? this.getLive(remote.id) : null;
+    const entries = local?.sm.getEntries() ?? [];
+    const merged = mergeEntries(entries, history.entries);
+    const changed = !existing || merged.length !== entries.length;
+    const metadataChanged = !existing || remote.updatedAt > existing.updatedAt;
+    if (!changed && !metadataChanged) return;
+    const file = existing?.file ?? join(this.sessionsDir, `${remote.id}.jsonl`);
+    if (changed) {
+      if (local) this.dropAgent(local);
+      const header = { ...history.header, cwd: this.opts.workspace.dir };
+      writeFileSync(file, [header, ...merged].map((e) => JSON.stringify(e)).join("\n") + "\n");
+      this.live.delete(remote.id);
+    }
+    const metadata: ChatMetadata = metadataChanged
+      ? remote
+      : {
+          ...remote,
+          title: existing?.title ?? remote.title,
+          updatedAt: existing?.updatedAt ?? remote.updatedAt,
+        };
+    this.index.set(remote.id, { ...metadata, file, titleSet: true });
+    this.saveIndex();
+    this.opts.emit("session.updated", { sessionId: remote.id, session: this.summary(remote.id) });
+  }
 
   private constructor(
     private readonly opts: HubOptions,
@@ -334,7 +399,7 @@ export class SessionHub {
 
   private entry(id: string): IndexEntry {
     const e = this.index.get(id);
-    if (!e) throw new HubError("not_found", `session ${id} not found`);
+    if (!e || e.deletedAt) throw new HubError("not_found", `session ${id} not found`);
     return e;
   }
 
@@ -371,15 +436,18 @@ export class SessionHub {
 
   list(): SessionSummary[] {
     return [...this.index.values()]
+      .filter((e) => !e.deletedAt)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .map((e) => this.summary(e.id));
   }
 
   private touch(id: string, patch: Partial<IndexEntry> = {}) {
-    const e = this.entry(id);
+    const e = this.index.get(id);
+    if (!e || e.deletedAt) return;
     Object.assign(e, patch, { updatedAt: new Date().toISOString() });
     this.saveIndex();
     this.opts.emit("session.updated", { sessionId: id, session: this.summary(id) });
+    if (!this.isStreaming(id)) this.onHistoryChange();
   }
 
   // ------------------------------------------------------------------ lifecycle
@@ -403,6 +471,7 @@ export class SessionHub {
     });
     this.live.set(id, this.newLive(id, manager));
     this.saveIndex();
+    this.onHistoryChange();
     return this.summary(id);
   }
 
@@ -423,6 +492,7 @@ export class SessionHub {
   }
 
   private getLive(id: string): LiveSession {
+    this.entry(id);
     const existing = this.live.get(id);
     if (existing) return existing;
     const e = this.entry(id);
@@ -531,9 +601,10 @@ export class SessionHub {
     live.agent = null;
   }
 
-  async delete(id: string): Promise<boolean> {
+  async delete(id: string, remote = false): Promise<boolean> {
     const e = this.index.get(id);
-    if (!e) return false;
+    if (!e || e.deletedAt) return false;
+    const summary = remote ? this.summary(id) : null;
     const live = this.live.get(id);
     if (live) {
       if (live.agent) {
@@ -544,8 +615,11 @@ export class SessionHub {
       this.live.delete(id);
     }
     rmSync(e.file, { force: true });
-    this.index.delete(id);
+    e.deletedAt = new Date().toISOString();
+    e.updatedAt = e.deletedAt;
     this.saveIndex();
+    if (!remote) this.onHistoryChange();
+    if (summary) this.opts.emit("session.updated", { sessionId: id, session: summary });
     return true;
   }
 
@@ -612,6 +686,9 @@ export class SessionHub {
       agentDir: this.agentDir,
       systemPrompt:
         ORION_SYSTEM_PROMPT +
+        (this.opts.farmCodeNotice?.()
+          ? `\nFarm code sync: ${this.opts.farmCodeNotice?.()}\n`
+          : "") +
         computerPrompt({
           ...this.opts,
           dataDir: this.opts.farmDir ?? this.opts.dataDir,
@@ -854,6 +931,14 @@ export class SessionHub {
     }
   }
 
+  get running(): boolean {
+    return this.starting > 0 || [...this.live.values()].some((live) => live.streaming);
+  }
+
+  reloadWorkspace(): void {
+    for (const live of this.live.values()) if (!live.streaming) this.dropAgent(live);
+  }
+
   /** True when Orion will restart by itself once no conversation is running. */
   restartWhenIdle(): boolean {
     if (!this.opts.restart) return false;
@@ -932,7 +1017,14 @@ export class SessionHub {
       else await agent.followUp(text);
       return;
     }
-    const agent = await this.ensureAgent(live);
+    await this.opts.beforePrompt?.();
+    this.starting++;
+    let agent: AgentSession;
+    try {
+      agent = await this.ensureAgent(live);
+    } finally {
+      this.starting--;
+    }
     agent.setAutoRetryEnabled(true);
     const entry = this.entry(id);
     live.streaming = true;

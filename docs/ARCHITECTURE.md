@@ -96,6 +96,10 @@ Events: `session.updated`, `message.start`, `message.delta {text|thinking}`,
 `tool.update {partial}`, `tool.end`, `agent.settled`, `modules.updated`,
 `db.changed {table, ids}`, `sync.status`, `error`.
 
+Orion also emits `session.updated` when private chat sync imports entries, changes a title, or
+removes a remotely deleted conversation. `sessions.list` and `sessions.open` then read the merged
+local Pi history; Core chat REST does not change the WebSocket request contracts.
+
 Validation uses typebox `Value.Check`, which avoids `eval` and so works under a strict webview CSP.
 The server validates every incoming frame with `decodeClientMessage()`. The client validates
 events, and by default also validates results.
@@ -173,6 +177,40 @@ mapped resource against them.
   `sync.status` reports `disabled`. Writes made while signed out stay in the outbox and are pushed
   after sign-in.
 
+### Farm code
+
+Workspace files and the farm's own app changes sync separately from database rows. Core keeps
+SHA-256 content-addressed blobs, manifests and parent-linked commits in Postgres
+(`0010_farm_code.sql`). JSON REST uses a user session and `x-orbit-farm`:
+`GET /v1/farm-code/head`, `POST /v1/farm-code/blobs/fetch {hashes}`, and
+`POST /v1/farm-code/commits {parent,manifest,blobs}`. Blob values are base64; manifests map workspace
+paths to hashes and hold an optional app delta. Any member reads; owners and managers write, using
+the same role rule as connectors. The head advances atomically only when `parent` still matches
+(otherwise HTTP 409). Limits are 2,000 paths, 1 MiB per blob and 8 MiB of referenced bytes, including
+app base versions; JSON requests are bounded to 16 MiB. Blob reads cannot cross farms.
+
+Orion reconciles on sign-in/link/refresh, after workspace commits and app builds, after agent
+settlement, and every 30 seconds while signed in. It defers file application while an agent runs.
+The last cloud manifest is the three-way workspace base: independent file edits merge, identical
+content does nothing, and conflicting edits keep the local file plus all versions in
+`farm-code/<farm-id>/conflicts` inside the open farm's folder (the data folder, or `farms/<id>/`),
+next to the sync base for that workspace. A persistent notice is included in the agent's prompt.
+Incoming files form normal Git workspace snapshots, so undo works; `db.changed` for `workspace`
+refreshes pages and idle agents reload their skills and context. Signed-out work remains local.
+Hidden/credential files, symlinks, dependency/build directories and files matching `share_build`'s
+secret patterns are excluded; Core also checks paths, hashes, content and limits.
+
+An app delta contains the sender's base release commit and changed paths, each referencing both
+base bytes and changed bytes (null denotes absence/deletion). The receiver writes these as a
+synthetic change commit without checking out the sender's release. `LocalUiService.update()` then
+carries that change through its existing cherry-pick/conflict path onto the receiver's installed
+release. The normal typecheck, Orion smoke check when needed, and `build:local` gate activation.
+A conflict or build failure leaves the shipped app active and saves the received delta and base
+bytes in `<data-dir>/farm-code/app`; `localUi.status` includes `syncError` and `recoveryPath`, and the
+agent receives a notice. The startup rule retiring builds older than the installed release is
+unchanged. Each install remembers the locally ported app fingerprint so a pull does not bounce
+the sender's base back into the cloud.
+
 ## Accounts, farm roles and invites (Core)
 
 - **Billing:** `core/api/src/plans.ts` defines the `free`, `orion`, `cam2`, `cam4` and `cam6` plans and hardware.
@@ -197,6 +235,19 @@ mapped resource against them.
 - **Farm-scoped routes** (`/v1/changes`, `/v1/shape`, `/v1/llm/*`) take a user session plus the
   `x-orbit-farm` header (membership required; `/v1/changes` rejects rows the role may not change),
   or a legacy per-farm api token, which keeps owner rights.
+- **Private chats:** `/v1/chat/*` requires a user session and `x-orbit-farm` membership; legacy
+  farm tokens are refused. Every Postgres chat key includes both farm ID and author user ID,
+  so owners and managers cannot read another member's chats. Native clients can use the same
+  JSON REST API without Orion: `GET /v1/chat/sessions` lists metadata (including deletion
+  tombstones), `GET /v1/chat/sessions/:id/entries` reads the Pi header and entries,
+  `POST /v1/chat/sessions/:id/entries` appends `{session, header, entries}` idempotently by entry
+  ID, `PATCH /v1/chat/sessions/:id` renames with `{title, updatedAt}`, and
+  `DELETE /v1/chat/sessions/:id` soft deletes permanently. Lists return 100 sessions per page;
+  entry reads return 20 entries per page. Both return `next` (null at the end), supplied as
+  `?after=` on the next request. Writes accept at most 1 MiB, 100 entries and 512 KiB per entry.
+  Append batches must put parents before children. Metadata uses ISO timestamps and
+  last-writer-wins `updatedAt`; immutable entries form a union
+  by ID, preserving `parentId` branches. Deleted sessions cannot be resurrected by offline writes.
 - **Orion** (`--core-url` / `ORBIT_CORE_URL`) relays `account.*`, `members.*` and `invites.*` for the
   UI, keeps the session encrypted in the data dir (`account-session.enc.json`, so it lasts as long as the farm's data; Windows drops keychain entries when an admin resets the user's password), links the local farm (member: use the
   role; unknown to the cloud: claim it as owner; someone else's: stay local with `linkError` until an
@@ -244,6 +295,15 @@ mapped resource against them.
   `AgentSessionRuntime`. Pi events are translated into protocol events: `message_update` becomes
   `message.delta`, tool execution start/update/end become `tool.*`, `message_end` becomes
   `message.end`, and `agent_settled` becomes `agent.settled`.
+- **Private chat sync:** `services/chat-sync.ts` reconciles JSONL and index metadata with Core
+  after account linking, settled turns, voice history, rename and delete, and every ten seconds.
+  Importing entries rebuilds idle Pi sessions and emits `session.updated`; running sessions
+  receive remote changes after settlement. JSONL and index tombstones retain offline writes
+  across restarts. Which conversations belong to whom comes from the hub's per-person chat
+  folders (`hub.setOwner`); chat sync runs for the signed-in user and open farm only after the
+  hub has switched to that person's folder. Without a linked farm, conversations remain local. Uploads reuse sharing's `SECRET_PATTERNS`, remove known credential
+  values, and omit results of tool calls that access credential files; local history is untouched.
+  Chat history stays in Core-only Postgres tables and never enters Electric or the farm outbox.
 - **Farm workspace:** the agent's `cwd` is `<data-dir>/workspace`. It holds `AGENTS.md` (farm
   context: herd, devices, routines), skills (for example connector setup and camera discovery),
   imports and scripts. These are loaded through `DefaultResourceLoader`.
