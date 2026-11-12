@@ -1,13 +1,13 @@
 import "./providers.css";
 import type { AccountStatus, BillingPlans, BillingStatus } from "@orbit/protocol";
-import { Check, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge, type BadgeVariant, Button, useToast } from "../../design";
 import { type MessageKey, useI18n } from "../../i18n";
 import { isTauriRuntime, useOrion } from "../../lib/orion";
 
-export type PaidPlan = Exclude<BillingStatus["plan"], "free">;
-export type BillingInterval = "month" | "year";
+/** Plans are chosen on the website, in the browser; the app only shows the current one. */
+export const PRICING_URL = "https://pecorva.com/pricing/";
 
 const DEFAULT_FREE_BILLING: BillingStatus = {
   plan: "free",
@@ -20,13 +20,10 @@ const DEFAULT_FREE_BILLING: BillingStatus = {
 
 export async function openExternalUrl(url: string): Promise<void> {
   if (isTauriRuntime()) {
-    try {
-      const shell = await import("@tauri-apps/plugin-shell");
-      await shell.open(url);
-      return;
-    } catch {
-      // Fall back to window.open if shell plugin fails
-    }
+    // Always the system browser: window.open in the desktop app would show the page inside Orbit.
+    const shell = await import("@tauri-apps/plugin-shell");
+    await shell.open(url);
+    return;
   }
   if (typeof window !== "undefined" && typeof window.open === "function") {
     window.open(url, "_blank", "noopener,noreferrer");
@@ -106,9 +103,7 @@ export function BillingSection({ status, now = Date.now() }: BillingSectionProps
 
   const [billing, setBilling] = useState<BillingStatus>(DEFAULT_FREE_BILLING);
   const [catalogue, setCatalogue] = useState<BillingPlans | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<PaidPlan>("orion");
-  const [selectedInterval, setSelectedInterval] = useState<BillingInterval>("month");
-  const [busyAction, setBusyAction] = useState<"checkout" | "portal" | null>(null);
+  const [busyPortal, setBusyPortal] = useState(false);
 
   useEffect(() => {
     setCatalogue(null);
@@ -117,11 +112,7 @@ export function BillingSection({ status, now = Date.now() }: BillingSectionProps
     let live = true;
     client.request("billing.status", {}).then(
       (next) => {
-        if (!live) return;
-        setBilling(next);
-        if (next.plan !== "free") setSelectedPlan(next.plan);
-        if (next.interval === "month" || next.interval === "year")
-          setSelectedInterval(next.interval);
+        if (live) setBilling(next);
       },
       () => {
         if (live) setBilling(DEFAULT_FREE_BILLING);
@@ -162,28 +153,14 @@ export function BillingSection({ status, now = Date.now() }: BillingSectionProps
   const badge = statusBadgeMeta(billing.status);
   const voiceMinutesUsed = Math.round(billing.usage.voiceSecondsUsed / 60);
   const voiceMinutesAllowance = Math.round(billing.usage.voiceSecondsAllowance / 60);
-  const paidPlans = catalogue?.plans.filter((plan) => plan.id !== "free") ?? [];
-  const canPick =
-    catalogue !== null &&
-    !catalogue.locked &&
-    paidPlans.length > 0 &&
-    paidPlans.every((plan) => plan.monthly !== undefined && plan.yearly !== undefined);
-  const activePlan = paidPlans.find((plan) => plan.id === selectedPlan) ?? paidPlans[0];
   const trialEnd = billing.trialEndsAt ? new Date(billing.trialEndsAt).getTime() : 0;
   const trialDays = billing.plan === "free" ? Math.ceil((trialEnd - now) / 86_400_000) : 0;
 
-  const openBillingLink = async (kind: "checkout" | "portal") => {
+  const openPortal = async () => {
     if (!client) return;
-    if (kind === "checkout" && (!canPick || !activePlan || activePlan.id === "free")) return;
-    setBusyAction(kind);
+    setBusyPortal(true);
     try {
-      const res =
-        kind === "checkout"
-          ? await client.request("billing.checkout", {
-              plan: activePlan && activePlan.id !== "free" ? activePlan.id : selectedPlan,
-              interval: selectedInterval,
-            })
-          : await client.request("billing.portal", {});
+      const res = await client.request("billing.portal", {});
       await openExternalUrl(res.url);
     } catch (error) {
       pushToast({
@@ -192,7 +169,7 @@ export function BillingSection({ status, now = Date.now() }: BillingSectionProps
         tone: "danger",
       });
     } finally {
-      setBusyAction(null);
+      setBusyPortal(false);
     }
   };
 
@@ -280,114 +257,39 @@ export function BillingSection({ status, now = Date.now() }: BillingSectionProps
         />
       </div>
 
-      {canPick ? (
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}
-          data-testid="billing-picker"
-        >
-          <div className="orbit-billing__picker-head">
-            <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
-              {t("account.billing.pickerPlanLabel")}
-            </span>
-            <fieldset
-              className="orbit-billing__intervals"
-              aria-label={t("account.billing.pickerIntervalLabel")}
-            >
-              {(["month", "year"] as const).map((interval) => (
-                <Button
-                  key={interval}
-                  type="button"
-                  size="sm"
-                  variant={selectedInterval === interval ? "primary" : "secondary"}
-                  aria-pressed={selectedInterval === interval}
-                  onClick={() => setSelectedInterval(interval)}
-                  data-testid={`billing-interval-${interval}`}
-                >
-                  {t(`account.billing.interval.${interval}`)}
-                </Button>
-              ))}
-            </fieldset>
-          </div>
-
-          <fieldset
-            className="orbit-billing__grid"
-            aria-label={t("account.billing.pickerPlanLabel")}
-          >
-            {paidPlans.map((plan) => {
-              const id = plan.id;
-              if (id === "free") return null;
-              const selected = activePlan?.id === plan.id;
-              const price = selectedInterval === "month" ? plan.monthly : plan.yearly;
-              if (price === undefined) return null;
-              return (
-                <button
-                  key={plan.id}
-                  type="button"
-                  className="orbit-billing__plan-btn"
-                  aria-pressed={selected}
-                  onClick={() => setSelectedPlan(id)}
-                  data-testid={`billing-plan-${plan.id}`}
-                >
-                  <span className="orbit-billing__plan-title">
-                    {selected && (
-                      <Check
-                        size={15}
-                        style={{ color: "var(--accent-primary)" }}
-                        aria-hidden="true"
-                      />
-                    )}
-                    {plan.name}
-                  </span>
-                  <span className="orbit-billing__plan-desc">
-                    {t(`account.billing.option.${selectedInterval}`, {
-                      name: plan.name,
-                      price: formatNumber(price, { style: "currency", currency: "EUR" }),
-                      tokens: formatNumber(plan.orionTokens),
-                      minutes: formatNumber(plan.voiceMinutes),
-                    })}
-                  </span>
-                </button>
-              );
-            })}
-          </fieldset>
-
-          <div className="orbit-billing__actions">
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              loading={busyAction === "checkout"}
-              icon={<ExternalLink size={14} />}
-              onClick={() => void openBillingLink("checkout")}
-              data-testid="billing-checkout-button"
-            >
-              {t("account.billing.choosePlan")}
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <a
-          href="https://pecorva.com/pricing/"
-          target="_blank"
-          rel="noreferrer"
-          data-testid="billing-pricing-link"
-        >
-          {t("account.billing.websitePricing")}
-        </a>
-      )}
-      {billing.plan !== "free" && (
+      <div className="orbit-billing__actions">
         <Button
           type="button"
-          variant="secondary"
+          variant="primary"
           size="sm"
-          loading={busyAction === "portal"}
           icon={<ExternalLink size={14} />}
-          onClick={() => void openBillingLink("portal")}
-          data-testid="billing-portal-button"
+          onClick={() =>
+            openExternalUrl(PRICING_URL).catch((error: unknown) =>
+              pushToast({
+                title: t("account.failed"),
+                description: error instanceof Error ? error.message : String(error),
+                tone: "danger",
+              }),
+            )
+          }
+          data-testid="billing-choose-plan-button"
         >
-          {t("account.billing.manageBilling")}
+          {t("account.billing.choosePlan")}
         </Button>
-      )}
+        {billing.plan !== "free" && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            loading={busyPortal}
+            icon={<ExternalLink size={14} />}
+            onClick={() => void openPortal()}
+            data-testid="billing-portal-button"
+          >
+            {t("account.billing.manageBilling")}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

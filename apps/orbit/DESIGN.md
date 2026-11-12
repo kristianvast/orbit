@@ -121,14 +121,14 @@ Layout: Ask Orion Screen (Chat & Voice) - two-column bounded shell (`.orbit-thre
 
 ### Settings Screen (Account & Billing) & Ask Orion (Chat & Voice)
 
-- **Primary Action:** **"Choose a plan"** (`billing-checkout-button`) inside `BillingSection` on the Account card; **"Send"** (`chat-send-button`) in the Ask Orion composer.
+- **Primary Action:** **"Choose a plan"** (`billing-choose-plan-button`, opens pecorva.com/pricing in the browser) inside `BillingSection` on the Account card; **"Send"** (`chat-send-button`) in the Ask Orion composer.
 - **Information Priorities (1-3):**
   1. **Current plan, status, renewal date, and usage meters** (`billing-plan-name`, `billing-status-badge`, `billing-period-end`, `billing-meter-tokens`, `billing-meter-voice`), plus open-source BYO key explanation on free plan (`billing-free-copy`).
-  2. **Plan & interval picker** (`billing-plan-pen`, `billing-plan-barn`, `billing-interval-month`, `billing-interval-year`) with checkout and billing portal actions (`billing-checkout-button`, `billing-portal-button`).
+  2. **Plan actions:** `billing-choose-plan-button` opens the website's plans page in the browser (plans and prices are never listed in the app); `billing-portal-button` (`billing.portal`) for paid farms.
   3. **Chat plan-limit card & Talk to Orion voice panel** (`chat-plan-error-card` with `chat-plan-error-use-key` and `chat-plan-error-see-plans`; `voice-panel` with `voice-state-badge`, `voice-transcript`, `voice-tools` reusing `ToolCard`, `voice-stop-button`, and `voice-mic-error` fallback).
 - **Left Out on Purpose:** multi-tier comparison tables with checkmarks, decorative discount badges, animated waveform gimmicks, 2px coloured selection borders on plan cards.
 - **Required Content:**
-  - `AccountCard`: plan name (`free`/`pen`/`barn`), status badge, renewal/period end, token and voice minute usage meters, Free BYO explanation, signed-out sign-in prompt, Pen/Barn x Monthly/Yearly picker, `Choose a plan` (`billing.checkout`), `Manage billing` (`billing.portal`).
+  - `AccountCard`: plan name (`free`/`pen`/`barn`), status badge, renewal/period end, token and voice minute usage meters, Free BYO explanation, signed-out sign-in prompt, `Choose a plan` (opens https://pecorva.com/pricing/ in the browser), `Manage billing` (`billing.portal`).
   - `ChatPage`: `PlanErrorCard` for `plan_required` and `budget_exceeded` with `"Use your own key"` (navigates to Providers) and `"See plans"` (navigates to Account card); `Composer` `"Talk to Orion"` button (`chat-voice-button`) opening `VoicePanel` with AudioWorklet 16 kHz PCM16 capture, 24 kHz AudioContext playback queue, live transcript, `ToolCard` tool executions, state badge, stop button, and mic-denied notice.
 
 ## 6. Components (source)

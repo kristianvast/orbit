@@ -275,8 +275,7 @@
   gap: var(--space-2);
 }
 
-.orbit-billing__summary,
-.orbit-billing__picker-head {
+.orbit-billing__summary {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -334,50 +333,7 @@
   transition: inline-size var(--duration-normal) var(--ease-out);
 }
 
-.orbit-billing__intervals {
-  display: inline-flex;
-  gap: var(--space-1);
-  border: none;
-  margin: 0;
-  padding: 0;
-}
-
-.orbit-billing__plan-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background-color: var(--bg-surface);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  text-align: start;
-  cursor: pointer;
-  min-block-size: var(--control-height-md);
-}
-
-.orbit-billing__plan-btn[aria-pressed="true"] {
-  border-color: var(--border-strong);
-  background-color: var(--bg-elevated);
-}
-
-.orbit-billing__plan-title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: 600;
-  font-size: var(--text-base);
-}
-
-.orbit-billing__plan-desc {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
 @media (max-width: 900px), (pointer: coarse) {
-  .orbit-billing__intervals .orbit-btn,
   .orbit-billing__actions .orbit-btn {
     min-block-size: var(--control-height-md);
   }
