@@ -356,7 +356,7 @@ describe("Orion account", () => {
     const shared = await c.request("farms.create", { name: "Hill farm" });
     expect(shared).toMatchObject({
       farm: { id: farmId, name: "Hill farm", role: "owner" },
-      farms: [{ id: farmId, role: "owner" }],
+      farms: [{ id: farmId, name: "Hill farm", role: "owner" }],
       localFarm: null,
     });
     await upToDate;

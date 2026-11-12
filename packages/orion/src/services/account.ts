@@ -472,9 +472,12 @@ export class AccountService {
    */
   private async link(): Promise<void> {
     const me = (await this.call("GET", "/v1/me")) as { user: AccountUser; farms: MeFarm[] };
-    const farms = me.farms.map(accountFarm);
     const active = this.opts.folders?.active ?? null;
     const local = this.opts.repo.farm();
+    // The cloud learns a farm's name from its first sync; until then this PC knows it.
+    const farms = me.farms.map((f) =>
+      accountFarm(f.name || f.farmId !== local?.id ? f : { ...f, name: local.name }),
+    );
     if (active) {
       const mine = me.farms.find((f) => f.farmId === active);
       if (!mine) {
