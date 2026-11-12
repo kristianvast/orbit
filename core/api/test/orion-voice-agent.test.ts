@@ -88,6 +88,22 @@ test("with an agent id it updates that agent's own tools and creates only the mi
   ]);
 });
 
+test("when the agent is refused, the tools made in that run are removed again", async () => {
+  let made = 0;
+  const api = elevenLabs({
+    "POST /v1/convai/tools": () => ({ id: `tool_${++made}` }),
+    ...Object.fromEntries(
+      names.map((_, i) => [`DELETE /v1/convai/tools/tool_${i + 1}`, () => ({ status: "ok" })]),
+    ),
+  });
+  await expect(syncOrionVoiceAgent({ apiKey: "xi-test", fetch: api.fetch })).rejects.toThrow(
+    "ElevenLabs POST /v1/convai/agents/create answered 404",
+  );
+  expect(api.calls.filter((call) => call.method === "DELETE").map((call) => call.path)).toEqual(
+    names.map((_, i) => `/v1/convai/tools/tool_${i + 1}`),
+  );
+});
+
 test("a refusal from ElevenLabs stops the sync and names the request", async () => {
   const api = elevenLabs({});
   await expect(syncOrionVoiceAgent({ apiKey: "xi-test", fetch: api.fetch })).rejects.toThrow(

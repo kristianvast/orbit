@@ -261,22 +261,41 @@ export async function syncOrionVoiceAgent(opts: SyncOptions): Promise<SyncResult
   }
 
   const tools: Record<string, string> = {};
-  for (const tool of ORION_VOICE_TOOLS) {
-    const body = { tool_config: toolConfig(tool) };
-    const id = existing.get(tool.name);
-    if (id) {
-      await call("PATCH", `/v1/convai/tools/${encodeURIComponent(id)}`, body);
-      tools[tool.name] = id;
-    } else {
-      tools[tool.name] = string((await call("POST", "/v1/convai/tools", body)).id, "tool id");
+  const madeHere: string[] = [];
+  try {
+    for (const tool of ORION_VOICE_TOOLS) {
+      const body = { tool_config: toolConfig(tool) };
+      const id = existing.get(tool.name);
+      if (id) {
+        await call("PATCH", `/v1/convai/tools/${encodeURIComponent(id)}`, body);
+        tools[tool.name] = id;
+      } else {
+        const made = string((await call("POST", "/v1/convai/tools", body)).id, "tool id");
+        madeHere.push(made);
+        tools[tool.name] = made;
+      }
     }
-  }
 
-  const body = agentBody(Object.values(tools));
-  if (opts.agentId) {
-    await call("PATCH", `/v1/convai/agents/${encodeURIComponent(opts.agentId)}`, body);
-    return { agentId: opts.agentId, created: false, tools };
+    const body = agentBody(Object.values(tools));
+    if (opts.agentId) {
+      await call("PATCH", `/v1/convai/agents/${encodeURIComponent(opts.agentId)}`, body);
+      return { agentId: opts.agentId, created: false, tools };
+    }
+    const created = await call("POST", "/v1/convai/agents/create", body);
+    return { agentId: string(created.agent_id, "agent id"), created: true, tools };
+  } catch (error) {
+    // A run that fails must not leave tools nobody uses in the workspace; a retry would add more.
+    const left: string[] = [];
+    for (const id of madeHere) {
+      const res = await opts.fetch(`${base}/v1/convai/tools/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { "xi-api-key": opts.apiKey },
+      });
+      if (!res.ok) left.push(id);
+    }
+    if (left.length === 0) throw error;
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)} (these tools could not be removed again: ${left.join(", ")})`,
+    );
   }
-  const created = await call("POST", "/v1/convai/agents/create", body);
-  return { agentId: string(created.agent_id, "agent id"), created: true, tools };
 }

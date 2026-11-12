@@ -219,8 +219,9 @@ The Orbit agent itself (what Orion is told, its voice, and its five client tools
 `api/src/orion-voice-agent.ts`. `bun run --filter '@core/api' voice:setup -- --print` shows what
 would be sent. With `ELEVENLABS_API_KEY` set, `voice:setup` creates the agent and its tools in
 ElevenLabs and prints the id to use as `VOICE_AGENT_ID`; with `VOICE_AGENT_ID` also set it
-updates that agent and only the tools that agent already uses. The tools run on the farm's own
-computer, so nothing in ElevenLabs reaches farm data directly.
+updates that agent and only the tools that agent already uses. A run that fails removes the tools
+it created. The tools run on the farm's own computer, so nothing in ElevenLabs reaches farm data
+directly. `deploy/provision.sh` carries the agent's id as the default `VOICE_AGENT_ID`.
 
 The remaining local-stack instructions below apply to a server or CI machine.
 
