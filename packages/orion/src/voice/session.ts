@@ -1,3 +1,4 @@
+import type { BillingStatus } from "@orbit/protocol";
 import type { ServerWebSocket } from "bun";
 import { AccountError, type AccountService } from "../services/account";
 import type { BillingService } from "../services/billing";
@@ -24,6 +25,19 @@ type LiveCall = {
   readonly pending: string[];
 };
 export type VoiceSocketData = { readonly kind: "voice"; readonly voiceId: string };
+
+/**
+ * Why this farm may not start a call, or null when it may. The voice seconds Core grants are the
+ * rule, never the plan's name: a farm in its free month has plan "free" and still has an allowance.
+ */
+export function voiceRefusal(status: BillingStatus): AccountError | null {
+  const { voiceSecondsAllowance, voiceSecondsUsed } = status.usage;
+  if (voiceSecondsAllowance <= 0)
+    return new AccountError("plan_required", "Choose an Orbit plan to talk to Orion.");
+  if (voiceSecondsUsed >= voiceSecondsAllowance)
+    return new AccountError("budget_exceeded", "Your voice allowance is used up for this period.");
+  return null;
+}
 type VoiceSocket = Pick<ServerWebSocket<SocketData>, "send" | "close">;
 
 /** A call outlives its SDK socket until stop or the protocol owner disconnects. */
@@ -173,11 +187,8 @@ export class VoiceSessions {
     if (this.opts.mockModel) return { url: "" };
     if (this.opts.account.status().state !== "signed_in")
       throw new AccountError("unauthorized", "Sign in with an Orbit plan to talk to Orion.");
-    const status = await this.opts.billing.status();
-    if (status.plan === "free" || !["active", "trialing"].includes(status.status))
-      throw new AccountError("plan_required", "Choose an Orbit plan to talk to Orion.");
-    if (status.usage.voiceSecondsUsed >= status.usage.voiceSecondsAllowance)
-      throw new AccountError("budget_exceeded", "Your voice allowance is used up for this period.");
+    const refusal = voiceRefusal(await this.opts.billing.status());
+    if (refusal) throw refusal;
     const connection = this.opts.account.cloudConnection();
     const url = new URL(`${connection.url}/v1/voice/agent`);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";

@@ -1,8 +1,30 @@
 import { expect, test } from "bun:test";
+import { voiceRefusal } from "../src/voice/session";
 import type { VoiceTransport } from "../src/voice/transport";
 import { LiveVoiceTransport } from "../src/voice/transport";
 import { TOKEN, waitFor } from "./helpers";
 import { bounded, VoicePeer, voiceFixture } from "./voice-helpers";
+
+const freePlanWith = (voiceSecondsUsed: number, voiceSecondsAllowance: number) => ({
+  plan: "free" as const,
+  interval: null,
+  status: "free",
+  currentPeriodEnd: null,
+  trialEndsAt: voiceSecondsAllowance > 0 ? "2026-12-11T00:00:00.000Z" : null,
+  cancelAtPeriodEnd: false,
+  usage: { tokensUsed: 0, tokenAllowance: 2_000_000, voiceSecondsUsed, voiceSecondsAllowance },
+});
+
+test("a farm in its free month may start a call although its plan is still free", () => {
+  expect(voiceRefusal(freePlanWith(0, 1800))).toBeNull();
+});
+
+test.each([
+  ["no voice allowance", 0, 0, "plan_required"],
+  ["a used-up voice allowance", 1800, 1800, "budget_exceeded"],
+] as const)("%s refuses the call", (_name, used, allowance, code) => {
+  expect(voiceRefusal(freePlanWith(used, allowance))?.code).toBe(code);
+});
 
 test("live transport authenticates Core and relays text bytes verbatim", async () => {
   const core = Bun.serve({
