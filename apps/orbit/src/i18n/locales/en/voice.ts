@@ -18,6 +18,8 @@ export const voice = {
   "orb.speaking": "SPEAKING",
   "orb.working": "WORKING",
   "orb.ended": "ENDED",
+  "orb.hudTitle": "ORION · VOICE LINK",
+  "orb.hudActions": "ACTIONS {count}",
   "action.start": "Talk to Orion",
   "action.startAgain": "Call again",
   "action.end": "End call",
@@ -129,4 +131,9 @@ export const voice = {
   "activity.generic.done": "Completed a step",
   "activity.generic.stopped": "Stopped",
   "activity.generic.error": "Could not complete that step",
+  "settings.title": "Orion's voice",
+  "settings.label": "Voice",
+  "settings.male": "Male",
+  "settings.female": "Female",
+  "settings.hint": "Used from your next call.",
 } as const satisfies Messages;

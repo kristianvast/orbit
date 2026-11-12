@@ -19,6 +19,8 @@ export const voice: Catalog<typeof en> = {
   "orb.speaking": "SNAKKER",
   "orb.working": "JOBBER",
   "orb.ended": "AVSLUTTET",
+  "orb.hudTitle": "ORION · TALELINJE",
+  "orb.hudActions": "HANDLINGER {count}",
   "action.start": "Snakk med Orion",
   "action.startAgain": "Ring på nytt",
   "action.end": "Avslutt",
@@ -130,4 +132,9 @@ export const voice: Catalog<typeof en> = {
   "activity.generic.done": "Fullførte et steg",
   "activity.generic.stopped": "Stoppet",
   "activity.generic.error": "Kunne ikke fullføre steget",
+  "settings.title": "Orions stemme",
+  "settings.label": "Stemme",
+  "settings.male": "Mann",
+  "settings.female": "Kvinne",
+  "settings.hint": "Brukes fra neste samtale.",
 };

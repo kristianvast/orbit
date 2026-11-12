@@ -10,14 +10,11 @@
   flex-shrink: 0;
 }
 
-.orbit-voice-orb-frame--widget {
-  inline-size: 11.5rem;
-  block-size: 8.5rem;
-}
-
+/* Same band as the website demo's halo: full width, clamp(14rem, 22vw, 17rem) tall. */
+.orbit-voice-orb-frame--widget,
 .orbit-voice-orb-frame--stage {
-  inline-size: min(100%, 21rem);
-  block-size: 13.5rem;
+  inline-size: 100%;
+  block-size: clamp(14rem, 22vw, 17rem);
 }
 
 .orbit-voice-orb-frame--dock {
@@ -49,7 +46,7 @@
 
 .orbit-home-voice__top {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: center;
   min-inline-size: 0;
@@ -121,7 +118,7 @@
   gap: var(--space-3);
   margin: var(--space-3) var(--space-4) 0;
   padding: var(--space-3) var(--space-4);
-  max-block-size: min(26rem, 45dvh);
+  max-block-size: min(36rem, 64dvh);
   border-radius: var(--radius-lg);
   background-color: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
@@ -178,9 +175,9 @@
 
 .orbit-voice-stage__compact {
   display: grid;
-  grid-template-columns: minmax(20rem, 21rem) minmax(0, 1fr);
-  gap: var(--space-4);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
   min-inline-size: 0;
 }
 
@@ -447,7 +444,7 @@
   .orbit-voice-stage {
     margin: var(--space-2) var(--space-2) 0;
     padding: var(--space-3);
-    max-block-size: min(24rem, 48dvh);
+    max-block-size: min(32rem, 60dvh);
   }
 }
 
@@ -459,16 +456,6 @@
   .orbit-home-voice__top,
   .orbit-voice-stage__compact {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .orbit-voice-orb-frame--stage {
-    inline-size: 100%;
-    block-size: 11.75rem;
-  }
-
-  .orbit-voice-orb-frame--widget {
-    inline-size: 100%;
-    block-size: 8.5rem;
   }
 
   .orbit-voice-dock {

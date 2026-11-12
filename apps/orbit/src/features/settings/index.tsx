@@ -27,6 +27,7 @@ import { AccountCard, AccountSection, BillingSection } from "./AccountCard";
 import { FarmProfileCard } from "./FarmProfileCard";
 import { FeedbackCard } from "./FeedbackCard";
 import { OrbitModulesCard } from "./OrbitModulesCard";
+import { OrionVoiceCard } from "./OrionVoiceCard";
 import { ProvidersCard } from "./ProvidersCard";
 import { YourOrbitCard } from "./YourOrbitCard";
 
@@ -304,6 +305,8 @@ export default function SettingsPage() {
           data-testid="settings-language-select"
         />
       </Card>
+
+      <OrionVoiceCard />
 
       <div className="orbit-split-grid">
         <Card

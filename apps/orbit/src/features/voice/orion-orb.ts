@@ -4,13 +4,15 @@ import type { ActivityRowView, VoiceCallState } from "./types";
 
 export type { OrbVariant } from "./orion-orb-draw";
 
-const MAX_CHIPS = 4;
+const MAX_CHIPS = 6;
 
 export interface OrionOrbController {
   update(input: {
     readonly state: VoiceCallState;
     readonly stateLabel: string;
     readonly wordmark: string;
+    readonly hudTitle: string;
+    readonly hudActions: string;
     readonly level: number;
     readonly activities: readonly ActivityRowView[];
     readonly reducedMotion: boolean;
@@ -40,6 +42,8 @@ export function createOrionOrb(
   let currentState: VoiceCallState = "idle";
   let stateLabel = "READY";
   let wordmark = "ORION";
+  let hudTitle = "";
+  let hudActions = "";
   let targetLevel = 0;
   let smoothLevel = 0;
   let reducedMotion = false;
@@ -71,6 +75,8 @@ export function createOrionOrb(
       currentState,
       stateLabel,
       wordmark,
+      hudTitle,
+      hudActions,
       reducedMotion,
       chips,
     });
@@ -116,7 +122,7 @@ export function createOrionOrb(
     const rect = canvas.getBoundingClientRect();
     dpr = typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 1) : 1;
     w = rect.width || (variant === "dock" ? 40 : 260);
-    h = rect.height || (variant === "dock" ? 40 : variant === "widget" ? 148 : 210);
+    h = rect.height || (variant === "dock" ? 40 : 240);
     canvas.width = Math.max(1, Math.round(w * dpr));
     canvas.height = Math.max(1, Math.round(h * dpr));
     paint(nowSec());
@@ -149,6 +155,8 @@ export function createOrionOrb(
       currentState = next.state;
       stateLabel = next.stateLabel;
       wordmark = next.wordmark;
+      hudTitle = next.hudTitle;
+      hudActions = next.hudActions;
       reducedMotion = next.reducedMotion;
       targetLevel = next.reducedMotion ? 0 : Math.max(0, Math.min(1, next.level));
       const t = nowSec();
@@ -161,6 +169,7 @@ export function createOrionOrb(
             status: act.status,
             startedAtSec: t,
             endedAtSec: act.status === "running" ? Number.POSITIVE_INFINITY : t,
+            dock: 0,
           };
         }
         return {

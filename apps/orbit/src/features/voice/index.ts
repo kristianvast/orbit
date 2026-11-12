@@ -29,3 +29,9 @@ export { VoiceDock } from "./VoiceDock";
 export { VoiceOrb, type VoiceOrbProps } from "./VoiceOrb";
 export { useVoice, VoiceProvider, type VoiceProviderProps } from "./VoiceProvider";
 export { selectStageLiveLine, VoiceStage } from "./VoiceStage";
+export {
+  ORION_VOICE_IDS,
+  type OrionVoiceChoice,
+  readVoiceChoice,
+  useVoiceChoice,
+} from "./voice-choice";

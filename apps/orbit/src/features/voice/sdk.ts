@@ -168,6 +168,8 @@ export async function defaultStartVoiceSession(
     },
   });
 
+  const overrides = { tts: { voiceId: input.voiceOverrideId } };
+
   const canAttemptMic =
     typeof navigator !== "undefined" &&
     typeof navigator.mediaDevices?.getUserMedia === "function" &&
@@ -181,6 +183,7 @@ export async function defaultStartVoiceSession(
         signedUrl: input.signedUrl,
         connectionType: "websocket",
         dynamicVariables: input.dynamicVariables,
+        overrides,
         workletPaths: assets.workletPaths,
         libsampleratePath: assets.libsampleratePath,
         stripAudioTags: true,
@@ -200,6 +203,7 @@ export async function defaultStartVoiceSession(
         signedUrl: refreshed.signedUrl,
         connectionType: "websocket",
         dynamicVariables: refreshed.dynamicVariables,
+        overrides,
         stripAudioTags: true,
         textOnly: true,
         clientTools: input.clientTools,
@@ -219,6 +223,7 @@ export async function defaultStartVoiceSession(
     signedUrl: input.signedUrl,
     connectionType: "websocket",
     dynamicVariables: input.dynamicVariables,
+    overrides,
     stripAudioTags: true,
     textOnly: true,
     clientTools: input.clientTools,

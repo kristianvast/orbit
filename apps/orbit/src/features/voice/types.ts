@@ -82,6 +82,7 @@ export interface VoiceSdkStartInput {
     readonly dynamicVariables: Record<string, string>;
   }>;
   readonly dynamicVariables: Record<string, string>;
+  readonly voiceOverrideId: string;
   readonly clientTools: VoiceClientToolCallbacks;
   readonly onStatusChange: (
     status: "connecting" | "connected" | "disconnecting" | "disconnected",

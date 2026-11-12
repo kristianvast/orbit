@@ -63,6 +63,10 @@ export function VoiceOrb({
   const stateLabel = t(ORB_STATE_KEYS[state]);
   const spokenState = t(SPOKEN_STATE_KEYS[state]);
   const wordmark = t("voice.orb.wordmark");
+  const hudTitle = t("voice.orb.hudTitle");
+  const hudActions = t("voice.orb.hudActions", {
+    count: String(Math.min(activities.length, 99)).padStart(2, "0"),
+  });
   const level = Math.max(inputLevel, outputLevel);
   const runningNames = activities
     .filter((a) => a.status === "running")
@@ -91,11 +95,13 @@ export function VoiceOrb({
       state,
       stateLabel,
       wordmark,
+      hudTitle,
+      hudActions,
       level,
       activities,
       reducedMotion,
     });
-  }, [state, stateLabel, wordmark, level, activities, reducedMotion]);
+  }, [state, stateLabel, wordmark, hudTitle, hudActions, level, activities, reducedMotion]);
 
   return (
     <div className={`orbit-voice-orb-frame orbit-voice-orb-frame--${variant}`}>

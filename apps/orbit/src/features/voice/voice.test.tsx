@@ -22,6 +22,7 @@ import {
   describeActivityRecord,
   ELAPSED_VISIBILITY_MS,
   formatActivityElapsed,
+  ORION_VOICE_IDS,
   type VoiceSdkStartInput,
   type VoiceSessionHandle,
   type VoiceStartSessionFn,
@@ -235,10 +236,36 @@ function RouteJumpProbe() {
 
 afterEach(() => {
   window.sessionStorage.clear();
+  window.localStorage.removeItem("orbit.voice");
   vi.restoreAllMocks();
 });
 
 describe("VoiceProvider lifecycle and surfaces", () => {
+  it("speaks with the voice chosen in Settings", async () => {
+    window.localStorage.setItem("orbit.voice", "female");
+    const { client } = createFakeVoiceClient();
+    const fakeSdk = createFakeStartSession();
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppProviders
+          initialClient={client}
+          initialEndpoint={{ url: "ws://127.0.0.1:7851/ws", token: "qa" }}
+          initialLocale="en"
+          voiceStartSession={fakeSdk.startSession}
+        >
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route index element={<HomePage />} />
+            </Route>
+          </Routes>
+        </AppProviders>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByTestId("home-voice-start"));
+    await waitFor(() => expect(fakeSdk.startSession).toHaveBeenCalled());
+    expect(fakeSdk.getInput().voiceOverrideId).toBe(ORION_VOICE_IDS.female);
+  });
+
   it("starts from Home without navigating, forwards clientTools, turns, and voice.note, and transitions across dock and chat stage", async () => {
     const { client, requestMock, emit } = createFakeVoiceClient();
     const fakeSdk = createFakeStartSession();
@@ -271,9 +298,11 @@ describe("VoiceProvider lifecycle and surfaces", () => {
     await waitFor(() => expect(widget).toHaveAttribute("data-voice-state", "listening"));
     expect(screen.getByTestId("current-path")).toHaveTextContent("/");
     expect(screen.queryByTestId("voice-dock")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("home-ask-input")).not.toBeInTheDocument();
 
     const sdkInput = fakeSdk.getInput();
     expect(sdkInput.signedUrl).toBe("ws://127.0.0.1:7851/voice/tok-secret/voice-42");
+    expect(sdkInput.voiceOverrideId).toBe(ORION_VOICE_IDS.male);
     expect(sdkInput.dynamicVariables).toEqual({
       farm_name: "North Meadow",
       conversation_recap: "",

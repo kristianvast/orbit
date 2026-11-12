@@ -294,7 +294,7 @@ export function HomePage() {
                 {t("home.setup.ownKey")}
               </Link>
             </section>
-          ) : (
+          ) : voice.isLive ? null : (
             <>
               <form className="orbit-ask orbit-ask--hero" onSubmit={submitQuestion}>
                 <label htmlFor="home-ask-orion" className="orbit-visually-hidden">
@@ -512,53 +512,57 @@ export function HomePage() {
           )}
         </div>
 
-        <form className="orbit-ask" onSubmit={submitQuestion}>
-          <label htmlFor="home-ask-orion" className="orbit-visually-hidden">
-            {t("home.ask.label")}
-          </label>
-          <input
-            id="home-ask-orion"
-            data-testid="home-ask-input"
-            className="orbit-ask__input"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder={t("home.ask.placeholder")}
-            autoComplete="off"
-          />
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            icon={<Mic size={15} />}
-            onClick={() => void (voice.isLive ? voice.stop() : voice.start({ resumeRecent: true }))}
-            data-testid="home-voice-btn"
-          >
-            {t("home.ask.voice")}
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            icon={<ArrowUp size={16} />}
-            data-testid="home-ask-submit"
-          >
-            {t("home.ask.submit")}
-          </Button>
-        </form>
-
-        <ul className="orbit-ask__suggestions" aria-label={t("home.ask.suggestions")}>
-          {suggestedQuestions.map((key) => (
-            <li key={key}>
-              <button
+        {!voice.isLive && (
+          <>
+            <form className="orbit-ask" onSubmit={submitQuestion}>
+              <label htmlFor="home-ask-orion" className="orbit-visually-hidden">
+                {t("home.ask.label")}
+              </label>
+              <input
+                id="home-ask-orion"
+                data-testid="home-ask-input"
+                className="orbit-ask__input"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder={t("home.ask.placeholder")}
+                autoComplete="off"
+              />
+              <Button
                 type="button"
-                className="orbit-ask__suggestion"
-                onClick={() => openOrionWithQuestion(t(key))}
+                variant="secondary"
+                size="sm"
+                icon={<Mic size={15} />}
+                onClick={() => void voice.start({ resumeRecent: true })}
+                data-testid="home-voice-btn"
               >
-                {t(key)}
-              </button>
-            </li>
-          ))}
-        </ul>
+                {t("home.ask.voice")}
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                icon={<ArrowUp size={16} />}
+                data-testid="home-ask-submit"
+              >
+                {t("home.ask.submit")}
+              </Button>
+            </form>
+
+            <ul className="orbit-ask__suggestions" aria-label={t("home.ask.suggestions")}>
+              {suggestedQuestions.map((key) => (
+                <li key={key}>
+                  <button
+                    type="button"
+                    className="orbit-ask__suggestion"
+                    onClick={() => openOrionWithQuestion(t(key))}
+                  >
+                    {t(key)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
         <HomeVoiceWidget />
       </header>

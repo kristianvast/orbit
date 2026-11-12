@@ -6,6 +6,7 @@ import { type CaptionAction, streamKeyFor, stripSpeechTags } from "./captions";
 import { createVoiceClientTools, openVoiceSessionOnOrion } from "./client-tools";
 import { buildVoiceSocketUrl } from "./sdk";
 import type { StartVoiceOptions } from "./types";
+import { ORION_VOICE_IDS, readVoiceChoice } from "./voice-choice";
 import type { CallPhase, VoiceRuntimeBag } from "./voice-hooks";
 
 function isToolErrorContext(context: unknown): boolean {
@@ -66,6 +67,7 @@ export async function runVoiceStartFlow(ctx: VoiceStartRunnerContext): Promise<v
     const sdkRes = await bag.startSession({
       signedUrl: buildVoiceSocketUrl(baseEndpointUrl, opened.path),
       dynamicVariables: opened.variables,
+      voiceOverrideId: ORION_VOICE_IDS[readVoiceChoice()],
       refreshSignedUrl: async () => {
         const prevId = bag.voiceId;
         if (prevId) {
