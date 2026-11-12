@@ -26,12 +26,12 @@ test("voice browser open and highlight emit JPEG views and close clears the imag
     expect(answer.isError).toBe(false);
     expect(answer.result).toContain('[1] button "Start here"');
     const view = await opened;
-    expect(view).toMatchObject({
-      title: "Voice browser",
-      width: 1280,
-      height: 900,
-      highlight: null,
-    });
+    expect(view).toMatchObject({ title: "Voice browser", highlight: null });
+    // The page area inside the 1280x900 window: Chrome and Edge take their frame and scrollbar off.
+    expect(view.width).toBeGreaterThan(0);
+    expect(view.width).toBeLessThanOrEqual(1280);
+    expect(view.height).toBeGreaterThan(0);
+    expect(view.height).toBeLessThanOrEqual(900);
     expect(Buffer.from(view.image ?? "", "base64").subarray(0, 2)).toEqual(
       Buffer.from([0xff, 0xd8]),
     );
