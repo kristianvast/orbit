@@ -2,15 +2,14 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import "./design/tokens.css";
-import { AppProviders, AppRoutes } from "./app";
+import { AppProviders, AppRoutes, readThemePreference, systemTheme } from "./app";
 import { captureLocalUiReturn, handOffToLocalUi, localUiBasename } from "./lib/local-ui";
 
-try {
-  const savedTheme = window.localStorage?.getItem("orbit.theme");
-  if (savedTheme === "dark" || savedTheme === "light") {
-    document.documentElement.setAttribute("data-theme", savedTheme);
-  }
-} catch {}
+// Paint the right theme before React mounts, so a dark OS never flashes light.
+const savedPreference = readThemePreference();
+const initialTheme =
+  savedPreference === "light" || savedPreference === "dark" ? savedPreference : systemTheme();
+if (initialTheme) document.documentElement.setAttribute("data-theme", initialTheme);
 
 captureLocalUiReturn();
 void handOffToLocalUi();

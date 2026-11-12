@@ -5,6 +5,7 @@ import {
   Home,
   MessageSquare,
   MessageSquareHeart,
+  Monitor,
   Moon,
   Plug,
   RefreshCw,
@@ -26,7 +27,23 @@ import { MODULE_IDS, type ModuleId, useModules } from "../lib/modules";
 import { resolveSyncNotice, useOrion, useOrionQuery } from "../lib/orion";
 import { useFarmSpecies } from "../lib/species";
 import { updateAction, useAppUpdate } from "../lib/updater";
-import { useTheme } from "./providers";
+import { type ThemePreference, useTheme } from "./providers";
+
+const THEME_ICON: Record<ThemePreference, typeof Home> = {
+  system: Monitor,
+  light: Sun,
+  dark: Moon,
+};
+const THEME_LABEL: Record<ThemePreference, MessageKey> = {
+  system: "shell.theme.system",
+  light: "shell.theme.light",
+  dark: "shell.theme.dark",
+};
+const THEME_TITLE: Record<ThemePreference, MessageKey> = {
+  system: "shell.theme.systemTitle",
+  light: "shell.theme.lightTitle",
+  dark: "shell.theme.darkTitle",
+};
 
 export interface NavItem {
   to: string;
@@ -112,7 +129,8 @@ export function AppShell() {
   const { state: connState, endpoint, reconnect, stopped, restart } = useOrion();
   const { data: summary } = useOrionQuery("farm.summary");
   const { isEnabled } = useModules();
-  const { theme, toggleTheme } = useTheme();
+  const { preference, cycleTheme } = useTheme();
+  const ThemeIcon = THEME_ICON[preference];
   const { species } = useFarmSpecies();
   const customPages = useCustomPages();
   const t = useT();
@@ -286,14 +304,13 @@ export function AppShell() {
         <Button
           variant="subtle"
           size="sm"
-          onClick={toggleTheme}
-          aria-label={t(theme === "light" ? "shell.theme.toDark" : "shell.theme.toLight")}
-          title={t(theme === "light" ? "shell.theme.darkTitle" : "shell.theme.lightTitle")}
-          icon={theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
+          onClick={cycleTheme}
+          aria-label={t(THEME_TITLE[preference])}
+          title={t(THEME_TITLE[preference])}
+          icon={<ThemeIcon size={16} />}
+          data-theme-preference={preference}
         >
-          <span className="orbit-theme-toggle__label">
-            {t(theme === "light" ? "shell.theme.dark" : "shell.theme.light")}
-          </span>
+          <span className="orbit-theme-toggle__label">{t(THEME_LABEL[preference])}</span>
         </Button>
       </header>
 
