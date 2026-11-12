@@ -305,6 +305,9 @@ function createMockClient(
     client,
     requestMock,
     providers,
+    setSessions(next: SessionSummary[]) {
+      sessions.splice(0, sessions.length, ...next);
+    },
     emit(ev: ServerEvent) {
       for (const key of [ev.type, "*"]) {
         for (const fn of listeners.get(key) ?? []) {
@@ -1070,5 +1073,50 @@ describe("returning to Chat", () => {
       expect(screen.getByTestId("session-item-sess-1")).toBeInTheDocument();
     });
     expect(second.requestMock).not.toHaveBeenCalledWith("sessions.open", expect.anything());
+  });
+
+  it("reloads the chat list on sessions.reset and drops a selected chat id that no longer exists", async () => {
+    const otherUserSession: SessionSummary = {
+      ...baseSession,
+      id: "sess-user-2",
+      title: "Evening horse check",
+    };
+    const mock = createMockClient();
+    const view = openChat(mock.client, "/chat?s=sess-1");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-1")).toHaveAttribute("data-active", "true");
+    });
+    expect(lastChat()?.id).toBe("sess-1");
+
+    mock.setSessions([otherUserSession]);
+    act(() => {
+      mock.emit({ type: "sessions.reset" });
+    });
+
+    expect(await screen.findByTestId("session-item-sess-user-2")).toHaveAttribute(
+      "data-active",
+      "false",
+    );
+    expect(screen.queryByTestId("session-item-sess-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-empty-state")).toBeInTheDocument();
+    expect(lastChat()).toBeNull();
+
+    fireEvent.click(screen.getByTestId("session-open-sess-user-2"));
+    await waitFor(() => {
+      expect(screen.getByTestId("session-item-sess-user-2")).toHaveAttribute("data-active", "true");
+    });
+
+    mock.setSessions([
+      otherUserSession,
+      { ...baseSession, id: "sess-user-2b", title: "Hoof care log" },
+    ]);
+    act(() => {
+      mock.emit({ type: "sessions.reset" });
+    });
+
+    expect(await screen.findByTestId("session-item-sess-user-2b")).toBeInTheDocument();
+    expect(screen.getByTestId("session-item-sess-user-2")).toHaveAttribute("data-active", "true");
+    view.unmount();
   });
 });

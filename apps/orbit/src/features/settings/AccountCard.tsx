@@ -1,15 +1,17 @@
 import type { AccountStatus } from "@orbit/protocol";
-import { UserRound } from "lucide-react";
+import { CloudUpload, UserRound } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
-import { useLocation } from "react-router";
 import { Badge, Button, Card, Input, useToast } from "../../design";
 import { useT } from "../../i18n";
-import { calmAccountSyncState, useOrion, useOrionEvent } from "../../lib/orion";
-import { BillingSection, openExternalUrl } from "./BillingSection";
+import { useAccount } from "../../lib/account";
+import { calmAccountSyncState, useOrion } from "../../lib/orion";
+import { AccountAuthForm } from "./AccountAuthForm";
+import { BillingSection } from "./BillingSection";
 import { MembersCard } from "./MembersCard";
 import { SettingsTitle } from "./parts";
 
 export { BillingSection, openExternalUrl } from "./BillingSection";
+export { FarmPickerList } from "./FarmPicker";
 export { MembersCard } from "./MembersCard";
 
 const SYNC_BADGE = {
@@ -29,12 +31,6 @@ const row = {
   alignItems: "center",
 } as const;
 const muted = { margin: 0, color: "var(--text-secondary)" } as const;
-const check = {
-  display: "flex",
-  gap: "var(--space-2)",
-  alignItems: "flex-start",
-  fontSize: "var(--text-sm)",
-} as const;
 
 function useRun() {
   const t = useT();
@@ -58,28 +54,18 @@ function useRun() {
 }
 
 export function AccountSection() {
-  const { client, state } = useOrion();
-  const [status, setStatus] = useState<AccountStatus | null>(null);
-
-  useEffect(() => {
-    if (!client || state !== "open") return;
-    client.request("account.status", {}).then(setStatus, (error: unknown) => {
-      // An Orion without account support (older sidecar, test mock) hides the section.
-      console.warn("orbit: account status unavailable:", error);
-      setStatus(null);
-    });
-  }, [client, state]);
-  useOrionEvent("account.updated", (event) => {
-    const { type: _type, ...next } = event;
-    setStatus(next);
-  });
+  const { status, setStatus, refreshStatus } = useAccount();
 
   if (!status) return null;
   return (
     <div id="account" style={column}>
       <AccountCard status={status} onStatus={setStatus} />
       {status.state === "signed_in" && status.farm && (
-        <MembersCard role={status.farm.role} userId={status.user?.id ?? ""} />
+        <MembersCard
+          role={status.farm.role}
+          userId={status.user?.id ?? ""}
+          onLeft={() => void refreshStatus()}
+        />
       )}
     </div>
   );
@@ -94,78 +80,53 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
   const t = useT();
   const { client, syncStatus } = useOrion();
   const { busy, run } = useRun();
-  const wantsRegister = (useLocation().state as { accountMode?: string } | null)?.accountMode;
-  const [mode, setMode] = useState<"login" | "register">(
-    wantsRegister === "register" ? "register" : "login",
-  );
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-  const [acceptTerms, setAcceptTerms] = useState(false);
-  const [googleUrl, setGoogleUrl] = useState<string | null>(null);
+  const [cloudFarmName, setCloudFarmName] = useState(status.localFarm?.name ?? "");
   const { pushToast } = useToast();
 
-  const google = () =>
-    run(async () => {
-      if (!client) return;
-      const { url, opened } = await client.request("account.googleStart", {});
-      if (!opened) await openExternalUrl(url);
-      setGoogleUrl(url);
-    });
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    void run(async () => {
-      if (!client) return;
-      const next =
-        mode === "login"
-          ? await client.request("account.login", { email, password })
-          : await client.request("account.register", {
-              email,
-              password,
-              acceptTerms: true,
-              ...(name.trim() ? { name: name.trim() } : {}),
-            });
-      setPassword("");
-      onStatus(next);
-    });
-  };
-
-  const forgot = () =>
-    run(async () => {
-      if (!client) return;
-      if (!email.trim()) throw new Error(t("account.forgot.needEmail"));
-      await client.request("account.requestPasswordReset", { email: email.trim() });
-      pushToast({ title: t("account.forgot.sent"), tone: "ok" });
-    });
+  useEffect(() => {
+    setCloudFarmName(status.localFarm?.name ?? "");
+  }, [status.localFarm?.name]);
 
   const resend = () =>
-    run(async () => {
+    void run(async () => {
       if (!client) return;
       await client.request("account.resendVerification", {});
       pushToast({ title: t("account.verify.sent"), tone: "ok" });
     });
 
   const refresh = () =>
-    run(async () => {
+    void run(async () => {
       if (client) onStatus(await client.request("account.refresh", {}));
     });
 
   const accept = () =>
-    run(async () => {
+    void run(async () => {
       if (!client) return;
       onStatus(await client.request("account.acceptInvite", { code }));
       setCode("");
       pushToast({ title: t("account.invite.joined"), tone: "ok" });
     });
 
+  const createCloudFarm = (e: FormEvent) => {
+    e.preventDefault();
+    void run(async () => {
+      if (!client) return;
+      const trimmed = cloudFarmName.trim();
+      const next = await client.request("farms.create", trimmed ? { name: trimmed } : {});
+      onStatus(next);
+      pushToast({ title: t("account.farms.putInCloudDone"), tone: "ok" });
+    });
+  };
+
   const logout = () =>
-    run(async () => {
+    void run(async () => {
       if (client) onStatus(await client.request("account.logout", {}));
     });
 
   const signedIn = status.state === "signed_in";
+  const displayState = calmAccountSyncState(syncStatus);
+
   return (
     <Card
       title={<SettingsTitle icon={UserRound}>{t("account.title")}</SettingsTitle>}
@@ -180,118 +141,7 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
 
       {status.state === "signed_out" && (
         <>
-          <div style={column} data-testid="account-google">
-            <Button
-              type="button"
-              variant="secondary"
-              loading={busy}
-              onClick={google}
-              data-testid="account-google-button"
-            >
-              {t("account.google.continue")}
-            </Button>
-            {googleUrl ? (
-              <div role="status" style={column} data-testid="account-google-waiting">
-                <p style={muted}>{t("account.google.waiting")}</p>
-                <div style={row}>
-                  <Button
-                    type="button"
-                    variant="subtle"
-                    size="sm"
-                    onClick={() => void run(() => openExternalUrl(googleUrl))}
-                    data-testid="account-google-reopen"
-                  >
-                    {t("account.google.reopen")}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <p style={{ ...muted, fontSize: "var(--text-sm)" }}>{t("account.google.terms")}</p>
-            )}
-            <p style={{ ...muted, fontSize: "var(--text-sm)", textAlign: "center" }}>
-              {t("account.google.or")}
-            </p>
-          </div>
-          <form style={column} onSubmit={submit} data-testid="account-form">
-            <div style={row} role="tablist">
-              {(["login", "register"] as const).map((m) => (
-                <Button
-                  key={m}
-                  type="button"
-                  size="sm"
-                  variant={mode === m ? "primary" : "subtle"}
-                  aria-pressed={mode === m}
-                  onClick={() => setMode(m)}
-                  data-testid={`account-mode-${m}`}
-                >
-                  {t(`account.mode.${m}`)}
-                </Button>
-              ))}
-            </div>
-            {mode === "register" && (
-              <Input
-                label={t("account.field.name")}
-                value={name}
-                autoComplete="name"
-                onChange={(e) => setName(e.target.value)}
-                data-testid="account-name"
-              />
-            )}
-            <Input
-              label={t("account.field.email")}
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              data-testid="account-email"
-            />
-            <Input
-              label={t("account.field.password")}
-              type="password"
-              required
-              minLength={mode === "register" ? 10 : 1}
-              autoComplete={mode === "register" ? "new-password" : "current-password"}
-              hint={mode === "register" ? t("account.field.passwordHint") : undefined}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              data-testid="account-password"
-            />
-            {mode === "register" && (
-              <label style={check}>
-                <input
-                  type="checkbox"
-                  required
-                  checked={acceptTerms}
-                  onChange={(e) => setAcceptTerms(e.target.checked)}
-                  data-testid="account-terms"
-                />
-                <span>{t("account.field.terms")}</span>
-              </label>
-            )}
-            <div style={row}>
-              <Button
-                type="submit"
-                variant="primary"
-                loading={busy}
-                disabled={mode === "register" && !acceptTerms}
-                data-testid="account-submit"
-              >
-                {t(`account.submit.${mode}`)}
-              </Button>
-              {mode === "login" && (
-                <Button
-                  type="button"
-                  variant="subtle"
-                  size="sm"
-                  onClick={forgot}
-                  data-testid="account-forgot"
-                >
-                  {t("account.forgot.link")}
-                </Button>
-              )}
-            </div>
-          </form>
+          <AccountAuthForm busy={busy} run={run} onStatus={onStatus} />
           <BillingSection status={status} />
         </>
       )}
@@ -315,6 +165,7 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
               </div>
             </div>
           )}
+
           {status.farm ? (
             <dl
               style={{
@@ -336,22 +187,47 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
               </dd>
               <dt style={muted}>{t("account.sync")}</dt>
               <dd style={{ margin: 0 }}>
-                {(() => {
-                  const displayState = calmAccountSyncState(syncStatus);
-                  return (
-                    <Badge variant={SYNC_BADGE[displayState]} data-testid="account-sync">
-                      {t(`account.sync.${displayState}`)}
-                    </Badge>
-                  );
-                })()}
+                <Badge variant={SYNC_BADGE[displayState]} data-testid="account-sync">
+                  {t(`account.sync.${displayState}`)}
+                </Badge>
               </dd>
             </dl>
-          ) : (
+          ) : status.linkError ? (
             <div role="status" data-testid="account-link-error">
               <strong>{t("account.linkError.title")}</strong>
-              <p style={muted}>{t("account.linkError.body")}</p>
+              <p style={muted}>{status.linkError || t("account.linkError.body")}</p>
             </div>
-          )}
+          ) : status.localFarm ? (
+            <form
+              className="settings-cloud-farm"
+              onSubmit={createCloudFarm}
+              data-testid="account-create-farm"
+            >
+              <div className="settings-cloud-farm__head">
+                <CloudUpload size={16} className="settings-accent" aria-hidden="true" />
+                <strong>{t("account.farms.putInCloudTitle")}</strong>
+              </div>
+              <p className="settings-muted">{t("account.farms.putInCloudBody")}</p>
+              <div className="settings-cloud-farm__row">
+                <Input
+                  label={t("settings.farm.name")}
+                  value={cloudFarmName}
+                  onChange={(e) => setCloudFarmName(e.target.value)}
+                  data-testid="account-create-farm-name"
+                />
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  size="sm"
+                  loading={busy}
+                  icon={<CloudUpload size={15} />}
+                  data-testid="account-create-farm-submit"
+                >
+                  {t("account.farms.putInCloudAction")}
+                </Button>
+              </div>
+            </form>
+          ) : null}
 
           <BillingSection status={status} />
 

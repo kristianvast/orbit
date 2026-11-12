@@ -10,7 +10,7 @@ export function classifyPlanError(
   message?: string | null,
 ): PlanErrorCode | null {
   if (code === "plan_required") return "plan_required";
-  if (code === "budget_exceeded") return "budget_exceeded";
+  if (code === "budget_exceeded" || code === "member_limit") return "budget_exceeded";
   if (code === "model_required") return "model_required";
   const text = `${code ?? ""} ${message ?? ""}`.toLowerCase();
   if (
@@ -20,7 +20,11 @@ export function classifyPlanError(
   ) {
     return "plan_required";
   }
-  if (text.includes("budget_exceeded") || text.includes("allowance is used up")) {
+  if (
+    text.includes("budget_exceeded") ||
+    text.includes("member_limit") ||
+    text.includes("allowance is used up")
+  ) {
     return "budget_exceeded";
   }
   // Orion's not_ready refusal when no provider/model is chosen (SessionHub.ensureAgent).

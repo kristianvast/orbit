@@ -333,6 +333,65 @@
   transition: inline-size var(--duration-normal) var(--ease-out);
 }
 
+.orbit-billing__multi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.orbit-billing__source {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.orbit-billing__source-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.orbit-billing__source-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.orbit-billing__allowances {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+  gap: var(--space-3);
+}
+
+.orbit-billing__allowance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+
+.orbit-billing__allowance[data-active="true"] {
+  background-color: var(--accent-primary-subtle);
+}
+
+.orbit-billing__allowance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.orbit-billing__allowance-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 @media (max-width: 900px), (pointer: coarse) {
   .orbit-billing__actions .orbit-btn {
     min-block-size: var(--control-height-md);

@@ -1,95 +1,32 @@
 import "./providers.css";
-import type { AccountStatus, BillingPlans, BillingStatus } from "@orbit/protocol";
+import type { AccountStatus, BillingPlans, BillingStatus, UsageSource } from "@orbit/protocol";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Badge, type BadgeVariant, Button, useToast } from "../../design";
-import { type MessageKey, useI18n } from "../../i18n";
-import { isTauriRuntime, useOrion } from "../../lib/orion";
+import { Badge, Button, useToast } from "../../design";
+import { useI18n } from "../../i18n";
+import { useOrion } from "../../lib/orion";
+import { BillingSourceAndAllowances, UsageMeter } from "./BillingAllowances";
+import {
+  buildCheckoutParams,
+  buildPortalParams,
+  DEFAULT_FREE_BILLING,
+  hasMultiUserBilling,
+  openExternalUrl,
+  PRICING_URL,
+  resolveBillingAccount,
+  resolveUsageChoice,
+  statusBadgeMeta,
+} from "./billing-model";
 
-/** Plans are chosen on the website, in the browser; the app only shows the current one. */
-export const PRICING_URL = "https://pecorva.com/pricing/";
-
-const DEFAULT_FREE_BILLING: BillingStatus = {
-  plan: "free",
-  interval: null,
-  status: "inactive",
-  currentPeriodEnd: null,
-  cancelAtPeriodEnd: false,
-  usage: { tokensUsed: 0, tokenAllowance: 0, voiceSecondsUsed: 0, voiceSecondsAllowance: 0 },
+export {
+  buildCheckoutParams,
+  buildPortalParams,
+  hasMultiUserBilling,
+  openExternalUrl,
+  PRICING_URL,
+  resolveBillingAccount,
+  resolveUsageChoice,
 };
-
-export async function openExternalUrl(url: string): Promise<void> {
-  if (isTauriRuntime()) {
-    // Always the system browser: window.open in the desktop app would show the page inside Orbit.
-    const shell = await import("@tauri-apps/plugin-shell");
-    await shell.open(url);
-    return;
-  }
-  if (typeof window !== "undefined" && typeof window.open === "function") {
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
-}
-
-function statusBadgeMeta(status: string): { variant: BadgeVariant; key: MessageKey } {
-  switch (status) {
-    case "active":
-      return { variant: "ok", key: "account.billing.status.active" };
-    case "trialing":
-      return { variant: "info", key: "account.billing.status.trialing" };
-    case "past_due":
-      return { variant: "warn", key: "account.billing.status.past_due" };
-    case "canceled":
-      return { variant: "neutral", key: "account.billing.status.canceled" };
-    default:
-      return { variant: "neutral", key: "account.billing.status.inactive" };
-  }
-}
-
-function UsageMeter({
-  label,
-  valueText,
-  used,
-  allowance,
-  testId,
-}: {
-  readonly label: string;
-  readonly valueText: string;
-  readonly used: number;
-  readonly allowance: number;
-  readonly testId: string;
-}) {
-  const pct = allowance > 0 ? Math.min(100, Math.round((used / allowance) * 100)) : 0;
-  const barColor =
-    allowance > 0 && used >= allowance
-      ? "var(--status-danger)"
-      : pct >= 85
-        ? "var(--status-warn)"
-        : "var(--accent-primary)";
-
-  return (
-    <div className="orbit-billing__meter" data-testid={testId}>
-      <div className="orbit-billing__meter-head">
-        <span style={{ fontWeight: 600 }}>{label}</span>
-        <span className="orbit-billing__meter-val tabular-nums" data-testid={`${testId}-value`}>
-          {valueText}
-        </span>
-      </div>
-      <div
-        className="orbit-billing__meter-track"
-        role="progressbar"
-        aria-label={label}
-        aria-valuemin={0}
-        aria-valuemax={allowance}
-        aria-valuenow={used}
-      >
-        <div
-          className="orbit-billing__meter-fill"
-          style={{ inlineSize: `${pct}%`, backgroundColor: barColor }}
-        />
-      </div>
-    </div>
-  );
-}
 
 export interface BillingSectionProps {
   readonly status: AccountStatus;
@@ -104,11 +41,14 @@ export function BillingSection({ status, now = Date.now() }: BillingSectionProps
   const [billing, setBilling] = useState<BillingStatus>(DEFAULT_FREE_BILLING);
   const [catalogue, setCatalogue] = useState<BillingPlans | null>(null);
   const [busyPortal, setBusyPortal] = useState(false);
+  const [busySource, setBusySource] = useState(false);
 
   useEffect(() => {
-    setCatalogue(null);
-    setBilling(DEFAULT_FREE_BILLING);
-    if (!client || status.state !== "signed_in") return;
+    if (!client || status.state !== "signed_in") {
+      setCatalogue(null);
+      setBilling(DEFAULT_FREE_BILLING);
+      return;
+    }
     let live = true;
     client.request("billing.status", {}).then(
       (next) => {
@@ -155,12 +95,30 @@ export function BillingSection({ status, now = Date.now() }: BillingSectionProps
   const voiceMinutesAllowance = Math.round(billing.usage.voiceSecondsAllowance / 60);
   const trialEnd = billing.trialEndsAt ? new Date(billing.trialEndsAt).getTime() : 0;
   const trialDays = billing.plan === "free" ? Math.ceil((trialEnd - now) / 86_400_000) : 0;
+  const portalParams = buildPortalParams(status, billing);
+  const canChoosePlan = resolveBillingAccount(status, billing) !== null;
+
+  const selectSource = async (source: UsageSource) => {
+    if (!client || resolveUsageChoice(billing) === source) return;
+    setBusySource(true);
+    try {
+      setBilling(await client.request("billing.setSource", { source }));
+    } catch (error) {
+      pushToast({
+        title: t("account.failed"),
+        description: error instanceof Error ? error.message : String(error),
+        tone: "danger",
+      });
+    } finally {
+      setBusySource(false);
+    }
+  };
 
   const openPortal = async () => {
-    if (!client) return;
+    if (!client || !portalParams) return;
     setBusyPortal(true);
     try {
-      const res = await client.request("billing.portal", {});
+      const res = await client.request("billing.portal", portalParams);
       await openExternalUrl(res.url);
     } catch (error) {
       pushToast({
@@ -211,6 +169,14 @@ export function BillingSection({ status, now = Date.now() }: BillingSectionProps
         )}
       </div>
 
+      <BillingSourceAndAllowances
+        status={status}
+        billing={billing}
+        catalogue={catalogue}
+        busySource={busySource}
+        onSelectSource={(source) => void selectSource(source)}
+      />
+
       {trialDays > 0 && billing.trialEndsAt && (
         <p data-testid="billing-trial">
           {t("account.billing.trial", {
@@ -258,25 +224,27 @@ export function BillingSection({ status, now = Date.now() }: BillingSectionProps
       </div>
 
       <div className="orbit-billing__actions">
-        <Button
-          type="button"
-          variant="primary"
-          size="sm"
-          icon={<ExternalLink size={14} />}
-          onClick={() =>
-            openExternalUrl(PRICING_URL).catch((error: unknown) =>
-              pushToast({
-                title: t("account.failed"),
-                description: error instanceof Error ? error.message : String(error),
-                tone: "danger",
-              }),
-            )
-          }
-          data-testid="billing-choose-plan-button"
-        >
-          {t("account.billing.choosePlan")}
-        </Button>
-        {billing.plan !== "free" && (
+        {canChoosePlan && (
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            icon={<ExternalLink size={14} />}
+            onClick={() =>
+              openExternalUrl(PRICING_URL).catch((error: unknown) =>
+                pushToast({
+                  title: t("account.failed"),
+                  description: error instanceof Error ? error.message : String(error),
+                  tone: "danger",
+                }),
+              )
+            }
+            data-testid="billing-choose-plan-button"
+          >
+            {t("account.billing.choosePlan")}
+          </Button>
+        )}
+        {portalParams !== null && (
           <Button
             type="button"
             variant="secondary"

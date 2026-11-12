@@ -238,6 +238,7 @@ export default function ChatPage() {
   openSessionRef.current = openSession;
 
   const startDraft = useCallback(() => {
+    sessionIdRef.current = null;
     dispatch({ type: "session.cleared" });
     forgetChat();
     setSessionParam(null);
@@ -245,6 +246,37 @@ export default function ChatPage() {
     setSidebarOpen(false);
     composerRef.current?.focus();
   }, [setSessionParam]);
+
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+
+  const reloadAfterReset = useCallback(async () => {
+    if (!client) return;
+    setSessionsLoading(true);
+    try {
+      const list = await client.request("sessions.list");
+      setSessions(list.sessions);
+      const stored = lastChat();
+      if (stored && !list.sessions.some((s) => s.id === stored.id)) {
+        forgetChat();
+      }
+      const activeId = sessionIdRef.current;
+      const paramId = searchParamsRef.current.get(SESSION_PARAM);
+      if (activeId !== null && !list.sessions.some((s) => s.id === activeId)) {
+        startDraft();
+      } else if (paramId !== null && !list.sessions.some((s) => s.id === paramId)) {
+        setSessionParam(activeId);
+      }
+    } catch (err) {
+      pushToast({
+        title: t("chat.toast.loadFailed"),
+        description: errorText(err),
+        tone: "warn",
+      });
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [client, pushToast, setSessionParam, startDraft, t]);
 
   useEffect(() => {
     if (!client || connState !== "open") return;
@@ -261,6 +293,9 @@ export default function ChatPage() {
         if (settings?.model) setDefaultModel(settings.model);
         const last = resumeLast.current ? lastChat() : null;
         resumeLast.current = false;
+        if (last && !list.sessions.some((s) => s.id === last.id)) {
+          forgetChat();
+        }
         const wanted = initialSessionParam.current ?? last?.id ?? null;
         const fromLink = initialSessionParam.current !== null;
         initialSessionParam.current = null;
@@ -297,9 +332,13 @@ export default function ChatPage() {
     if (!client) return;
     return client.on("*", (event) => {
       if (event.type === "session.updated") upsertSession(event.session);
+      if (event.type === "sessions.reset") {
+        void reloadAfterReset();
+        return;
+      }
       dispatch({ type: "server.event", event });
     });
-  }, [client, upsertSession]);
+  }, [client, reloadAfterReset, upsertSession]);
 
   useEffect(() => {
     if (!atBottom) return;

@@ -330,3 +330,183 @@
 .settings-link:hover {
   text-decoration: underline;
 }
+
+.settings-divider {
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.settings-farm-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.settings-farm-opening {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.settings-cloud-farm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-elevated);
+}
+
+.settings-cloud-farm__head {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.settings-cloud-farm__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.settings-cloud-farm__row > .orbit-field {
+  flex: 1;
+  min-inline-size: min(14rem, 100%);
+}
+
+.settings-member {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+}
+
+.settings-rows > .settings-member:first-child {
+  padding-block-start: 0;
+}
+
+.settings-rows > .settings-member:last-child {
+  padding-block-end: 0;
+}
+
+.settings-member + .settings-member {
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.settings-member__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.settings-member__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-member__name-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.settings-member__usage {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-block-start: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.settings-member__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-member__actions .orbit-select {
+  inline-size: auto;
+  min-inline-size: 7.5rem;
+  min-block-size: var(--control-height-sm);
+  padding-block: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.settings-member__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.settings-member__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-member__limit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-member__limit-input {
+  inline-size: 9.5rem;
+  min-block-size: var(--control-height-sm);
+  padding-block: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.settings-invite-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.settings-invite-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.settings-invite-created {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-elevated);
+}
+
+.settings-invite-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+  user-select: all;
+}

@@ -12,6 +12,7 @@ import {
 import { ToastProvider } from "../design";
 import { VoiceProvider, type VoiceStartSessionFn } from "../features/voice";
 import { I18nProvider, type Locale } from "../i18n";
+import { AccountProvider } from "../lib/account";
 import { type OrionEndpoint, OrionProvider } from "../lib/orion";
 import { FarmSpeciesProvider } from "../lib/species";
 
@@ -104,13 +105,15 @@ export function AppProviders({
       <ThemeProvider defaultTheme={defaultTheme}>
         <ToastProvider>
           <OrionProvider initialClient={initialClient} initialEndpoint={initialEndpoint}>
-            <FarmSpeciesProvider initialSpecies={initialSpecies}>
-              <VoiceProvider
-                {...(voiceStartSession !== undefined ? { startSession: voiceStartSession } : {})}
-              >
-                {children}
-              </VoiceProvider>
-            </FarmSpeciesProvider>
+            <AccountProvider>
+              <FarmSpeciesProvider initialSpecies={initialSpecies}>
+                <VoiceProvider
+                  {...(voiceStartSession !== undefined ? { startSession: voiceStartSession } : {})}
+                >
+                  {children}
+                </VoiceProvider>
+              </FarmSpeciesProvider>
+            </AccountProvider>
           </OrionProvider>
         </ToastProvider>
       </ThemeProvider>

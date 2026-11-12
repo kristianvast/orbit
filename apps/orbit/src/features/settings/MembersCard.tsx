@@ -1,11 +1,15 @@
 import type { FarmInvite, FarmMember, FarmRole } from "@orbit/protocol";
 import { assignableRoles, canManageMember, canManageMembers } from "@orbit/schema/roles";
-import { Users } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
-import { Badge, Button, Card, Input, Select, useToast } from "../../design";
-import { useI18n } from "../../i18n";
+import { LogOut, Trash2, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Button, Card, Dialog, useToast } from "../../design";
+import { useT } from "../../i18n";
 import { useOrion } from "../../lib/orion";
+import { MemberInvites } from "./MemberInvites";
+import { MemberRow } from "./MemberRow";
 import { SettingsTitle } from "./parts";
+
+export { formatCompactTokens, parseTokenLimitInput } from "./MemberRow";
 
 const column = { display: "flex", flexDirection: "column", gap: "var(--space-3)" } as const;
 const row = {
@@ -16,37 +20,38 @@ const row = {
 } as const;
 const muted = { margin: 0, color: "var(--text-secondary)" } as const;
 
-export function MembersCard({
-  role,
-  userId,
-}: {
+export interface MembersCardProps {
   readonly role: FarmRole;
   readonly userId: string;
-}) {
-  const { t, formatDate } = useI18n();
+  readonly onLeft?: () => void;
+}
+
+export function MembersCard({ role, userId, onLeft }: MembersCardProps) {
+  const t = useT();
   const { client } = useOrion();
   const { pushToast } = useToast();
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [members, setMembers] = useState<FarmMember[]>([]);
   const [invites, setInvites] = useState<FarmInvite[]>([]);
-  const [email, setEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<FarmRole>("worker");
-  const [created, setCreated] = useState<{ email: string; code: string } | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<FarmMember | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const manage = canManageMembers(role);
   const roles = assignableRoles(role);
   const roleOptions = roles.map((r) => ({ value: r, label: t(`account.role.${r}`) }));
 
-  const run = async (action: () => Promise<void>) => {
+  const run = async <R,>(action: () => Promise<R>): Promise<R> => {
     setBusy(true);
     try {
-      await action();
+      return await action();
     } catch (error) {
       pushToast({
         title: t("account.failed"),
         description: error instanceof Error ? error.message : String(error),
         tone: "danger",
       });
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -57,10 +62,6 @@ export function MembersCard({
     setInvites(next.invites);
   };
 
-  const refresh = async () => {
-    if (client) apply(await client.request("members.list", {}));
-  };
-
   useEffect(() => {
     if (!client) return;
     let live = true;
@@ -69,190 +70,185 @@ export function MembersCard({
         if (!live) return;
         setMembers(next.members);
         setInvites(next.invites);
+        setLoaded(true);
       },
-      (error: unknown) =>
+      (error: unknown) => {
+        if (live) setLoaded(true);
         pushToast({
           title: t("account.failed"),
           description: error instanceof Error ? error.message : String(error),
           tone: "danger",
-        }),
+        });
+      },
     );
     return () => {
       live = false;
     };
   }, [client, pushToast, t]);
 
-  const invite = (e: FormEvent) => {
-    e.preventDefault();
-    void run(async () => {
-      if (!client) return;
-      const res = await client.request("invites.create", { email, role: inviteRole });
-      setCreated({ email: res.invite.email, code: res.code });
-      setEmail("");
-      await refresh();
-    });
-  };
+  const hasSelfRow = members.some((m) => m.userId === userId);
+  const canSelfLeave = role !== "owner" && Boolean(userId);
 
   return (
-    <Card title={<SettingsTitle icon={Users}>{t("account.members.title")}</SettingsTitle>}>
+    <Card
+      title={<SettingsTitle icon={Users}>{t("account.members.title")}</SettingsTitle>}
+      data-testid="members-card"
+    >
       <div style={column}>
-        <ul
-          style={{ ...column, listStyle: "none", margin: 0, padding: 0 }}
-          data-testid="members-list"
-        >
+        <ul className="settings-rows" data-testid="members-list">
           {members.map((m) => {
-            const editable = manage && m.userId !== userId && canManageMember(role, m.role);
+            const isSelf = m.userId === userId;
+            const editable = manage && !isSelf && canManageMember(role, m.role);
             return (
-              <li
+              <MemberRow
                 key={m.userId}
-                style={{ ...row, justifyContent: "space-between" }}
-                data-testid="member-row"
-              >
-                <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                  <strong>{m.name ?? m.email}</strong>
-                  {m.userId === userId && <span style={muted}> ({t("account.members.you")})</span>}
-                  {m.name && <span style={{ ...muted, display: "block" }}>{m.email}</span>}
-                </span>
-                {editable ? (
-                  <span style={row}>
-                    <Select
-                      aria-label={t("account.members.role")}
-                      value={m.role}
-                      options={roleOptions}
-                      disabled={busy}
-                      onChange={(e) =>
-                        void run(async () => {
-                          if (!client) return;
-                          apply(
-                            await client.request("members.update", {
-                              userId: m.userId,
-                              role: e.target.value as FarmRole,
-                            }),
-                          );
-                        })
-                      }
-                      data-testid="member-role"
-                    />
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(async () => {
-                          if (client) {
-                            apply(await client.request("members.remove", { userId: m.userId }));
-                          }
-                        })
-                      }
-                      data-testid="member-remove"
-                    >
-                      {t("account.members.remove")}
-                    </Button>
-                  </span>
-                ) : (
-                  <Badge variant="neutral">{t(`account.role.${m.role}`)}</Badge>
-                )}
-              </li>
+                member={m}
+                isSelf={isSelf}
+                canManageTeam={manage}
+                editable={editable}
+                canLeave={isSelf && canSelfLeave}
+                busy={busy}
+                roleOptions={roleOptions}
+                onUpdate={(patch) =>
+                  void run(async () => {
+                    if (!client) return;
+                    apply(
+                      await client.request("members.update", {
+                        userId: m.userId,
+                        ...patch,
+                      }),
+                    );
+                  }).catch(() => undefined)
+                }
+                onRequestRemove={() => setConfirmRemove(m)}
+                onRequestLeave={() => setConfirmLeave(true)}
+              />
             );
           })}
-          {members.length <= 1 && <li style={muted}>{t("account.members.empty")}</li>}
+          {loaded && members.length <= 1 && (
+            <li className="settings-muted">{t("account.members.empty")}</li>
+          )}
         </ul>
+
+        {loaded && canSelfLeave && !hasSelfRow && (
+          <div style={row}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy}
+              icon={<LogOut size={14} />}
+              onClick={() => setConfirmLeave(true)}
+              data-testid="member-leave"
+            >
+              {t("account.members.leave")}
+            </Button>
+          </div>
+        )}
 
         {!manage && <p style={muted}>{t("account.members.readOnly")}</p>}
 
         {manage && (
-          <form style={column} onSubmit={invite} data-testid="invite-form">
-            <strong>{t("account.members.inviteTitle")}</strong>
-            <div style={{ ...row, alignItems: "flex-end" }}>
-              <Input
-                label={t("account.field.email")}
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                data-testid="invite-email"
-              />
-              <Select
-                label={t("account.members.role")}
-                value={inviteRole}
-                options={roleOptions}
-                onChange={(e) => setInviteRole(e.target.value as FarmRole)}
-                data-testid="invite-role"
-              />
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                loading={busy}
-                data-testid="invite-submit"
-              >
-                {t("account.members.invite")}
-              </Button>
-            </div>
-          </form>
-        )}
-
-        {created && (
-          <div role="status" style={column} data-testid="invite-created">
-            <strong>{t("account.members.codeTitle", { email: created.email })}</strong>
-            <code
-              style={{
-                fontFamily: "var(--font-mono)",
-                padding: "var(--space-2) var(--space-3)",
-                background: "var(--bg-subtle)",
-                borderRadius: "var(--radius-sm)",
-                overflowWrap: "anywhere",
-                userSelect: "all",
-              }}
-              data-testid="invite-code"
-            >
-              {created.code}
-            </code>
-            <p style={{ ...muted, fontSize: "var(--text-sm)" }}>{t("account.members.codeHint")}</p>
-          </div>
-        )}
-
-        {manage && invites.length > 0 && (
-          <div style={column}>
-            <strong>{t("account.members.pending")}</strong>
-            <ul
-              style={{ ...column, listStyle: "none", margin: 0, padding: 0 }}
-              data-testid="invites-list"
-            >
-              {invites.map((i) => (
-                <li key={i.id} style={{ ...row, justifyContent: "space-between" }}>
-                  <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                    {i.email} · {t(`account.role.${i.role}`)}
-                    <span style={{ ...muted, display: "block", fontSize: "var(--text-sm)" }}>
-                      {t("account.members.expires", {
-                        date: formatDate(i.expiresAt, {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        }),
-                      })}
-                    </span>
-                  </span>
-                  <Button
-                    variant="subtle"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        if (client)
-                          apply(await client.request("invites.revoke", { inviteId: i.id }));
-                      })
-                    }
-                    data-testid="invite-revoke"
-                  >
-                    {t("account.members.revoke")}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <MemberInvites
+            busy={busy}
+            invites={invites}
+            roleOptions={roleOptions}
+            onCreateInvite={(input) =>
+              run(async () => {
+                if (!client) throw new Error("Orion client disconnected");
+                const res = await client.request("invites.create", input);
+                apply(await client.request("members.list", {}));
+                return { email: res.invite.email, code: res.code };
+              })
+            }
+            onRevokeInvite={(inviteId) =>
+              void run(async () => {
+                if (client) {
+                  apply(await client.request("invites.revoke", { inviteId }));
+                }
+              }).catch(() => undefined)
+            }
+          />
         )}
       </div>
+
+      <Dialog
+        open={confirmRemove !== null}
+        onClose={() => setConfirmRemove(null)}
+        title={t("account.members.removeConfirmTitle")}
+        footer={
+          <div style={row}>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmRemove(null)}
+              data-testid="member-remove-cancel"
+            >
+              {t("account.members.cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              loading={busy}
+              icon={<Trash2 size={15} />}
+              onClick={() => {
+                const target = confirmRemove;
+                if (!target) return;
+                void run(async () => {
+                  if (client) {
+                    apply(await client.request("members.remove", { userId: target.userId }));
+                  }
+                  setConfirmRemove(null);
+                }).catch(() => undefined);
+              }}
+              data-testid="member-remove-confirm"
+            >
+              {t("account.members.remove")}
+            </Button>
+          </div>
+        }
+      >
+        <p style={{ margin: 0, fontSize: "var(--text-sm)" }}>
+          {t("account.members.removeConfirmBody", {
+            member: confirmRemove?.name ?? confirmRemove?.email ?? "",
+          })}
+        </p>
+      </Dialog>
+
+      <Dialog
+        open={confirmLeave}
+        onClose={() => setConfirmLeave(false)}
+        title={t("account.members.leaveConfirmTitle")}
+        footer={
+          <div style={row}>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmLeave(false)}
+              data-testid="member-leave-cancel"
+            >
+              {t("account.members.cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              loading={busy}
+              icon={<LogOut size={15} />}
+              onClick={() =>
+                void run(async () => {
+                  if (client) {
+                    apply(await client.request("members.remove", { userId }));
+                  }
+                  setConfirmLeave(false);
+                  onLeft?.();
+                }).catch(() => undefined)
+              }
+              data-testid="member-leave-confirm"
+            >
+              {t("account.members.leave")}
+            </Button>
+          </div>
+        }
+      >
+        <p style={{ margin: 0, fontSize: "var(--text-sm)" }}>
+          {t("account.members.leaveConfirmBody")}
+        </p>
+      </Dialog>
     </Card>
   );
 }

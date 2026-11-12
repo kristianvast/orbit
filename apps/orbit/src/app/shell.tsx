@@ -18,6 +18,7 @@ import { Badge, BrandMark, Button } from "../design";
 import { AccessDialog } from "../features/access";
 import { GuideOverlay } from "../features/guide";
 import { CUSTOM_PAGE_ICON, useCustomPages } from "../features/pages";
+import { CompactFarmPicker } from "../features/settings/FarmPicker";
 import { VoiceDock } from "../features/voice";
 import { type MessageKey, useT } from "../i18n";
 import { useLocalUiLifecycle, useLocalUiReady, useLocalUiStatus } from "../lib/local-ui";
@@ -278,7 +279,7 @@ export function AppShell() {
 
       <header className="orbit-topbar">
         <div className="orbit-topbar__farm">
-          <span className="orbit-topbar__name">{farmName}</span>
+          <CompactFarmPicker fallbackName={farmName} />
           <SyncStatusBadge />
         </div>
 

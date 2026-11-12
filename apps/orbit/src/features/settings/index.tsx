@@ -7,7 +7,13 @@ import { isLocale, LOCALE_NAMES, LOCALES, type MessageKey, useI18n } from "../..
 import { useOrion, useOrionEvent } from "../../lib/orion";
 import { AboutCard } from "./AboutCard";
 import { AccessCard, PrivacyCard } from "./AccessCard";
-import { AccountCard, AccountSection, BillingSection } from "./AccountCard";
+import {
+  AccountCard,
+  AccountSection,
+  BillingSection,
+  FarmPickerList,
+  MembersCard,
+} from "./AccountCard";
 import { FarmProfileCard } from "./FarmProfileCard";
 import { FeedbackCard } from "./FeedbackCard";
 import { ModelCard } from "./ModelCard";
@@ -19,7 +25,15 @@ import { UndoCard } from "./UndoCard";
 import { YourOrbitCard } from "./YourOrbitCard";
 import "./settings.css";
 
-export { AccountCard, AccountSection, BillingSection, FarmProfileCard, OrbitModulesCard };
+export {
+  AccountCard,
+  AccountSection,
+  BillingSection,
+  FarmPickerList,
+  FarmProfileCard,
+  MembersCard,
+  OrbitModulesCard,
+};
 
 interface SectionInfo {
   readonly id: string;
