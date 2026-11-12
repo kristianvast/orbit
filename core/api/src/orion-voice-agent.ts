@@ -189,10 +189,19 @@ export function agentBody(toolIds: readonly string[]): Record<string, unknown> {
         },
       },
       asr: { provider: "scribe_realtime", quality: "high", user_input_audio_format: "pcm_16000" },
+      // Voice settings copied from the website demo agent. The app plays audio from a websocket
+      // (the demo uses WebRTC), so it asks for 44.1 kHz instead of 16 kHz to sound as full.
+      // Default voice is the demo's male voice (Chris); the app may override it with Sarah.
       tts: {
         model_id: "eleven_v4_turbo",
-        voice_id: "EXAVITQu4vr4xnSDxMaL",
-        agent_output_audio_format: "pcm_16000",
+        voice_id: "iP95p4xoKVk53GoZ742B",
+        agent_output_audio_format: "pcm_44100",
+        expressive_mode: true,
+        enable_phoneme_tags: true,
+        optimize_streaming_latency: 3,
+        stability: 0.5,
+        similarity_boost: 0.75,
+        speed: 1,
       },
       turn: { turn_model: "turn_v3" },
       conversation: {
@@ -208,7 +217,11 @@ export function agentBody(toolIds: readonly string[]): Record<string, unknown> {
       },
     },
     // Signed URLs only: the agent must not be callable with its id alone.
-    platform_settings: { auth: { enable_auth: true } },
+    // The farmer's voice choice in Settings travels as a tts.voice_id override.
+    platform_settings: {
+      auth: { enable_auth: true },
+      overrides: { conversation_config_override: { tts: { voice_id: true } } },
+    },
   };
 }
 

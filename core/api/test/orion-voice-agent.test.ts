@@ -44,13 +44,25 @@ test("without an agent id it creates every tool and then the agent that uses the
   });
   expect(api.calls.every((call) => call.key === "xi-test")).toBe(true);
   const agent = api.calls.at(-1)?.body as {
-    conversation_config: { agent: { prompt: { tool_ids: string[] } } };
-    platform_settings: { auth: { enable_auth: boolean } };
+    conversation_config: {
+      agent: { prompt: { tool_ids: string[] } };
+      tts: { voice_id: string; agent_output_audio_format: string };
+    };
+    platform_settings: {
+      auth: { enable_auth: boolean };
+      overrides: { conversation_config_override: { tts: { voice_id: boolean } } };
+    };
   };
   expect(agent.conversation_config.agent.prompt.tool_ids).toEqual(
     names.map((_, i) => `tool_${i + 1}`),
   );
   expect(agent.platform_settings.auth.enable_auth).toBe(true);
+  // Chris by default at full-band audio; Settings can switch to Sarah through the override.
+  expect(agent.conversation_config.tts).toMatchObject({
+    voice_id: "iP95p4xoKVk53GoZ742B",
+    agent_output_audio_format: "pcm_44100",
+  });
+  expect(agent.platform_settings.overrides.conversation_config_override.tts.voice_id).toBe(true);
 });
 
 test("with an agent id it updates that agent's own tools and creates only the missing ones", async () => {
