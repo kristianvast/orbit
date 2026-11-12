@@ -293,7 +293,7 @@ describe("@orbit/app UI shell and design system", () => {
     ).toBe("up_to_date");
   });
 
-  it("shows a friendly connection banner when Orion is reconnecting", async () => {
+  it("shows Orion reconnecting only in the rail status, not as a page banner", async () => {
     const { client } = createFakeOrionClient({ state: "reconnecting" });
 
     render(
@@ -304,8 +304,14 @@ describe("@orbit/app UI shell and design system", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/Orion assistant is not reachable right now/i)).toBeInTheDocument();
+    const status = screen.getByTestId("orion-connection-status");
+    expect(status).toHaveTextContent("Orion reconnecting");
+    expect(status).toHaveAttribute(
+      "title",
+      expect.stringContaining("Waiting for local Orion agent"),
+    );
     expect(screen.getByRole("button", { name: /Retry connection/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Orion assistant is not reachable right now/i)).toBeNull();
   });
 
   it("renders design primitives (Button, Badge, Tabs, Dialog, OrbitRings) accessibly", () => {

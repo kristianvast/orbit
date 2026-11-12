@@ -1,3 +1,4 @@
+import { DEV_SERVER_URL } from "@orbit/protocol";
 import {
   Camera,
   CloudOff,
@@ -6,6 +7,7 @@ import {
   MessageSquareHeart,
   Moon,
   Plug,
+  RefreshCw,
   Settings as SettingsIcon,
   Sun,
   Tag,
@@ -20,7 +22,7 @@ import { VoiceDock } from "../features/voice";
 import { type MessageKey, useT } from "../i18n";
 import { useLocalUiLifecycle, useLocalUiReady, useLocalUiStatus } from "../lib/local-ui";
 import { MODULE_IDS, type ModuleId, useModules } from "../lib/modules";
-import { OrionConnectionBanner, resolveSyncNotice, useOrion, useOrionQuery } from "../lib/orion";
+import { resolveSyncNotice, useOrion, useOrionQuery } from "../lib/orion";
 import { useFarmSpecies } from "../lib/species";
 import { updateAction, useAppUpdate } from "../lib/updater";
 import { useTheme } from "./providers";
@@ -106,7 +108,7 @@ function SyncStatusBadge() {
 }
 
 export function AppShell() {
-  const { state: connState } = useOrion();
+  const { state: connState, endpoint, reconnect, stopped, restart } = useOrion();
   const { data: summary } = useOrionQuery("farm.summary");
   const { isEnabled } = useModules();
   const { theme, toggleTheme } = useTheme();
@@ -135,7 +137,18 @@ export function AppShell() {
       : cattleCount > 0
         ? cattleCount
         : horseCount;
-  const orionOnline = connState === "open";
+  const orionOnline = connState === "open" && !stopped;
+  const statusLabel = stopped
+    ? t("connection.title.stopped")
+    : t(connState === "open" ? "shell.orion.online" : `shell.orion.${connState}`);
+  const statusDetail = orionOnline
+    ? undefined
+    : stopped
+      ? t("connection.detail.stopped", { reason: stopped })
+      : connState === "unauthorized"
+        ? t("connection.detail.unauthorized")
+        : t("connection.detail.waiting", { url: endpoint?.url ?? DEV_SERVER_URL });
+  const statusActionLabel = t(stopped ? "connection.restart" : "connection.retry");
 
   const topAndModuleNavItems: NavItem[] = [
     HOME_NAV_ITEM,
@@ -234,13 +247,30 @@ export function AppShell() {
           <span>{t("shell.nav.feedback")}</span>
         </NavLink>
 
-        <div className="orbit-rail__status-card">
+        <div
+          className="orbit-rail__status-card"
+          role="status"
+          aria-live="polite"
+          title={statusDetail}
+          data-testid="orion-connection-status"
+        >
           <div className="orbit-rail__status">
             <span
               className={orionOnline ? "orbit-status-dot orbit-status-dot--ok" : "orbit-status-dot"}
               aria-hidden="true"
             />
-            <span>{t(orionOnline ? "shell.orion.online" : `shell.orion.${connState}`)}</span>
+            <span className="orbit-rail__status-label">{statusLabel}</span>
+            {!orionOnline && connState !== "connecting" && (
+              <button
+                type="button"
+                className="orbit-rail__status-action"
+                onClick={stopped ? restart : reconnect}
+                aria-label={statusActionLabel}
+                title={statusActionLabel}
+              >
+                <RefreshCw size={13} aria-hidden="true" />
+              </button>
+            )}
           </div>
           <span className="orbit-rail__status-sub">{t("shell.sync.savedLocally")}</span>
         </div>
@@ -266,8 +296,7 @@ export function AppShell() {
         </Button>
       </header>
 
-      <main className="orbit-main-scroll">
-        <OrionConnectionBanner />
+      <div className="orbit-toasts">
         {appUpdate.ready && (
           <div className="orbit-update-bar" role="status" data-testid="app-update-bar">
             <span>{t("shell.update.ready")}</span>
@@ -315,6 +344,8 @@ export function AppShell() {
             </Button>
           </div>
         )}
+      </div>
+      <main className="orbit-main-scroll">
         <Outlet />
       </main>
       <VoiceDock />

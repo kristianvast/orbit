@@ -12,7 +12,6 @@ import {
   type ServerEvent,
 } from "@orbit/protocol";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, RefreshCw, WifiOff } from "lucide-react";
 import {
   createContext,
   createElement,
@@ -24,8 +23,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Badge, Button } from "../design";
-import { type MessageKey, useT } from "../i18n";
 import { localUiEndpoint } from "./local-ui-path";
 
 export interface OrionEndpoint {
@@ -423,119 +420,4 @@ export function useOrionQuery<Q extends DbQueryName>(
     loading,
     refetch: execute,
   };
-}
-
-const BANNER_STATE_KEYS: Record<Exclude<ConnectionState, "open">, MessageKey> = {
-  connecting: "connection.state.connecting",
-  reconnecting: "connection.state.reconnecting",
-  closed: "connection.state.closed",
-  unauthorized: "connection.state.unauthorized",
-};
-
-export function OrionConnectionBanner() {
-  const { state, endpoint, reconnect, stopped, restart } = useOrion();
-  const t = useT();
-
-  if (state === "open" && !stopped) return null;
-
-  const isAuthError = state === "unauthorized" || stopped !== null;
-  const isConnecting = state === "connecting";
-
-  const title = stopped
-    ? t("connection.title.stopped")
-    : state === "unauthorized"
-      ? t("connection.title.unauthorized")
-      : isConnecting
-        ? t("connection.title.connecting")
-        : t("connection.title.unreachable");
-
-  const detail = stopped
-    ? t("connection.detail.stopped", { reason: stopped })
-    : state === "unauthorized"
-      ? t("connection.detail.unauthorized")
-      : t("connection.detail.waiting", { url: endpoint?.url ?? DEV_SERVER_URL });
-  const badgeKey = stopped
-    ? "connection.state.stopped"
-    : BANNER_STATE_KEYS[state as Exclude<ConnectionState, "open">];
-
-  return createElement(
-    "div",
-    {
-      role: "status",
-      "aria-live": "polite",
-      style: {
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: "var(--space-4)",
-        padding: "var(--space-3) var(--space-5)",
-        backgroundColor: isAuthError ? "var(--status-danger-bg)" : "var(--status-warn-bg)",
-        borderBlockEnd: `1px solid ${
-          isAuthError ? "var(--status-danger-border)" : "var(--status-warn-border)"
-        }`,
-        color: "var(--text-primary)",
-      },
-    },
-    createElement(
-      "div",
-      {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-3)",
-          minInlineSize: 0,
-        },
-      },
-      isAuthError
-        ? createElement(AlertTriangle, {
-            size: 20,
-            style: { color: "var(--status-danger)", flexShrink: 0 },
-          })
-        : createElement(WifiOff, {
-            size: 20,
-            style: { color: "var(--status-warn)", flexShrink: 0 },
-          }),
-      createElement(
-        "div",
-        { style: { minInlineSize: 0 } },
-        createElement(
-          "div",
-          {
-            style: {
-              fontWeight: 600,
-              fontSize: "var(--text-sm)",
-              display: "flex",
-              alignItems: "center",
-              gap: "var(--space-2)",
-            },
-          },
-          title,
-          createElement(Badge, { variant: isAuthError ? "danger" : "warn" }, t(badgeKey)),
-        ),
-        createElement(
-          "div",
-          {
-            style: {
-              fontSize: "var(--text-xs)",
-              color: "var(--text-secondary)",
-              whiteSpace: "pre-wrap",
-            },
-            "data-testid": "orion-connection-detail",
-          },
-          detail,
-        ),
-      ),
-    ),
-    createElement(
-      Button,
-      {
-        variant: "secondary",
-        size: "sm",
-        onClick: stopped ? restart : reconnect,
-        icon: createElement(RefreshCw, { size: 15 }),
-      },
-      t(stopped ? "connection.restart" : "connection.retry"),
-    ),
-  );
 }

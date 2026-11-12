@@ -368,18 +368,33 @@ a {
   line-height: 1;
 }
 
+/* Notices float over the page instead of pushing it down. */
+.orbit-toasts {
+  position: fixed;
+  inset-block-start: calc(var(--topbar-height) + var(--space-3));
+  inset-inline-end: var(--space-6);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  max-inline-size: min(28rem, calc(100vw - 2 * var(--space-6)));
+  pointer-events: none;
+}
+
 .orbit-update-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-3);
-  margin: var(--space-3) var(--space-4) 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
   font-size: var(--text-sm);
+  pointer-events: auto;
 }
 
 .orbit-update-bar__actions {
@@ -423,6 +438,31 @@ a {
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.orbit-rail__status-label {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.orbit-rail__status-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.orbit-rail__status-action:hover,
+.orbit-rail__status-action:focus-visible {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
 }
 
 .orbit-rail__status-sub {
