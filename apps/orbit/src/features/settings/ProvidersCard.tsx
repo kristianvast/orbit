@@ -452,9 +452,14 @@ export function ProvidersCard({
           className="orbit-card__header settings-pop__summary"
           data-testid="providers-toggle"
         >
-          <h2 className="orbit-card__title">
-            <SettingsTitle icon={KeyRound}>{t("providers.card.title")}</SettingsTitle>
-          </h2>
+          <div>
+            <h2 className="orbit-card__title">
+              <SettingsTitle icon={KeyRound}>{t("providers.card.title")}</SettingsTitle>
+            </h2>
+            <p className="orbit-card__subtitle" data-testid="providers-hint">
+              {t("providers.card.hint")}
+            </p>
+          </div>
           <span className="settings-pop__end">
             <Badge
               variant={connectedCount > 0 ? "ok" : "neutral"}

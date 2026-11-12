@@ -2,6 +2,7 @@ import type { Messages } from "../../core";
 
 export const providers = {
   "card.title": "Model accounts",
+  "card.hint": "Use your own AI subscription or key instead of the Orion plan from Barnstar.",
   "card.connectedCount": {
     zero: "None connected",
     one: "{count} connected",
