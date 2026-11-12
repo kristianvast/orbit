@@ -54,20 +54,26 @@ function useRun() {
 }
 
 export function AccountSection() {
-  const { status, setStatus, refreshStatus } = useAccount();
+  const { status, setStatus } = useAccount();
 
   if (!status) return null;
   return (
     <div id="account" style={column}>
       <AccountCard status={status} onStatus={setStatus} />
-      {status.state === "signed_in" && status.farm && (
-        <MembersCard
-          role={status.farm.role}
-          userId={status.user?.id ?? ""}
-          onLeft={() => void refreshStatus()}
-        />
-      )}
     </div>
+  );
+}
+
+export function FarmTeamSection() {
+  const { status, refreshStatus } = useAccount();
+
+  if (status?.state !== "signed_in" || !status.farm) return null;
+  return (
+    <MembersCard
+      role={status.farm.role}
+      userId={status.user?.id ?? ""}
+      onLeft={() => void refreshStatus()}
+    />
   );
 }
 
@@ -229,8 +235,6 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
             </form>
           ) : null}
 
-          <BillingSection status={status} />
-
           <div
             style={{
               ...row,
@@ -257,6 +261,8 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
               {t("account.invite.accept")}
             </Button>
           </div>
+          <BillingSection status={status} />
+
           <div style={row}>
             <Button variant="subtle" size="sm" onClick={logout} data-testid="account-logout">
               {t("account.logout")}

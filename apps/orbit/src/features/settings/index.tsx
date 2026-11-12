@@ -12,6 +12,7 @@ import {
   AccountSection,
   BillingSection,
   FarmPickerList,
+  FarmTeamSection,
   MembersCard,
 } from "./AccountCard";
 import { FarmProfileCard } from "./FarmProfileCard";
@@ -169,14 +170,17 @@ export default function SettingsPage() {
         )}
 
         {page === "account" && (
-          <div className="settings-columns">
-            <div className="settings-stack">
-              <AccountSection />
+          <>
+            <div className="settings-columns">
+              <div className="settings-stack">
+                <AccountSection />
+              </div>
+              <div className="settings-stack">
+                <FarmTeamSection />
+              </div>
             </div>
-            <div className="settings-stack">
-              <PrivacyCard settings={settings} onSettings={setSettings} />
-            </div>
-          </div>
+            <PrivacyCard settings={settings} onSettings={setSettings} />
+          </>
         )}
 
         {page === "orion" && (
