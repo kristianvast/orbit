@@ -1,3 +1,4 @@
+export * from "./about";
 export * from "./account";
 export * from "./billing";
 export * from "./client";
