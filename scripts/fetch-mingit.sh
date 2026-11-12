@@ -19,4 +19,9 @@ echo "$MINGIT_SHA256  $TMP/$MINGIT_ZIP" | sha256sum --check --status \
   || { echo "MinGit checksum mismatch" >&2; exit 1; }
 mkdir -p "$MINGIT_DIR"
 unzip -q -o "$TMP/$MINGIT_ZIP" -d "$MINGIT_DIR"
+# Drop parts Orion never runs, so the installer is smaller: scalar (huge-repo tool), the dumb-HTTP
+# helpers (git-remote-https does all real fetch/push), and the HTML manuals.
+rm -rf "$MINGIT_DIR/cmd/scalar.exe" "$MINGIT_DIR/ucrt64/bin/scalar.exe" \
+  "$MINGIT_DIR/ucrt64/bin/git-http-fetch.exe" "$MINGIT_DIR/ucrt64/bin/git-http-push.exe" \
+  "$MINGIT_DIR/ucrt64/share/doc/git-doc"
 rm -rf "$TMP"
