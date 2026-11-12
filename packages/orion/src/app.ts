@@ -315,6 +315,7 @@ export async function startOrion(
       thinkingLevel: s.thinkingLevel,
       shareAnonymousData: s.shareAnonymousData,
       toolAccess: s.toolAccess,
+      toolAccessAccepted: s.toolAccessAccepted,
       ...(s.species ? { species: s.species } : {}),
       apiKeys,
       availableModels: hub.availableModels(),
@@ -339,7 +340,16 @@ export async function startOrion(
       ...(u.model !== undefined ? { model: u.model } : {}),
       ...(u.thinkingLevel ? { thinkingLevel: u.thinkingLevel } : {}),
       ...(u.shareAnonymousData !== undefined ? { shareAnonymousData: u.shareAnonymousData } : {}),
-      ...(u.toolAccess ? { toolAccess: { ...settings.get().toolAccess, ...u.toolAccess } } : {}),
+      ...(u.toolAccess
+        ? {
+            toolAccess: { ...settings.get().toolAccess, ...u.toolAccess },
+            // The app only turns a tool on after its question was allowed, so on counts as accepted.
+            toolAccessAccepted: {
+              ...settings.get().toolAccessAccepted,
+              ...Object.fromEntries(Object.entries(u.toolAccess).filter(([, on]) => on)),
+            },
+          }
+        : {}),
       ...(u.species ? { species: u.species } : {}),
     });
     // Allowing a tool in Settings also answers the question Orion is waiting on for it.

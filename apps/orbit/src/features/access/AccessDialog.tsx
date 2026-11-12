@@ -30,7 +30,6 @@ type Request = EventBody<"access.request">;
 
 export function AccessDialog() {
   const { client } = useOrion();
-  const t = useT();
   const [requests, setRequests] = useState<Request[]>([]);
   const [busy, setBusy] = useState(false);
   const request = requests[0] ?? null;
@@ -57,12 +56,26 @@ export function AccessDialog() {
   );
 
   if (!request) return null;
-  const copy = COPY[request.tool];
+  return <AccessPrompt tool={request.tool} busy={busy} onAnswer={(allow) => void answer(allow)} />;
+}
+
+export interface AccessPromptProps {
+  readonly tool: AccessTool;
+  readonly busy: boolean;
+  readonly onAnswer: (allow: boolean) => void;
+  /** Opened by turning the switch on in Settings rather than by Orion needing the tool. */
+  readonly fromSettings?: boolean;
+}
+
+/** The question for one tool; Orion's first use and the first switch-on in Settings both show it. */
+export function AccessPrompt({ tool, busy, onAnswer, fromSettings = false }: AccessPromptProps) {
+  const t = useT();
+  const copy = COPY[tool];
   const Icon = copy.icon;
   return (
     <Dialog
       open
-      onClose={() => void answer(false)}
+      onClose={() => onAnswer(false)}
       title={
         <span className="orbit-access__title">
           <span className="orbit-access__icon" aria-hidden="true">
@@ -71,13 +84,13 @@ export function AccessDialog() {
           {t(copy.title)}
         </span>
       }
-      description={t("access.lead")}
+      description={t(fromSettings ? "access.leadSettings" : "access.lead")}
       footer={
         <div className="orbit-access__actions">
           <Button
             variant="secondary"
             disabled={busy}
-            onClick={() => void answer(false)}
+            onClick={() => onAnswer(false)}
             data-testid="access-decline"
           >
             {t("access.decline")}
@@ -85,7 +98,7 @@ export function AccessDialog() {
           <Button
             variant="primary"
             loading={busy}
-            onClick={() => void answer(true)}
+            onClick={() => onAnswer(true)}
             data-testid="access-allow"
           >
             {t("access.allow")}
@@ -93,7 +106,7 @@ export function AccessDialog() {
         </div>
       }
     >
-      <div className="orbit-access" data-testid="access-dialog" data-tool={request.tool}>
+      <div className="orbit-access" data-testid="access-dialog" data-tool={tool}>
         <ul className="orbit-access__points">
           <li>
             <Icon size={16} aria-hidden="true" />

@@ -11,6 +11,8 @@ export interface StoredSettings {
   shareAnonymousData: boolean;
   /** The farmer's yes per tool (shell, browser, computer), each given on that tool's first use. */
   toolAccess: ToolAccess;
+  /** Tools whose question the farmer has allowed at least once (stays true when a switch is turned off). */
+  toolAccessAccepted: ToolAccess;
   species?: Species;
   /** Masked hints only ("…abcd"); keys live in Pi's credential store (<data-dir>/pi/auth.json). */
   keyHints: Record<string, string>;
@@ -26,6 +28,7 @@ const DEFAULTS: StoredSettings = {
   thinkingLevel: "medium",
   shareAnonymousData: true,
   toolAccess: { shell: false, browser: false, computer: false },
+  toolAccessAccepted: { shell: false, browser: false, computer: false },
   keyHints: {},
   version: VERSION,
 };
@@ -46,6 +49,7 @@ export class SettingsStore {
         ...DEFAULTS,
         ...kept,
         toolAccess: { ...DEFAULTS.toolAccess, ...kept.toolAccess },
+        toolAccessAccepted: { ...DEFAULTS.toolAccessAccepted, ...kept.toolAccessAccepted },
       };
       // Older files stored the old "off" default on any save, so it is not a farmer's choice.
       if ((kept.version ?? 1) < VERSION) {

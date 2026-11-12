@@ -3,6 +3,7 @@ import type { access as en } from "../en/access";
 
 export const access: Catalog<typeof en> = {
   lead: "Orion trenger dette for å få gjort det du ba om. Den spør bare én gang.",
+  leadSettings: "Før du slår dette på, her er hva det lar Orion gjøre.",
   "shell.title": "Skal Orion få kjøre kommandoer?",
   "shell.what":
     "Orion kjører kommandoer og små programmer på denne datamaskinen for å bygge og fikse ting for gården din, som å sjekke at et verktøy er installert.",

@@ -2,6 +2,7 @@ import type { Messages } from "../../core";
 
 export const access = {
   lead: "Orion needs this to get your request done. It only asks once.",
+  leadSettings: "Before you turn this on, here is what it lets Orion do.",
   "shell.title": "Let Orion run commands?",
   "shell.what":
     "Orion runs commands and small programs on this computer to build and fix things for your farm, like checking that a tool is installed.",

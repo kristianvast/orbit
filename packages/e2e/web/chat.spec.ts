@@ -55,3 +55,29 @@ test("a new session appears in the sidebar and survives a reload", async ({ page
   await page.reload();
   await expect(page.getByTestId(testId as string)).toBeVisible();
 });
+
+test("turning a switch on in Settings asks the first time only", async ({ page }) => {
+  await page.goto("/settings");
+  const computer = page.getByTestId("settings-access-computer");
+  const dialog = page.getByTestId("access-dialog");
+  await expect(computer).toBeEnabled();
+  await expect(computer).not.toBeChecked();
+
+  await computer.click();
+  await expect(dialog).toHaveAttribute("data-tool", "computer");
+  await page.getByTestId("access-decline").click();
+  await expect(dialog).toHaveCount(0);
+  await expect(computer).not.toBeChecked();
+
+  await computer.click();
+  await page.getByTestId("access-allow").click();
+  await expect(computer).toBeChecked();
+
+  await computer.click();
+  await expect(computer).not.toBeChecked();
+  await computer.click();
+  await expect(computer).toBeChecked();
+  await expect(dialog).toHaveCount(0);
+  await computer.click();
+  await expect(computer).not.toBeChecked();
+});

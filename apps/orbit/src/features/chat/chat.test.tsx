@@ -57,6 +57,7 @@ function createMockClient(
     thinkingLevel: "off",
     shareAnonymousData: true,
     toolAccess: { shell: false, browser: false, computer: false },
+    toolAccessAccepted: { shell: false, browser: false, computer: false },
     apiKeys: {
       "orion-mock": { configured: true },
       anthropic: { configured: true, hint: "…9a2f" },

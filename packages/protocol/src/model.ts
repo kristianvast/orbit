@@ -142,6 +142,8 @@ export const Settings = Type.Object({
   shareAnonymousData: Type.Boolean(),
   /** Which of Orion's tools the farmer allowed; each is asked once, on its own first use. */
   toolAccess: ToolAccess,
+  /** Which tools' first-use question the farmer has answered with Allow at least once; until then, turning one on in Settings asks it first. */
+  toolAccessAccepted: ToolAccess,
   species: Type.Optional(Type.Enum([...SPECIES])),
   /** Per provider: whether a key is stored (in the OS keychain) and a masked hint. Never the key. */
   apiKeys: Type.Record(

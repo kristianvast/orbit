@@ -21,7 +21,17 @@ export async function setToolAccess(
   const toggle = page.getByTestId(`settings-access-${tool}`);
   await expect(toggle).toBeEnabled();
   // The box is controlled by Orion's answer, so it flips only after the update comes back.
-  if ((await toggle.isChecked()) !== allowed) await toggle.click();
+  if ((await toggle.isChecked()) !== allowed) {
+    await toggle.click();
+    // The first time a tool is turned on, Settings asks the same question Orion would.
+    const allow = page.getByTestId("access-allow");
+    if (allowed) {
+      await expect(
+        allow.or(page.locator(`[data-testid="settings-access-${tool}"]:checked`)),
+      ).toBeVisible();
+      if (await allow.isVisible()) await allow.click();
+    }
+  }
   await expect(toggle).toBeChecked({ checked: allowed });
 }
 

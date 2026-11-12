@@ -126,3 +126,23 @@ test("each tool gets its own question, and a yes or a no for one leaves the othe
   await computer;
   expect(settings.get().toolAccess).toEqual({ shell: true, browser: false, computer: true });
 });
+
+test("an allowed question is remembered as accepted, and turning a switch off keeps it accepted", async () => {
+  const { client, sessionId } = await fixture();
+  const asked = waitFor(client, "access.request");
+  const run = await checkGit(client, sessionId);
+  await client.request("access.respond", { requestId: (await asked).requestId, allow: true });
+  await run.settled;
+  expect((await client.request("settings.get")).toolAccessAccepted).toEqual({
+    shell: true,
+    browser: false,
+    computer: false,
+  });
+
+  const off = await client.request("settings.update", { toolAccess: { shell: false } });
+  expect(off.toolAccess.shell).toBe(false);
+  expect(off.toolAccessAccepted.shell).toBe(true);
+  const on = await client.request("settings.update", { toolAccess: { browser: true } });
+  expect(on.toolAccess).toEqual({ shell: false, browser: true, computer: false });
+  expect(on.toolAccessAccepted).toEqual({ shell: true, browser: true, computer: false });
+});

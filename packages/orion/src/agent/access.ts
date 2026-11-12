@@ -75,8 +75,13 @@ export class AccessGate {
   respond(requestId: string, allow: boolean): boolean {
     const tool = [...this.asks].find(([, ask]) => ask.body.requestId === requestId)?.[0];
     if (!tool) return false;
-    if (allow)
-      this.settings.update({ toolAccess: { ...this.settings.get().toolAccess, [tool]: true } });
+    if (allow) {
+      const s = this.settings.get();
+      this.settings.update({
+        toolAccess: { ...s.toolAccess, [tool]: true },
+        toolAccessAccepted: { ...s.toolAccessAccepted, [tool]: true },
+      });
+    }
     this.close(tool, allow);
     return true;
   }
