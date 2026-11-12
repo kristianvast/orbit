@@ -35,7 +35,13 @@ export function monthStart(now: Date): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }
 
-export async function entitlements(db: CoreDb, farmId: string, now: Date) {
+export type BillingAccount = {
+  readonly kind: "farm" | "personal";
+  readonly id: string;
+};
+
+export async function entitlements(db: CoreDb, account: string | BillingAccount, now: Date) {
+  const farmId = typeof account === "string" ? account : account.id;
   const [subscription] = await db
     .select()
     .from(farmSubscriptions)
@@ -46,13 +52,19 @@ export async function entitlements(db: CoreDb, farmId: string, now: Date) {
   const plan = planFor(active ? subscription.plan : "free");
   const [owner] = active
     ? []
-    : await db
-        .select({ createdAt: users.createdAt, verifiedAt: users.emailVerifiedAt })
-        .from(farmMembers)
-        .innerJoin(users, eq(users.id, farmMembers.userId))
-        .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.role, "owner")))
-        .orderBy(asc(users.createdAt))
-        .limit(1);
+    : typeof account !== "string" && account.kind === "personal"
+      ? await db
+          .select({ createdAt: users.createdAt, verifiedAt: users.emailVerifiedAt })
+          .from(users)
+          .where(eq(users.id, account.id))
+          .limit(1)
+      : await db
+          .select({ createdAt: users.createdAt, verifiedAt: users.emailVerifiedAt })
+          .from(farmMembers)
+          .innerJoin(users, eq(users.id, farmMembers.userId))
+          .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.role, "owner")))
+          .orderBy(asc(users.createdAt))
+          .limit(1);
   const trialEnd = owner
     ? new Date(new Date(owner.createdAt).getTime() + trialDays * 86_400_000)
     : null;
@@ -73,17 +85,17 @@ export async function entitlements(db: CoreDb, farmId: string, now: Date) {
   };
 }
 
-export async function usageThisMonth(db: CoreDb, farmId: string, window: Date | string) {
+export async function usageThisMonth(db: CoreDb, accountId: string, window: Date | string) {
   const since = typeof window === "string" ? window : monthStart(window);
   const [[tokens], [voice]] = await Promise.all([
     db
       .select({ used: sql<string>`coalesce(sum(${llmUsage.totalTokens}), 0)` })
       .from(llmUsage)
-      .where(and(eq(llmUsage.farmId, farmId), gte(llmUsage.createdAt, since))),
+      .where(and(eq(llmUsage.accountId, accountId), gte(llmUsage.createdAt, since))),
     db
       .select({ used: sql<string>`coalesce(sum(${voiceUsage.seconds}), 0)` })
       .from(voiceUsage)
-      .where(and(eq(voiceUsage.farmId, farmId), gte(voiceUsage.createdAt, since))),
+      .where(and(eq(voiceUsage.accountId, accountId), gte(voiceUsage.createdAt, since))),
   ]);
   return { tokensUsed: Number(tokens?.used ?? 0), voiceSecondsUsed: Number(voice?.used ?? 0) };
 }

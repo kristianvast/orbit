@@ -140,7 +140,10 @@ export function createApp(options: AppOptions) {
     const user = token ? await resolveSession(options.db, token, now()) : null;
     if (user) {
       if (!wanted) {
-        if (c.req.path.endsWith("/billing/checkout")) {
+        if (
+          c.req.path.startsWith("/v1/llm/") ||
+          ["/v1/billing/checkout", "/v1/billing/portal", "/v1/billing/status"].includes(c.req.path)
+        ) {
           c.set("principal", { farmId: "", role: "owner", userId: user.id });
           return next();
         }
@@ -223,6 +226,7 @@ export function createApp(options: AppOptions) {
     return handleLlm(options.db, c.req.raw, principal.farmId, path, {
       ...llmOptions,
       sessionPrincipal: principal.userId !== null,
+      userId: principal.userId,
     });
   });
 

@@ -115,14 +115,34 @@ test("status clears trialEndsAt after the free month", async () => {
 test("free month status counts the single token and voice pool from the owner's creation date", async () => {
   await trialOwner();
   await db.insert(llmUsage).values([
-    { farmId: FARM, path: "/x", status: 200, totalTokens: 99, createdAt: "2026-10-19T12:00:00Z" },
-    { farmId: FARM, path: "/x", status: 200, totalTokens: 70, createdAt: START },
-    { farmId: FARM, path: "/x", status: 200, totalTokens: 30, createdAt: NOW.toISOString() },
+    {
+      farmId: FARM,
+      accountId: FARM,
+      path: "/x",
+      status: 200,
+      totalTokens: 99,
+      createdAt: "2026-10-19T12:00:00Z",
+    },
+    { farmId: FARM, accountId: FARM, path: "/x", status: 200, totalTokens: 70, createdAt: START },
+    {
+      farmId: FARM,
+      accountId: FARM,
+      path: "/x",
+      status: 200,
+      totalTokens: 30,
+      createdAt: NOW.toISOString(),
+    },
   ]);
   await db.insert(voiceUsage).values([
-    { farmId: FARM, model: "live", seconds: 99, createdAt: "2026-10-19T12:00:00Z" },
-    { farmId: FARM, model: "live", seconds: 40, createdAt: START },
-    { farmId: FARM, model: "live", seconds: 20, createdAt: NOW.toISOString() },
+    {
+      farmId: FARM,
+      accountId: FARM,
+      model: "live",
+      seconds: 99,
+      createdAt: "2026-10-19T12:00:00Z",
+    },
+    { farmId: FARM, accountId: FARM, model: "live", seconds: 40, createdAt: START },
+    { farmId: FARM, accountId: FARM, model: "live", seconds: 20, createdAt: NOW.toISOString() },
   ]);
   const response = await app().request("/v1/billing/status", { headers: headers() });
   expect(await response.json()).toMatchObject({
@@ -134,6 +154,7 @@ test("the gateway refuses an exhausted free pool from the previous calendar mont
   await trialOwner();
   await db.insert(llmUsage).values({
     farmId: FARM,
+    accountId: FARM,
     path: "/x",
     status: 200,
     totalTokens: 2_000_000,

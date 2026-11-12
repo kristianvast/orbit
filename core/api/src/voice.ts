@@ -1,6 +1,7 @@
 import type { Server, ServerWebSocket } from "bun";
 import { eq } from "drizzle-orm";
 import { memberRole, resolveSession } from "./auth";
+import { MEMBER_LIMIT, memberFarmTokens, resolveBillingAccount } from "./billing-account";
 import { type CoreDb, voiceUsage } from "./db";
 import { entitlements, planRequired, usageThisMonth } from "./entitlements";
 import { object } from "./stripe";
@@ -15,7 +16,9 @@ export interface VoiceOptions {
 
 export interface VoiceConnection {
   readonly id: string;
-  readonly farmId: string;
+  readonly farmId: string | null;
+  readonly accountId: string;
+  readonly accountKind: "farm" | "personal";
   readonly model: string;
   readonly allowance: number;
   readonly startedAt: number;
@@ -83,18 +86,26 @@ export function createVoiceRelay(db: CoreDb, options: RelayOptions) {
           { error: { code: "unauthorized", message: "Sign in first" } },
           { status: 401 },
         );
-      const farmId = request.headers.get("x-orbit-farm") ?? "";
-      if (!/^[0-9a-f-]{36}$/i.test(farmId))
+      const farmId = request.headers.get("x-orbit-farm");
+      if (farmId !== null && !/^[0-9a-f-]{36}$/i.test(farmId))
         return Response.json(
-          { error: { code: "bad_request", message: "x-orbit-farm is required" } },
+          { error: { code: "bad_request", message: "x-orbit-farm must be a uuid" } },
           { status: 400 },
         );
-      if (!(await memberRole(db, farmId, user.id)))
+      if (farmId && !(await memberRole(db, farmId, user.id)))
         return Response.json({ error: { code: "forbidden" } }, { status: 403 });
-      const entitlement = await entitlements(db, farmId, now());
+      const account = await resolveBillingAccount(db, { farmId, userId: user.id }, now());
+      const entitlement = account.entitlement;
+      if (
+        account.kind === "farm" &&
+        account.member &&
+        account.member.monthlyTokenLimit !== null &&
+        (await memberFarmTokens(db, account.member, now())) >= account.member.monthlyTokenLimit
+      )
+        return Response.json(MEMBER_LIMIT, { status: 429 });
       if (entitlement.voiceSecondsAllowance === 0)
         return Response.json(planRequired(entitlement), { status: 402 });
-      const usage = await usageThisMonth(db, farmId, entitlement.usageStart);
+      const usage = await usageThisMonth(db, account.id, entitlement.usageStart);
       if (usage.voiceSecondsUsed >= entitlement.voiceSecondsAllowance)
         return Response.json({ error: { code: "budget_exceeded" } }, { status: 429 });
       if (request.headers.get("upgrade")?.toLowerCase() !== "websocket")
@@ -103,14 +114,22 @@ export function createVoiceRelay(db: CoreDb, options: RelayOptions) {
       if (prepared instanceof Response) return prepared;
       const id = crypto.randomUUID();
       // Failed provider preparation never creates a charge.
-      await db
-        .insert(voiceUsage)
-        .values({ id, farmId, model: prepared.model, seconds: 0, createdAt: now().toISOString() });
+      await db.insert(voiceUsage).values({
+        id,
+        farmId,
+        userId: user.id,
+        accountId: account.id,
+        model: prepared.model,
+        seconds: 0,
+        createdAt: now().toISOString(),
+      });
       const upstream = prepared.connect();
       upstream.binaryType = "arraybuffer";
       const data: VoiceConnection = {
         id,
         farmId,
+        accountId: account.id,
+        accountKind: account.kind,
         model: prepared.model,
         allowance: entitlement.voiceSecondsAllowance,
         startedAt: now().getTime(),
@@ -149,8 +168,16 @@ export function createVoiceRelay(db: CoreDb, options: RelayOptions) {
           data.ticking = true;
           try {
             await persist(data);
-            const current = await entitlements(db, data.farmId, now());
-            const { voiceSecondsUsed } = await usageThisMonth(db, data.farmId, current.usageStart);
+            const current = await entitlements(
+              db,
+              { kind: data.accountKind, id: data.accountId },
+              now(),
+            );
+            const { voiceSecondsUsed } = await usageThisMonth(
+              db,
+              data.accountId,
+              current.usageStart,
+            );
             if (voiceSecondsUsed >= current.voiceSecondsAllowance)
               ws.close(4402, "Voice allowance used up");
           } catch (error) {

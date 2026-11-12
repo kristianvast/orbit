@@ -580,7 +580,15 @@ describe("farms and members", () => {
     expect(row).toMatchObject({ name: "Fjord stable", originDevice: "cloud" });
     const me = await call(a, "GET", "/v1/me", undefined, as(token));
     expect(me.body.farms).toEqual([
-      { farmId: r.body.farm.id, role: "owner", name: "Fjord stable", plan: "free" },
+      {
+        farmId: r.body.farm.id,
+        role: "owner",
+        name: "Fjord stable",
+        plan: "free",
+        useFarmPlan: true,
+        monthlyTokenLimit: null,
+        usageSource: null,
+      },
     ]);
   });
 

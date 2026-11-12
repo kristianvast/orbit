@@ -25,6 +25,7 @@ test("a paid farm at its allowance gets budget_exceeded", async () => {
   await paid();
   await db.insert(llmUsage).values({
     farmId: FARM,
+    accountId: FARM,
     path: "/v1/chat/completions",
     status: 200,
     totalTokens: 3_000_000,
@@ -45,6 +46,7 @@ test("a farm budget override wins over its paid plan allowance", async () => {
   await db.insert(farmBudgets).values({ farmId: FARM, monthlyTokenBudget: 4 });
   await db.insert(llmUsage).values({
     farmId: FARM,
+    accountId: FARM,
     path: "/x",
     status: 200,
     totalTokens: 4,
@@ -77,9 +79,13 @@ test("Vertex thinking tokens count toward the farm allowance", async () => {
 });
 test("billing status includes metered voice usage", async () => {
   await paid();
-  await db
-    .insert(voiceUsage)
-    .values({ farmId: FARM, seconds: 123, model: "gemini-3.8-live", createdAt: NOW.toISOString() });
+  await db.insert(voiceUsage).values({
+    farmId: FARM,
+    accountId: FARM,
+    seconds: 123,
+    model: "gemini-3.8-live",
+    createdAt: NOW.toISOString(),
+  });
   const response = await app().request("/v1/billing/status", { headers: headers() });
   expect(await response.json()).toMatchObject({
     usage: { voiceSecondsUsed: 123, voiceSecondsAllowance: 3600 },

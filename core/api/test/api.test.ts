@@ -409,7 +409,9 @@ describe("POST /v1/llm/*", () => {
       },
     });
     await db.insert(farmBudgets).values({ farmId: FARM, monthlyTokenBudget: 100 });
-    await db.insert(llmUsage).values({ farmId: FARM, path: "/x", status: 200, totalTokens: 100 });
+    await db
+      .insert(llmUsage)
+      .values({ farmId: FARM, accountId: FARM, path: "/x", status: 200, totalTokens: 100 });
     const res = await call(a, { model: "m" });
     expect(res.status).toBe(429);
     expect(await res.json()).toMatchObject({

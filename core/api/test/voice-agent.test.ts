@@ -84,6 +84,7 @@ test("agent persists periodic usage and closes both sockets at the shared allowa
   await paid();
   await db.insert(voiceUsage).values({
     farmId: FARM,
+    accountId: FARM,
     model: "live",
     seconds: 1799,
     createdAt: NOW.toISOString(),

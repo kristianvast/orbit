@@ -53,6 +53,7 @@ test.each([
   if (row.used)
     await db.insert(voiceUsage).values({
       farmId: FARM,
+      accountId: FARM,
       model: "live",
       seconds: row.used,
       createdAt: NOW.toISOString(),

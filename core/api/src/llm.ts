@@ -2,8 +2,9 @@
 // with Core's API key, enforces the current paid or free-month token allowance, and records one
 // llm_usage row per request (token counts parsed from JSON or SSE responses).
 import { and, eq, gte, sql } from "drizzle-orm";
+import { MEMBER_LIMIT, memberFarmTokens, resolveBillingAccount } from "./billing-account";
 import { type CoreDb, farmBudgets, llmUsage } from "./db";
-import { entitlements, planRequired } from "./entitlements";
+import { planRequired } from "./entitlements";
 import type { FetchLike } from "./shape";
 
 export interface LlmGatewayOptions {
@@ -22,6 +23,7 @@ export interface LlmGatewayOptions {
   stripPrefix?: string;
   /** Legacy farm tokens retain their original default/override budget behavior. */
   sessionPrincipal?: boolean;
+  userId?: string | null;
   fetch: FetchLike;
   now: () => Date;
 }
@@ -61,14 +63,14 @@ export function monthStart(now: Date): string {
 
 export async function usedThisMonth(
   db: CoreDb,
-  farmId: string,
+  accountId: string,
   window: Date | string,
 ): Promise<number> {
   const since = typeof window === "string" ? window : monthStart(window);
   const [row] = await db
     .select({ used: sql<string | number | null>`coalesce(sum(${llmUsage.totalTokens}), 0)` })
     .from(llmUsage)
-    .where(and(eq(llmUsage.farmId, farmId), gte(llmUsage.createdAt, since)));
+    .where(and(eq(llmUsage.accountId, accountId), gte(llmUsage.createdAt, since)));
   return Number(row?.used ?? 0);
 }
 
@@ -119,7 +121,12 @@ export async function handleLlm(
   options: LlmGatewayOptions,
 ): Promise<Response> {
   const now = options.now();
-  const entitlement = options.sessionPrincipal ? await entitlements(db, farmId, now) : null;
+  const account = await resolveBillingAccount(
+    db,
+    { farmId: farmId || null, userId: options.userId ?? null },
+    now,
+  );
+  const entitlement = options.sessionPrincipal ? account.entitlement : null;
   if (
     entitlement &&
     entitlement.plan.id === "free" &&
@@ -135,11 +142,19 @@ export async function handleLlm(
     );
   }
   const [used, budget] = await Promise.all([
-    usedThisMonth(db, farmId, entitlement?.usageStart ?? now),
+    usedThisMonth(db, account.id, entitlement?.usageStart ?? now),
     entitlement
       ? Promise.resolve(entitlement.tokenAllowance)
       : budgetFor(db, farmId, options.defaultMonthlyTokenBudget),
   ]);
+  if (
+    account.kind === "farm" &&
+    account.member &&
+    account.member.monthlyTokenLimit !== null &&
+    (await memberFarmTokens(db, account.member, now)) >= account.member.monthlyTokenLimit
+  ) {
+    return Response.json(MEMBER_LIMIT, { status: 429 });
+  }
   if (used >= budget) {
     return Response.json(
       { error: { code: "budget_exceeded", message: "Monthly token budget used up", used, budget } },
@@ -184,7 +199,9 @@ export async function handleLlm(
 
   const record = async (status: number, usage: Usage) => {
     await db.insert(llmUsage).values({
-      farmId,
+      farmId: farmId || null,
+      userId: options.userId ?? null,
+      accountId: account.id,
       model,
       path,
       status,

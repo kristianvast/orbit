@@ -27,6 +27,7 @@ test.each([
     .where(eq(users.id, session.userId));
   await db.insert(voiceUsage).values({
     farmId: FARM,
+    accountId: FARM,
     model: "live",
     seconds: used,
     createdAt: "2026-10-21T12:00:00Z",

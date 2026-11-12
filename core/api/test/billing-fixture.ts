@@ -38,7 +38,9 @@ export function billingFixture() {
     if (!user) throw new TypeError("User fixture failed");
     session.userId = user.id;
     session.token = (await createSession(db, user.id, null, NOW)).token;
-    await db.insert(farmMembers).values({ farmId: FARM, userId: user.id, role: "owner" });
+    await db
+      .insert(farmMembers)
+      .values({ farmId: FARM, userId: user.id, role: "owner", usageSource: "farm" });
   });
 
   const headers = () => ({

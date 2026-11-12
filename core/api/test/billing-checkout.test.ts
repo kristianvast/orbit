@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
+import { pg } from "@orbit/schema";
 import { eq } from "drizzle-orm";
-import { farmMembers, users } from "../src/db";
+import { billingCustomers, farmMembers, users } from "../src/db";
 import { billingFixture, FARM, SECRET } from "./billing-fixture";
 import { stripeFake } from "./billing-stripe";
 
 const { app, db, headers, session } = billingFixture();
 
-test("workers cannot start a checkout", async () => {
+test("workers cannot start a farm checkout", async () => {
   await db
     .update(farmMembers)
     .set({ role: "worker" })
@@ -18,7 +19,7 @@ test("workers cannot start a checkout", async () => {
   }).request("/v1/billing/checkout", {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ plan: "cam2", interval: "month" }),
+    body: JSON.stringify({ plan: "cam2", interval: "month", account: "farm" }),
   });
   expect(response.status).toBe(403);
 });
@@ -148,7 +149,7 @@ test("without automatic tax the checkout carries no tax fields", async () => {
   expect(sessions[0]?.has("automatic_tax[enabled]")).toBe(false);
 });
 
-test("checkout without x-orbit-farm creates a default farm when the account has none", async () => {
+test("checkout without x-orbit-farm buys a personal plan without creating a farm", async () => {
   await db.delete(farmMembers).where(eq(farmMembers.userId, session.userId));
   const sessions: URLSearchParams[] = [];
   const a = app({ fetch: stripeFake(sessions) });
@@ -165,7 +166,10 @@ test("checkout without x-orbit-farm creates a default farm when the account has 
     .select()
     .from(farmMembers)
     .where(eq(farmMembers.userId, session.userId));
-  expect(createdMemberships).toHaveLength(1);
-  expect(createdMemberships[0]?.role).toBe("owner");
-  expect(sessions[0]?.get("metadata[farm_id]")).toBe(createdMemberships[0]?.farmId ?? null);
+  expect(createdMemberships).toEqual([]);
+  expect(await db.select().from(pg.farms)).toEqual([]);
+  expect(await db.select().from(billingCustomers)).toMatchObject([{ farmId: session.userId }]);
+  expect(sessions[0]?.get("metadata[farm_id]")).toBe(session.userId);
+  expect(sessions[0]?.get("metadata[account]")).toBe("personal");
+  expect(sessions[0]?.get("subscription_data[metadata][account]")).toBe("personal");
 });

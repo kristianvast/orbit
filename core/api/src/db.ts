@@ -1,9 +1,11 @@
 // Core-only tables (not synced to farms) plus the combined Drizzle schema used by @core/api.
 import { FARM_ROLES, pg } from "@orbit/schema";
+import { sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -42,7 +44,9 @@ export const llmUsage = pgTable(
   "llm_usage",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    farmId: uuid("farm_id").notNull(),
+    farmId: uuid("farm_id"),
+    userId: uuid("user_id"),
+    accountId: uuid("account_id").notNull(),
     model: text("model"),
     path: text("path").notNull(),
     status: integer("status").notNull(),
@@ -51,7 +55,11 @@ export const llmUsage = pgTable(
     totalTokens: integer("total_tokens").notNull().default(0),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
-  (t) => [index("llm_usage_farm_created_idx").on(t.farmId, t.createdAt)],
+  (t) => [
+    index("llm_usage_farm_created_idx").on(t.farmId, t.createdAt),
+    index("llm_usage_account_created_idx").on(t.accountId, t.createdAt),
+    index("llm_usage_member_created_idx").on(t.farmId, t.userId, t.createdAt),
+  ],
 );
 
 /** People who sign in to Orbit. `email` is stored lower-cased; passwords only as argon2id hashes. */
@@ -121,12 +129,16 @@ export const farmMembers = pgTable(
     farmId: uuid("farm_id").notNull(),
     userId: uuid("user_id").notNull(),
     role: text("role", { enum: FARM_ROLES }).notNull(),
+    useFarmPlan: boolean("use_farm_plan").notNull().default(true),
+    monthlyTokenLimit: bigint("monthly_token_limit", { mode: "number" }),
+    usageSource: text("usage_source", { enum: ["farm", "own"] }),
     createdAt: ts("created_at").notNull().defaultNow(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.farmId, t.userId] }),
     index("farm_members_user_idx").on(t.userId),
+    check("farm_members_usage_source_check", sql`${t.usageSource} in ('farm', 'own')`),
   ],
 );
 
@@ -138,6 +150,8 @@ export const farmInvites = pgTable(
     farmId: uuid("farm_id").notNull(),
     email: text("email").notNull(),
     role: text("role", { enum: FARM_ROLES }).notNull(),
+    useFarmPlan: boolean("use_farm_plan").notNull().default(false),
+    monthlyTokenLimit: bigint("monthly_token_limit", { mode: "number" }),
     tokenHash: text("token_hash").notNull(),
     invitedBy: uuid("invited_by").notNull(),
     createdAt: ts("created_at").notNull().defaultNow(),
@@ -157,11 +171,13 @@ export const coreMigrations = pgTable("__core_migrations", {
   appliedAt: ts("applied_at").notNull().defaultNow(),
 });
 
+/** Billing account key: farm UUID, or user UUID for personal plans (disjoint UUID spaces). */
 export const billingCustomers = pgTable("billing_customers", {
   farmId: uuid("farm_id").primaryKey(),
   stripeCustomerId: text("stripe_customer_id").notNull().unique(),
 });
 
+/** `farm_id` also stores the user UUID for a personal subscription, matching Stripe metadata. */
 export const farmSubscriptions = pgTable("farm_subscriptions", {
   farmId: uuid("farm_id").primaryKey(),
   plan: text("plan", { enum: ["free", "orion", "cam2", "cam4", "cam6"] }).notNull(),
@@ -199,12 +215,18 @@ export const voiceUsage = pgTable(
   "voice_usage",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    farmId: uuid("farm_id").notNull(),
+    farmId: uuid("farm_id"),
+    userId: uuid("user_id"),
+    accountId: uuid("account_id").notNull(),
     seconds: integer("seconds").notNull(),
     model: text("model").notNull(),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
-  (t) => [index("voice_usage_farm_created_idx").on(t.farmId, t.createdAt)],
+  (t) => [
+    index("voice_usage_farm_created_idx").on(t.farmId, t.createdAt),
+    index("voice_usage_account_created_idx").on(t.accountId, t.createdAt),
+    index("voice_usage_member_created_idx").on(t.farmId, t.userId, t.createdAt),
+  ],
 );
 
 /**

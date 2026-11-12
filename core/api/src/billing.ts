@@ -1,5 +1,4 @@
-import { canManageMembers, createHlc, pg } from "@orbit/schema";
-import { asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Principal } from "./auth";
 import {
@@ -9,9 +8,9 @@ import {
   hardwareSelection,
   redirectUrl,
 } from "./billing-checkout";
+import { billingStatus, checkoutAccount } from "./billing-status";
 import { billingWebhook } from "./billing-webhook";
-import { billingCustomers, type CoreDb, farmMembers, users } from "./db";
-import { entitlements, usageThisMonth } from "./entitlements";
+import { billingCustomers, type CoreDb, users } from "./db";
 import { currency, hardware, isPaidPlan, lookupKey, plans, trialDays } from "./plans";
 import { BillingError, object, priceFor, type StripeOptions, string, stripeClient } from "./stripe";
 
@@ -42,8 +41,6 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
     if (["/checkout", "/portal", "/status"].some((suffix) => c.req.path.endsWith(suffix))) {
       const principal = c.get("principal");
       if (!principal.userId) throw new BillingError(401, "unauthorized", "Sign in first");
-      if (!c.req.path.endsWith("/status") && !canManageMembers(principal.role))
-        throw new BillingError(403, "forbidden", "Only owners and managers manage billing");
       if (c.req.path.endsWith("/checkout")) {
         const [user] = await db
           .select({ verifiedAt: users.emailVerifiedAt })
@@ -56,25 +53,7 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
     await next();
   });
   routes.get("/status", async (c) => {
-    const farmId = c.get("principal").farmId;
-    const now = options.now();
-    const { subscription, plan, tokenAllowance, voiceSecondsAllowance, trialEndsAt, usageStart } =
-      await entitlements(db, farmId, now);
-    return c.json({
-      plan: plan.id,
-      trialEndsAt,
-      interval: subscription?.interval ?? null,
-      status: subscription?.status ?? "free",
-      currentPeriodEnd: subscription?.currentPeriodEnd
-        ? new Date(subscription.currentPeriodEnd).toISOString()
-        : null,
-      cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd ?? false,
-      usage: {
-        ...(await usageThisMonth(db, farmId, usageStart)),
-        tokenAllowance,
-        voiceSecondsAllowance,
-      },
-    });
+    return c.json(await billingStatus(db, c.get("principal"), options.now()));
   });
   routes.post("/checkout", async (c) => {
     const body = object(await c.req.json());
@@ -86,45 +65,11 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
         "Choose an Orion or camera plan and month or year",
       );
     const selection = hardwareSelection(body);
-    let farmId = c.get("principal").farmId;
-    const userId = c.get("principal").userId as string;
-    if (!farmId) {
-      const existing = await db
-        .select({ farmId: farmMembers.farmId, role: farmMembers.role })
-        .from(farmMembers)
-        .where(eq(farmMembers.userId, userId))
-        .orderBy(asc(farmMembers.createdAt));
-      const manageable = existing.find((m) => canManageMembers(m.role));
-      if (manageable) {
-        farmId = manageable.farmId;
-      } else if (existing.length > 0) {
-        throw new BillingError(403, "forbidden", "Only owners and managers manage billing");
-      } else {
-        const [buyer] = await db
-          .select({ name: users.name })
-          .from(users)
-          .where(eq(users.id, userId));
-        const trimmedName = buyer?.name?.trim();
-        const farmName = trimmedName ? `${trimmedName}'s farm` : "My farm";
-        const newFarmId = crypto.randomUUID();
-        const ts = options.now().toISOString();
-        const hlc = createHlc("cloud").tick();
-        await db.transaction(async (tx) => {
-          await tx.insert(pg.farms).values({
-            id: newFarmId,
-            name: farmName,
-            timezone: "UTC",
-            farmId: newFarmId,
-            createdAt: ts,
-            updatedAt: ts,
-            hlc,
-            originDevice: "cloud",
-          });
-          await tx.insert(farmMembers).values({ farmId: newFarmId, userId, role: "owner" });
-        });
-        farmId = newFarmId;
-      }
-    }
+    const principal = c.get("principal");
+    const account = checkoutAccount(principal, body.account);
+    const farmId = account.id;
+    const userId = principal.userId;
+    if (!userId) throw new BillingError(401, "unauthorized", "Sign in first");
     let [customer] = await db
       .select()
       .from(billingCustomers)
@@ -133,12 +78,13 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
       const [buyer] = await db
         .select({ email: users.email, name: users.name })
         .from(users)
-        .where(eq(users.id, c.get("principal").userId as string));
+        .where(eq(users.id, userId));
       const created = await stripe(
         "customers",
         new URLSearchParams({
           "metadata[farm_id]": farmId,
-          "metadata[user_id]": c.get("principal").userId as string,
+          "metadata[user_id]": userId,
+          "metadata[account]": account.kind,
           ...(buyer?.email ? { email: buyer.email } : {}),
           ...(buyer?.name ? { name: buyer.name } : {}),
         }),
@@ -167,6 +113,7 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
       plan,
       interval,
       user_id: userId,
+      account: account.kind,
     })) {
       form.set(`metadata[${key}]`, value);
       form.set(`subscription_data[metadata][${key}]`, value);
@@ -176,10 +123,11 @@ export function registerBillingRoutes(app: Hono<FarmEnv>, db: CoreDb, options: S
   });
   routes.post("/portal", async (c) => {
     const body = object(await c.req.json());
+    const account = checkoutAccount(c.get("principal"), body.account);
     const [customer] = await db
       .select()
       .from(billingCustomers)
-      .where(eq(billingCustomers.farmId, c.get("principal").farmId));
+      .where(eq(billingCustomers.farmId, account.id));
     if (!customer) throw new BillingError(404, "customer_missing", "Subscribe to a plan first");
     const session = await stripe(
       "billing_portal/sessions",
