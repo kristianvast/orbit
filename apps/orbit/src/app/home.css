@@ -50,34 +50,6 @@
   color: var(--text-primary);
 }
 
-.orbit-telemetry {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: var(--space-6);
-  margin: 0;
-}
-
-.orbit-telemetry__item {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 2px;
-}
-
-.orbit-telemetry__value {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-h2);
-  font-weight: 400;
-  line-height: 1;
-  color: var(--text-primary);
-}
-
-.orbit-telemetry__label {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
 .orbit-home__lede {
   margin: 0;
   max-inline-size: 60ch;
@@ -339,48 +311,6 @@
   max-inline-size: 65ch;
 }
 
-.orbit-home__rings {
-  display: flex;
-  justify-content: center;
-  padding-block: var(--space-1) var(--space-3);
-}
-
-.orbit-herd-composition {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-block: var(--space-3);
-  border-block-start: 1px solid var(--border-subtle);
-}
-
-.orbit-herd-composition__legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-.orbit-herd-composition__item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.orbit-herd-composition__swatch {
-  inline-size: 0.45rem;
-  block-size: 0.45rem;
-  border-radius: var(--radius-full);
-}
-
-.orbit-herd-composition__bar {
-  display: flex;
-  block-size: 0.4375rem;
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  gap: 2px;
-}
-
 .orbit-gauges {
   list-style: none;
   margin: 0;
@@ -451,19 +381,152 @@
   color: var(--text-muted);
 }
 
-.orbit-home__note {
+.orbit-home__masthead .orbit-gauges {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  margin: 0;
-  max-inline-size: 72ch;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
 }
 
-.orbit-home__note svg {
-  flex-shrink: 0;
-  margin-block-start: 0.15em;
+.orbit-home__masthead .orbit-gauge {
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    "value label"
+    "value detail";
+  column-gap: var(--space-3);
+  inline-size: auto;
+  margin: 0;
+  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+}
+
+.orbit-home__masthead .orbit-gauge__label,
+.orbit-home__masthead .orbit-gauge__detail {
+  font-size: var(--text-xs);
+}
+
+.orbit-home__masthead .orbit-gauge__chevron {
+  display: none;
+}
+
+/* A desktop window shows the whole Home at once: Orion and the alerts share the middle row and
+   give up height first, so the page itself never scrolls. */
+@media (min-width: 961px) and (min-height: 600px) {
+  .orbit-home--fit {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: var(--space-5);
+    block-size: 100%;
+  }
+
+  .orbit-home--fit .orbit-home__masthead {
+    padding-block-end: var(--space-4);
+  }
+
+  .orbit-home--fit .orbit-home__headline {
+    font-size: var(--text-h1);
+  }
+
+  .orbit-home--fit .orbit-home__grid {
+    align-items: stretch;
+    min-block-size: 0;
+  }
+
+  .orbit-home--fit .orbit-home__grid > * {
+    min-block-size: 0;
+  }
+
+  .orbit-home--fit .orbit-home-voice {
+    overflow-y: auto;
+  }
+
+  .orbit-home--fit .orbit-voice-orb-frame--widget {
+    flex: 1 1 0;
+    block-size: auto;
+    min-block-size: 5rem;
+  }
+
+  .orbit-home--fit .orbit-home__panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .orbit-home--fit .orbit-alert-list {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .orbit-home--fit .orbit-alert {
+    padding-block: var(--space-3);
+  }
+
+  .orbit-home--fit .orbit-alert__desc {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .orbit-home--fit .orbit-page-cards {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(14rem, 1fr);
+    overflow-x: auto;
+  }
+
+  .orbit-home--fit .orbit-page-card__frame {
+    block-size: clamp(6rem, calc(100dvh - 40rem), 13rem);
+  }
+
+  .orbit-home--fit .orbit-home__grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+
+  .orbit-home--fit .orbit-home__masthead {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+}
+
+@media (min-width: 961px) and (min-height: 600px) {
+  .orbit-home--minimal {
+    justify-content: flex-start;
+    block-size: 100%;
+    min-block-size: 0;
+  }
+
+  .orbit-home--minimal .orbit-home__head--minimal {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    padding-block-start: 0;
+    gap: var(--space-4);
+  }
+
+  .orbit-home--minimal .orbit-home-voice {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .orbit-home--minimal .orbit-voice-orb-frame--widget {
+    flex: 1 1 0;
+    block-size: auto;
+    min-block-size: 5rem;
+  }
+}
+
+@media (min-width: 961px) and (min-height: 600px) and (max-width: 1200px) {
+  .orbit-home--fit .orbit-home__masthead .orbit-gauge__detail {
+    display: none;
+  }
+}
+
+@media (min-width: 961px) and (min-height: 600px) and (max-height: 780px) {
+  .orbit-home--fit .orbit-ask__suggestions {
+    display: none;
+  }
 }
 
 @media (max-width: 960px) {

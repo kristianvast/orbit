@@ -4,7 +4,9 @@
 
 .settings-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-4);
 }
 
@@ -276,9 +278,18 @@
 }
 
 .settings-pop > .settings-pop__summary {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
   list-style: none;
-  align-items: center;
   cursor: pointer;
+}
+
+.settings-pop__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
 .settings-pop:not([open]) > .settings-pop__summary {
@@ -497,4 +508,62 @@
   border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
   user-select: all;
+}
+
+.settings-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.settings-farm-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: end;
+}
+
+.settings-card--row > .orbit-card__header {
+  align-items: center;
+  padding-block-end: var(--space-5);
+}
+
+.settings-card--row > .orbit-card__body {
+  display: none;
+}
+
+.settings-pop {
+  position: relative;
+}
+
+.settings-pop[open] > .orbit-card__body {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-2));
+  inset-inline: 0;
+  z-index: 30;
+  max-block-size: min(32rem, 50dvh);
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 960px) {
+  .settings-columns,
+  .settings-farm-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.settings-inline-select {
+  inline-size: auto;
+  min-inline-size: 8rem;
+  block-size: var(--control-height-sm);
+}
+
+.settings-pop[data-up="true"][open] > .orbit-card__body {
+  inset-block-start: auto;
+  inset-block-end: calc(100% + var(--space-2));
 }

@@ -169,34 +169,40 @@ export default function SettingsPage() {
         )}
 
         {page === "account" && (
-          <>
-            <AccountSection />
-            <PrivacyCard settings={settings} onSettings={setSettings} />
-          </>
+          <div className="settings-columns">
+            <div className="settings-stack">
+              <AccountSection />
+            </div>
+            <div className="settings-stack">
+              <PrivacyCard settings={settings} onSettings={setSettings} />
+            </div>
+          </div>
         )}
 
         {page === "orion" && (
-          <>
-            <div className="orbit-split-grid">
+          <div className="settings-columns">
+            <div className="settings-stack">
               <ModelCard settings={settings} onSettings={setSettings} />
+              <ProvidersCard onChanged={(id) => void handleProvidersChanged(id)} />
               <OrionVoiceCard />
             </div>
-            <ProvidersCard onChanged={(id) => void handleProvidersChanged(id)} />
-            <div className="orbit-split-grid">
+            <div className="settings-stack">
               <AccessCard settings={settings} onSettings={setSettings} />
               <UndoCard />
             </div>
-          </>
+          </div>
         )}
 
         {page === "about" && (
-          <>
-            <div className="orbit-split-grid">
-              <YourOrbitCard />
+          <div className="settings-columns">
+            <div className="settings-stack">
               <AboutCard />
             </div>
-            <FeedbackCard />
-          </>
+            <div className="settings-stack">
+              <YourOrbitCard />
+              <FeedbackCard />
+            </div>
+          </div>
         )}
       </div>
     </div>

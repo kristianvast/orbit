@@ -76,7 +76,7 @@ export function FarmProfileCard() {
           className={hasPicker ? "settings-stack settings-divider" : "settings-stack"}
           onSubmit={(e) => void handleSubmit(e)}
         >
-          <div className="orbit-split-grid">
+          <div className="settings-farm-fields">
             <Input
               label={t("settings.farm.name")}
               placeholder={t("settings.farm.namePlaceholder")}
@@ -90,9 +90,6 @@ export function FarmProfileCard() {
               onChange={(e) => setTimezone(e.target.value)}
               data-testid="settings-farm-timezone-input"
             />
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <Button
               type="submit"
               variant="primary"

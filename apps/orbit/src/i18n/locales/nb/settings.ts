@@ -66,8 +66,6 @@ export const settings: Catalog<typeof en> = {
   "undo.alreadyUndone": "Allerede angret",
   "undo.undo": "Angre",
   "access.title": "Orions tilgang",
-  "access.hint":
-    "Orion spør første gang den trenger hver av disse. Slå en av når som helst, så spør Orion igjen før den bruker den neste gang.",
   "access.shell": "Kjøre kommandoer",
   "access.shellHint": "Kommandoer og små programmer som bygger og fikser ting for gården din.",
   "access.browser": "Bruke en nettleser",

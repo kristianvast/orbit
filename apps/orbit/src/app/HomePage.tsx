@@ -6,11 +6,11 @@ import {
   ChevronRight,
   Flame,
   HeartPulse,
-  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Badge, Button, EmptyState, OrbitRings, type OrbitSatellite, Skeleton } from "../design";
+import { Badge, Button, EmptyState, Skeleton } from "../design";
 import { PageCards, useCustomPages } from "../features/pages";
 import { HomeVoiceWidget } from "../features/voice";
 import { type MessageKey, type TranslateFn, useI18n } from "../i18n";
@@ -102,13 +102,6 @@ interface Instrument {
   testId?: string;
 }
 
-const GROUP_PALETTE = [
-  "var(--accent-secondary)",
-  "var(--accent-primary)",
-  "var(--border-control)",
-  "var(--status-info)",
-] as const;
-
 export function HomePage() {
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -132,7 +125,6 @@ export function HomePage() {
 
   const herdEnabled = isEnabled("herd");
   const devicesEnabled = isEnabled("devices");
-  const camerasEnabled = isEnabled("cameras");
 
   const { data: animalsData } = useOrionQuery(
     "animals.list",
@@ -142,24 +134,6 @@ export function HomePage() {
 
   const animalRows = animalsData?.rows ?? [];
   const animalById = useMemo(() => new Map(animalRows.map((a) => [a.id, a])), [animalRows]);
-
-  const groupSegments = useMemo(() => {
-    const active = animalRows.filter((a) => a.status === "active" && a.species === species);
-    if (active.length === 0) return [];
-    const counts = new Map<string, number>();
-    for (const a of active) {
-      const key = a.groupName?.trim() || t("herd.animal.ungrouped");
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([name, count], idx) => ({
-        name,
-        count,
-        color: GROUP_PALETTE[idx % GROUP_PALETTE.length],
-      }));
-  }, [animalRows, species, t]);
 
   const cattle = summary?.counts?.cattle ?? 0;
   const horses = summary?.counts?.horses ?? 0;
@@ -330,63 +304,9 @@ export function HomePage() {
         </header>
 
         <PageCards pages={customPages} theme={theme} />
-
-        <p className="orbit-home__note">
-          <ShieldCheck size={16} aria-hidden="true" />
-          <span>
-            {t("home.note.body")} <Link to="/settings#undo">{t("home.note.undo")}</Link>
-          </span>
-        </p>
       </div>
     );
   }
-
-  const satellites: OrbitSatellite[] = [
-    ...(herdEnabled || totalAnimals > 0
-      ? ([
-          {
-            id: isHorse ? "horses" : "cattle",
-            label: t(isHorse ? "home.orbit.horses" : "home.orbit.cattle"),
-            ring: 1 as const,
-            angleDeg: -35,
-            tone: "ok" as const,
-            count: primaryAnimals,
-          },
-        ] satisfies OrbitSatellite[])
-      : []),
-    ...(devicesEnabled && totalConnectors > 0
-      ? ([
-          {
-            id: "connectors",
-            label: t("home.orbit.connectors"),
-            ring: 2 as const,
-            angleDeg: 210,
-            tone: connectorsWithErrors > 0 ? ("danger" as const) : ("ok" as const),
-            count: totalConnectors,
-          },
-        ] satisfies OrbitSatellite[])
-      : []),
-    ...(camerasEnabled
-      ? ([
-          {
-            id: "cameras",
-            label: t("home.orbit.cameras"),
-            ring: 3 as const,
-            angleDeg: -115,
-            tone: camerasOnline < totalCameras ? ("warn" as const) : ("ok" as const),
-            count: camerasOnline,
-          },
-        ] satisfies OrbitSatellite[])
-      : []),
-    {
-      id: "alerts",
-      label: t("home.orbit.alerts"),
-      ring: 3,
-      angleDeg: 80,
-      tone: recentAlerts.length > 0 ? "danger" : "ok",
-      count: recentAlerts.length,
-    },
-  ];
 
   const allInstruments: Instrument[] = [
     {
@@ -441,7 +361,7 @@ export function HomePage() {
       : t("home.hero.quiet");
 
   return (
-    <div className="orbit-container orbit-home">
+    <div className="orbit-container orbit-home orbit-home--fit">
       <header className="orbit-home__head">
         <div className="orbit-home__masthead">
           <div className="orbit-home__masthead-main">
@@ -475,28 +395,35 @@ export function HomePage() {
             </h1>
           </div>
 
-          {summary && (herdEnabled || camerasEnabled || totalAnimals > 0) && (
-            <dl className="orbit-telemetry">
-              {(herdEnabled || totalAnimals > 0) && (
-                <div className="orbit-telemetry__item">
-                  <dd className="orbit-telemetry__value tabular-nums">{primaryAnimals}</dd>
-                  <dt className="orbit-telemetry__label">
-                    {t(isHorse ? "home.telemetry.horses" : "home.telemetry.cattle")}
-                  </dt>
-                </div>
-              )}
-              {camerasEnabled && (
-                <div className="orbit-telemetry__item">
-                  <dd className="orbit-telemetry__value tabular-nums">
-                    {camerasOnline}/{totalCameras}
-                  </dd>
-                  <dt className="orbit-telemetry__label">{t("home.telemetry.cameras")}</dt>
-                </div>
-              )}
-            </dl>
+          {instruments.length > 0 && (
+            <ul className="orbit-gauges">
+              {instruments.map((ins) => (
+                <li key={ins.id}>
+                  <button
+                    type="button"
+                    className="orbit-gauge"
+                    data-testid={ins.testId}
+                    onClick={() => navigate(ins.to)}
+                  >
+                    <span className="orbit-gauge__label">{ins.label}</span>
+                    {isLoading ? (
+                      <Skeleton width="3rem" height="1.5rem" />
+                    ) : (
+                      <span className="orbit-gauge__value">{ins.value}</span>
+                    )}
+                    <span className="orbit-gauge__detail" data-tone={ins.tone}>
+                      {ins.detail}
+                    </span>
+                    <ChevronRight size={16} className="orbit-gauge__chevron" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
+      </header>
 
+      <div className="orbit-home__grid">
         <HomeVoiceWidget
           ask={{
             value: question,
@@ -519,9 +446,6 @@ export function HomePage() {
             ))}
           </ul>
         </HomeVoiceWidget>
-      </header>
-
-      <div className="orbit-home__grid">
         <section className="orbit-card orbit-home__panel" aria-labelledby="home-alerts-title">
           <div className="orbit-home__panel-head">
             <h2 id="home-alerts-title" className="orbit-home__panel-title">
@@ -580,6 +504,8 @@ export function HomePage() {
                     <Button
                       variant="secondary"
                       size="sm"
+                      icon={<Sparkles size={15} />}
+                      title={t("home.alerts.ask")}
                       aria-label={t("home.alerts.askAria", {
                         animal: animalLabel,
                         kind: meta.label.toLowerCase(),
@@ -592,92 +518,16 @@ export function HomePage() {
                           }),
                         )
                       }
-                    >
-                      {t("home.alerts.ask")}
-                    </Button>
+                    />
                   </li>
                 );
               })}
             </ul>
           )}
         </section>
-
-        {instruments.length > 0 && (
-          <section className="orbit-card orbit-home__panel" aria-labelledby="home-status-title">
-            <div className="orbit-home__panel-head">
-              <h2 id="home-status-title" className="orbit-home__panel-title">
-                {t("home.status.title")}
-              </h2>
-            </div>
-
-            <div className="orbit-home__rings">
-              <OrbitRings
-                size={188}
-                centerLabel={t(isHorse ? "home.status.center.horse" : "home.status.center")}
-                centerSublabel={t("home.status.head", { count: primaryAnimals })}
-                satellites={satellites}
-              />
-            </div>
-
-            {groupSegments.length > 0 && (
-              <div className="orbit-herd-composition">
-                <div className="orbit-herd-composition__legend">
-                  {groupSegments.map((seg) => (
-                    <span key={seg.name} className="orbit-herd-composition__item tabular-nums">
-                      <span
-                        className="orbit-herd-composition__swatch"
-                        style={{ backgroundColor: seg.color }}
-                        aria-hidden="true"
-                      />
-                      <span>
-                        {seg.name} {seg.count}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-                <div className="orbit-herd-composition__bar" aria-hidden="true">
-                  {groupSegments.map((seg) => (
-                    <span key={seg.name} style={{ flex: seg.count, backgroundColor: seg.color }} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <ul className="orbit-gauges">
-              {instruments.map((ins) => (
-                <li key={ins.id}>
-                  <button
-                    type="button"
-                    className="orbit-gauge"
-                    data-testid={ins.testId}
-                    onClick={() => navigate(ins.to)}
-                  >
-                    <span className="orbit-gauge__label">{ins.label}</span>
-                    {isLoading ? (
-                      <Skeleton width="3rem" height="1.5rem" />
-                    ) : (
-                      <span className="orbit-gauge__value">{ins.value}</span>
-                    )}
-                    <span className="orbit-gauge__detail" data-tone={ins.tone}>
-                      {ins.detail}
-                    </span>
-                    <ChevronRight size={16} className="orbit-gauge__chevron" aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
       </div>
 
       <PageCards pages={customPages} theme={theme} />
-
-      <p className="orbit-home__note">
-        <ShieldCheck size={16} aria-hidden="true" />
-        <span>
-          {t("home.note.body")} <Link to="/settings#undo">{t("home.note.undo")}</Link>
-        </span>
-      </p>
     </div>
   );
 }

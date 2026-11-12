@@ -75,10 +75,7 @@ export function AccessCard({ settings, onSettings }: SettingsCardProps) {
     setAsking(null);
   };
   return (
-    <Card
-      title={<SettingsTitle icon={ShieldCheck}>{t("settings.access.title")}</SettingsTitle>}
-      subtitle={t("settings.access.hint")}
-    >
+    <Card title={<SettingsTitle icon={ShieldCheck}>{t("settings.access.title")}</SettingsTitle>}>
       <div className="settings-rows">
         {ACCESS_SWITCHES.map(({ tool, icon, labelKey, hintKey }) => (
           <SwitchRow

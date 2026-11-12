@@ -65,8 +65,6 @@ export const settings = {
   "undo.alreadyUndone": "Already undone",
   "undo.undo": "Undo",
   "access.title": "Orion's access",
-  "access.hint":
-    "Orion asks the first time it needs each of these. Turn one off any time and Orion asks again before it next uses it.",
   "access.shell": "Run commands",
   "access.shellHint": "Commands and small programs that build and fix things for your farm.",
   "access.browser": "Use a web browser",

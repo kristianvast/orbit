@@ -16,7 +16,15 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useLocation } from "react-router";
 import { Badge, Button, Dialog, Input, useToast } from "../../design";
 import { useT } from "../../i18n";
@@ -364,6 +372,36 @@ export function ProvidersCard({
   useEffect(() => {
     if (hash === "#providers") setOpen(true);
   }, [hash]);
+  const popRef = useRef<HTMLDetailsElement>(null);
+  const [placement, setPlacement] = useState<{ up: boolean; max: number } | null>(null);
+
+  // The list floats over the page, so it takes only the room left in the window and opens upward
+  // when there is more room above; the page itself never grows a scrollbar.
+  useLayoutEffect(() => {
+    const el = popRef.current;
+    if (!open || !el) return;
+    const rect = el.getBoundingClientRect();
+    const below = window.innerHeight - rect.bottom - 24;
+    const above = rect.top - 72;
+    const up = below < 320 && above > below;
+    setPlacement({ up, max: Math.max(160, Math.min(512, up ? above : below)) });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !popRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   const refresh = useCallback(async () => {
     if (!client) return;
@@ -443,7 +481,9 @@ export function ProvidersCard({
     <>
       <details
         id="providers"
+        ref={popRef}
         className="orbit-card settings-pop"
+        data-up={placement?.up ? "true" : undefined}
         open={open}
         onToggle={(e) => setOpen(e.currentTarget.open)}
         data-testid="providers-card"
@@ -452,25 +492,28 @@ export function ProvidersCard({
           className="orbit-card__header settings-pop__summary"
           data-testid="providers-toggle"
         >
-          <div>
+          <span className="settings-pop__row">
             <h2 className="orbit-card__title">
               <SettingsTitle icon={KeyRound}>{t("providers.card.title")}</SettingsTitle>
             </h2>
-            <p className="orbit-card__subtitle" data-testid="providers-hint">
-              {t("providers.card.hint")}
-            </p>
-          </div>
-          <span className="settings-pop__end">
-            <Badge
-              variant={connectedCount > 0 ? "ok" : "neutral"}
-              data-testid="providers-connected-count"
-            >
-              {t("providers.card.connectedCount", { count: connectedCount })}
-            </Badge>
-            <ChevronDown size={18} className="settings-pop__chevron" aria-hidden="true" />
+            <span className="settings-pop__end">
+              <Badge
+                variant={connectedCount > 0 ? "ok" : "neutral"}
+                data-testid="providers-connected-count"
+              >
+                {t("providers.card.connectedCount", { count: connectedCount })}
+              </Badge>
+              <ChevronDown size={18} className="settings-pop__chevron" aria-hidden="true" />
+            </span>
           </span>
+          <p className="orbit-card__subtitle" data-testid="providers-hint">
+            {t("providers.card.hint")}
+          </p>
         </summary>
-        <div className="orbit-card__body">
+        <div
+          className="orbit-card__body"
+          style={placement ? { maxBlockSize: placement.max } : undefined}
+        >
           <div className="orbit-providers">
             <div className="orbit-providers__toolbar">
               <div className="orbit-providers__tabs" role="tablist">
