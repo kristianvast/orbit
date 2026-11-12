@@ -177,9 +177,9 @@ export default function SettingsPage() {
               </div>
               <div className="settings-stack">
                 <FarmTeamSection />
+                <PrivacyCard settings={settings} onSettings={setSettings} />
               </div>
             </div>
-            <PrivacyCard settings={settings} onSettings={setSettings} />
           </>
         )}
 
