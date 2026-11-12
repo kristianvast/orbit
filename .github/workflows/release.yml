@@ -129,16 +129,20 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Notarization uses an App Store Connect API key (Developer role): key ID, issuer ID and the .p8 contents.
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           ORBIT_DEFAULT_CORE_URL: ${{ vars.ORBIT_CORE_URL }}
         run: |
           if [[ "$RUNNER_OS" == "macOS" && -n "$APPLE_CERTIFICATE" ]]; then
             for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
-              APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+              APPLE_API_KEY APPLE_API_ISSUER; do
               echo "$name=${!name}" >> "$GITHUB_ENV"
             done
+            KEY_PATH="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY.p8"
+            printf '%s\n' "$APPLE_API_KEY_P8" > "$KEY_PATH"
+            echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             echo "::warning::No Apple signing secrets: this macOS build is unsigned and Gatekeeper will block it after download."
           fi
