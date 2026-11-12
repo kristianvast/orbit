@@ -372,6 +372,33 @@ describe("Minimal-first Orbit UI: navigation, routes, Home, and Settings modules
     });
   });
 
+  it("loads an open page again when its files change, and only then", async () => {
+    const { client, emit } = createMinimalTestClient({
+      pages: [{ id: "herd-count", title: "Herd count", path: "/pages/t/herd-count/index.html" }],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/pages/herd-count"]}>
+        <AppProviders initialClient={client}>
+          <AppRoutes />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+    const first = await screen.findByTestId("custom-page-frame");
+
+    act(() => {
+      emit({ type: "db.changed", table: "workspace", ids: ["pages/other/index.html"] });
+    });
+    expect(screen.getByTestId("custom-page-frame")).toBe(first);
+
+    act(() => {
+      emit({ type: "db.changed", table: "workspace", ids: ["pages/herd-count/index.html"] });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("custom-page-frame")).not.toBe(first);
+    });
+  });
+
   it("shows only enabled module instruments on Home when a module is enabled", async () => {
     const { client } = createMinimalTestClient({
       initialEnabled: ["herd"],

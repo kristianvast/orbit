@@ -45,6 +45,14 @@ export default function CustomPageView({ theme }: { theme: PageTheme }) {
   const { endpoint } = useOrion();
   const pages = useCustomPages();
   const page = pages.find((p) => p.id === id);
+  // A page that is open while its files change (another PC's edit arriving, an undo, Orion
+  // working) loads again; the frame otherwise keeps showing the version it opened with.
+  const [version, setVersion] = useState(0);
+  useOrionEvent("db.changed", (event) => {
+    if (event.table === "workspace" && event.ids.some((file) => file.startsWith(`pages/${id}/`)))
+      setVersion((v) => v + 1);
+  });
+  useOrionEvent("agent.settled", () => setVersion((v) => v + 1));
 
   if (!page) {
     return (
@@ -57,7 +65,7 @@ export default function CustomPageView({ theme }: { theme: PageTheme }) {
   return (
     <div className="orbit-custom-page" data-testid={`custom-page-${page.id}`}>
       <iframe
-        key={page.id}
+        key={`${page.id}:${version}`}
         title={page.title}
         src={customPageUrl(endpoint, page.path, { theme, lang: intlLocale })}
         sandbox="allow-scripts allow-forms"
