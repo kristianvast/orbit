@@ -19,6 +19,7 @@ export const settings: Catalog<typeof en> = {
   "about.license":
     "Åpen kildekode under AGPL-3.0-only, med en kommersiell lisens for bedrifter og OEM-partnere.",
   "about.details": "Tekniske detaljer",
+  "about.source": "Kildekode på GitHub",
   "farm.title": "Gårdsprofil",
   "farm.name": "Gårdsnavn",
   "farm.namePlaceholder": "f.eks. Nordli gård",

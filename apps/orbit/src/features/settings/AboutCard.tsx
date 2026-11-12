@@ -1,8 +1,11 @@
-import { FolderOpen, Info } from "lucide-react";
+import { FolderOpen, Github, Info } from "lucide-react";
 import { BrandMark, Card } from "../../design";
 import { useT } from "../../i18n";
 import { useOrion } from "../../lib/orion";
+import { openExternalUrl } from "./BillingSection";
 import { More, SettingsTitle } from "./parts";
+
+const REPO_URL = "https://github.com/kristianvast/orbit";
 
 function defaultPlatformDataPath(): string {
   if (typeof navigator === "undefined") {
@@ -28,6 +31,20 @@ export function AboutCard() {
           <span className="settings-mono">{version}</span>
         </p>
         <p className="settings-muted">{t("settings.about.license")}</p>
+        <a
+          className="settings-link"
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => {
+            e.preventDefault();
+            void openExternalUrl(REPO_URL);
+          }}
+          data-testid="settings-source-link"
+        >
+          <Github size={16} aria-hidden="true" />
+          {t("settings.about.source")}
+        </a>
         <div className="settings-row">
           <FolderOpen size={18} className="settings-row__icon" aria-hidden="true" />
           <span className="settings-row__text">{t("settings.about.ownData")}</span>

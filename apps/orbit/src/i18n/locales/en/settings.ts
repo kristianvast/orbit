@@ -18,6 +18,7 @@ export const settings = {
   "about.license":
     "Open source under AGPL-3.0-only, with a commercial license for businesses and OEM partners.",
   "about.details": "Technical details",
+  "about.source": "Source code on GitHub",
   "farm.title": "Farm profile",
   "farm.name": "Farm name",
   "farm.namePlaceholder": "e.g. North Ridge Dairy",

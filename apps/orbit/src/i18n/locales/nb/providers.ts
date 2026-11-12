@@ -4,7 +4,7 @@ import type { providers as en } from "../en/providers";
 export const providers: Catalog<typeof en> = {
   "card.title": "Modellkontoer",
   "card.hint":
-    "Bruk ditt eget KI-abonnement eller din egen nøkkel i stedet for Orion-planen fra Barnstar.",
+    "Bruk ditt eget KI-abonnement eller din egen nøkkel i stedet for Orion-planen fra oss.",
   "card.connectedCount": {
     zero: "Ingen tilkoblet",
     one: "{count} tilkoblet",
