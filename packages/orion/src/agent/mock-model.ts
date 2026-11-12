@@ -31,6 +31,11 @@ export const MOCK_TRIGGERS: MockTrigger[] = [
     tool: "connector_scaffold",
     args: { name: "delpro", fromSkill: "delaval-delpro" },
   },
+  {
+    match: /check git/i,
+    tool: "bash",
+    args: { command: "git --version", description: "Checking that git is installed" },
+  },
   { match: /find a skill for my herd/i, tool: "skill_search", args: { query: "herd" } },
   { match: /install the farm views skill/i, tool: "skill_install", args: { name: "farm-views" } },
   {

@@ -28,7 +28,7 @@ import { billingError } from "./billing-error";
 import { FileCredentialStore } from "./credentials";
 import { MEMORY_SCOPES, memoryFile } from "./memory";
 import { MOCK_MODEL, MOCK_PROVIDER, registerMockProvider } from "./mock-model";
-import { bundledShell, useBundledShell } from "./shell";
+import { bundledShell, shellTools, useBundledShell } from "./shell";
 import { cleanTitle, GATEWAY_TITLE_MODEL, pickTitleModel, titleRequest } from "./title";
 import { assistantItem, buildTranscript, contentText, toolStatus, userItem } from "./transcript";
 import { type TaskOutcome, voiceMessage } from "./voice-history";
@@ -600,7 +600,7 @@ export class SessionHub {
         retry: { provider: { maxRetries: 0 } },
         ...(shellPath ? { shellPath } : {}),
       }),
-      customTools: this.opts.tools,
+      customTools: [...shellTools(this.opts.workspace.dir, shellPath), ...this.opts.tools],
     });
     live.agent = session;
     live.unsubscribe = session.subscribe((event) => this.onEvent(live, event));

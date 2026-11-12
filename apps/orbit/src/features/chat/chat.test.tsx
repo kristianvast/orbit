@@ -563,7 +563,12 @@ describe("turn grouping", () => {
           items={[
             { kind: "user", id: "u1", ts: "2026-11-03T07:00:00.000Z", text: "Check" },
             mk("t1", "read", { path: "apps/orbit/src/app/shell.tsx" }, "done"),
-            mk("t2", "bash", { command: "git status" }, "running"),
+            mk(
+              "t2",
+              "bash",
+              { command: "git status", description: "Checking for unsaved changes" },
+              "running",
+            ),
           ]}
           streaming={true}
           runStartedAt="2026-11-03T07:00:00.000Z"
@@ -572,7 +577,8 @@ describe("turn grouping", () => {
     );
 
     expect(screen.getByTestId("tool-group-toggle")).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByTestId("tool-group-live")).toHaveTextContent("git status");
+    expect(screen.getByTestId("tool-group-live")).toHaveTextContent("Checking for unsaved changes");
+    expect(screen.getByTestId("tool-group-live")).not.toHaveTextContent("git status");
     expect(screen.queryByTestId("tool-group-list")).not.toBeInTheDocument();
 
     rerender(

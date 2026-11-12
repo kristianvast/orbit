@@ -436,7 +436,8 @@ export function summarizeToolArgs(name: string, args: unknown, t: TranslateFn): 
     return String(rec.path ?? rec.file_path ?? "");
   }
   if (name === "bash" || name === "powershell") {
-    return String(rec.command ?? "");
+    // Orion's plain-words description; the command itself stays inside the expanded details.
+    return typeof rec.description === "string" ? rec.description.trim() : "";
   }
   if (name === "computer") {
     const action = typeof rec.action === "string" ? rec.action : "";
@@ -656,7 +657,10 @@ export function ToolCard({ item, repeatCount = 1, defaultExpanded = false }: Too
                     fontSize: "var(--text-xs)",
                     color: "var(--text-secondary)",
                     fontFamily:
-                      item.name === "db_query" || item.name === "db_mutate"
+                      item.name === "db_query" ||
+                      item.name === "db_mutate" ||
+                      item.name === "bash" ||
+                      item.name === "powershell"
                         ? "var(--font-sans)"
                         : "var(--font-mono)",
                     overflow: "hidden",
