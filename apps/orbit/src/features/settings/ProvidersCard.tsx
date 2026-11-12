@@ -6,9 +6,19 @@ import type {
   AuthProviderInfo,
   EventBody,
 } from "@orbit/protocol";
-import { Check, Copy, ExternalLink, KeyRound, Loader2, Search, Sparkles } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  KeyRound,
+  Loader2,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Button, Card, Dialog, Input, useToast } from "../../design";
+import { useLocation } from "react-router";
+import { Badge, Button, Dialog, Input, useToast } from "../../design";
 import { useT } from "../../i18n";
 import { useOrion } from "../../lib/orion";
 import { SettingsTitle } from "./parts";
@@ -348,6 +358,12 @@ export function ProvidersCard({
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState<Target | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { hash } = useLocation();
+  const [open, setOpen] = useState(hash === "#providers");
+
+  useEffect(() => {
+    if (hash === "#providers") setOpen(true);
+  }, [hash]);
 
   const refresh = useCallback(async () => {
     if (!client) return;
@@ -424,128 +440,148 @@ export function ProvidersCard({
   };
 
   return (
-    <Card
-      id="providers"
-      title={<SettingsTitle icon={KeyRound}>{t("providers.card.title")}</SettingsTitle>}
-      actions={
-        <Badge
-          variant={connectedCount > 0 ? "ok" : "neutral"}
-          data-testid="providers-connected-count"
+    <>
+      <details
+        id="providers"
+        className="orbit-card settings-pop"
+        open={open}
+        onToggle={(e) => setOpen(e.currentTarget.open)}
+        data-testid="providers-card"
+      >
+        <summary
+          className="orbit-card__header settings-pop__summary"
+          data-testid="providers-toggle"
         >
-          {t("providers.card.connectedCount", { count: connectedCount })}
-        </Badge>
-      }
-      data-testid="providers-card"
-    >
-      <div className="orbit-providers">
-        <div className="orbit-providers__toolbar">
-          <div className="orbit-providers__tabs" role="tablist">
-            {(["subscriptions", "apiKeys"] as const).map((id) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={tab === id}
-                className="orbit-providers__tab"
-                onClick={() => setTab(id)}
-                data-testid={`providers-tab-${id}`}
-              >
-                {id === "subscriptions" ? <Sparkles size={14} /> : <KeyRound size={14} />}
-                {t(
-                  id === "subscriptions" ? "providers.tab.subscriptions" : "providers.tab.apiKeys",
-                )}
-              </button>
-            ))}
-          </div>
-          <label className="orbit-providers__search">
-            <Search size={14} aria-hidden="true" />
-            <input
-              type="search"
-              aria-label={t("providers.search.label")}
-              placeholder={t("providers.search.placeholder")}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              data-testid="providers-search"
-            />
-          </label>
-        </div>
-
-        <ul className="orbit-providers__list" data-testid="providers-list">
-          {providers === null ? (
-            <li className="orbit-providers__empty">{t("providers.list.loading")}</li>
-          ) : visible.length === 0 ? (
-            <li className="orbit-providers__empty">{t("providers.list.empty")}</li>
-          ) : (
-            visible.map((provider) => {
-              const method: AuthMethod = tab === "subscriptions" ? "oauth" : "api_key";
-              const label = statusLabel(provider, t);
-              const stored = provider.status.configured && provider.status.source !== "environment";
-              return (
-                <li
-                  key={provider.id}
-                  className="orbit-provider"
-                  data-configured={provider.status.configured ? "true" : "false"}
-                  data-testid={`provider-row-${provider.id}`}
-                >
-                  <div className="orbit-provider__text">
-                    <span className="orbit-provider__name">
-                      {tab === "subscriptions" && provider.oauth
-                        ? provider.oauth.name
-                        : provider.name}
-                    </span>
-                    <span className="orbit-provider__meta">
-                      {tab === "subscriptions" && provider.oauth?.subscription && (
-                        <span className="orbit-provider__tag">
-                          {t("providers.row.subscription")}
-                        </span>
-                      )}
-                      {tab === "subscriptions" &&
-                        provider.oauth &&
-                        !provider.oauth.name
-                          .toLowerCase()
-                          .includes(provider.name.toLowerCase()) && <span>{provider.name}</span>}
-                      {t("providers.row.models", { count: provider.modelCount })}
-                    </span>
-                  </div>
-                  {label && (
-                    <Badge
-                      variant="ok"
-                      icon={<Check size={11} />}
-                      data-testid={`provider-status-${provider.id}`}
-                    >
-                      {label}
-                    </Badge>
-                  )}
-                  <div className="orbit-provider__actions">
-                    {stored ? (
-                      <Button
-                        variant="subtle"
-                        size="sm"
-                        loading={busyId === provider.id}
-                        onClick={() => void disconnect(provider)}
-                        data-testid={`provider-disconnect-${provider.id}`}
-                      >
-                        {t("providers.action.disconnect")}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant={provider.status.configured ? "secondary" : "primary"}
-                        size="sm"
-                        onClick={() => setTarget({ provider, method })}
-                        data-testid={`provider-connect-${provider.id}`}
-                      >
-                        {method === "oauth"
-                          ? t("providers.action.signIn")
-                          : t("providers.action.addKey")}
-                      </Button>
+          <h2 className="orbit-card__title">
+            <SettingsTitle icon={KeyRound}>{t("providers.card.title")}</SettingsTitle>
+          </h2>
+          <span className="settings-pop__end">
+            <Badge
+              variant={connectedCount > 0 ? "ok" : "neutral"}
+              data-testid="providers-connected-count"
+            >
+              {t("providers.card.connectedCount", { count: connectedCount })}
+            </Badge>
+            <ChevronDown size={18} className="settings-pop__chevron" aria-hidden="true" />
+          </span>
+        </summary>
+        <div className="orbit-card__body">
+          <div className="orbit-providers">
+            <div className="orbit-providers__toolbar">
+              <div className="orbit-providers__tabs" role="tablist">
+                {(["subscriptions", "apiKeys"] as const).map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === id}
+                    className="orbit-providers__tab"
+                    onClick={() => setTab(id)}
+                    data-testid={`providers-tab-${id}`}
+                  >
+                    {id === "subscriptions" ? <Sparkles size={14} /> : <KeyRound size={14} />}
+                    {t(
+                      id === "subscriptions"
+                        ? "providers.tab.subscriptions"
+                        : "providers.tab.apiKeys",
                     )}
-                  </div>
-                </li>
-              );
-            })
-          )}
-        </ul>
-      </div>
+                  </button>
+                ))}
+              </div>
+              <label className="orbit-providers__search">
+                <Search size={14} aria-hidden="true" />
+                <input
+                  type="search"
+                  aria-label={t("providers.search.label")}
+                  placeholder={t("providers.search.placeholder")}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  data-testid="providers-search"
+                />
+              </label>
+            </div>
+
+            <ul className="orbit-providers__list" data-testid="providers-list">
+              {providers === null ? (
+                <li className="orbit-providers__empty">{t("providers.list.loading")}</li>
+              ) : visible.length === 0 ? (
+                <li className="orbit-providers__empty">{t("providers.list.empty")}</li>
+              ) : (
+                visible.map((provider) => {
+                  const method: AuthMethod = tab === "subscriptions" ? "oauth" : "api_key";
+                  const label = statusLabel(provider, t);
+                  const stored =
+                    provider.status.configured && provider.status.source !== "environment";
+                  return (
+                    <li
+                      key={provider.id}
+                      className="orbit-provider"
+                      data-configured={provider.status.configured ? "true" : "false"}
+                      data-testid={`provider-row-${provider.id}`}
+                    >
+                      <div className="orbit-provider__text">
+                        <span className="orbit-provider__name">
+                          {tab === "subscriptions" && provider.oauth
+                            ? provider.oauth.name
+                            : provider.name}
+                        </span>
+                        <span className="orbit-provider__meta">
+                          {tab === "subscriptions" && provider.oauth?.subscription && (
+                            <span className="orbit-provider__tag">
+                              {t("providers.row.subscription")}
+                            </span>
+                          )}
+                          {tab === "subscriptions" &&
+                            provider.oauth &&
+                            !provider.oauth.name
+                              .toLowerCase()
+                              .includes(provider.name.toLowerCase()) && (
+                              <span>{provider.name}</span>
+                            )}
+                          {t("providers.row.models", { count: provider.modelCount })}
+                        </span>
+                      </div>
+                      {label && (
+                        <Badge
+                          variant="ok"
+                          icon={<Check size={11} />}
+                          data-testid={`provider-status-${provider.id}`}
+                        >
+                          {label}
+                        </Badge>
+                      )}
+                      <div className="orbit-provider__actions">
+                        {stored ? (
+                          <Button
+                            variant="subtle"
+                            size="sm"
+                            loading={busyId === provider.id}
+                            onClick={() => void disconnect(provider)}
+                            data-testid={`provider-disconnect-${provider.id}`}
+                          >
+                            {t("providers.action.disconnect")}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant={provider.status.configured ? "secondary" : "primary"}
+                            size="sm"
+                            onClick={() => setTarget({ provider, method })}
+                            data-testid={`provider-connect-${provider.id}`}
+                          >
+                            {method === "oauth"
+                              ? t("providers.action.signIn")
+                              : t("providers.action.addKey")}
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </div>
+        </div>
+      </details>
 
       {target && (
         <LoginDialog
@@ -555,6 +591,6 @@ export function ProvidersCard({
           onRetry={() => setTarget({ ...target })}
         />
       )}
-    </Card>
+    </>
   );
 }

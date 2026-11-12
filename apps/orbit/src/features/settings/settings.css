@@ -286,3 +286,32 @@
   margin: 0;
   color: var(--text-primary);
 }
+
+.settings-pop > .settings-pop__summary {
+  list-style: none;
+  align-items: center;
+  cursor: pointer;
+}
+
+.settings-pop:not([open]) > .settings-pop__summary {
+  padding-block-end: var(--space-5);
+}
+
+.settings-pop > .settings-pop__summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-pop__end {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.settings-pop__chevron {
+  color: var(--text-secondary);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.settings-pop[open] .settings-pop__chevron {
+  transform: rotate(180deg);
+}
