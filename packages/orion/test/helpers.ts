@@ -18,6 +18,24 @@ export function removeDir(dir: string) {
   rmSync(dir, { recursive: true, force: true });
 }
 
+/**
+ * For folders a browser used. Edge and Chrome keep their profile folder locked until their process
+ * is gone, which on Windows is a moment after it is closed. Nothing announces that, so the delete
+ * is retried while the folder is still locked, for at most ten seconds.
+ */
+export async function removeLockedDir(dir: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as { code?: string }).code ?? "";
+      if (!["EBUSY", "EPERM", "ENOTEMPTY"].includes(code) || attempt >= 100) throw error;
+      await Bun.sleep(100);
+    }
+  }
+}
+
 export async function startApp(dataDir: string, seed = true): Promise<OrionApp> {
   return startOrion({
     port: 0,

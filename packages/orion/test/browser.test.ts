@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { BrowserSession } from "../src/agent/browser";
-import { tempDir } from "./helpers";
+import { removeLockedDir, tempDir } from "./helpers";
 
 const FORM_PAGE = `<!doctype html><title>Order feed</title>
 <h1>Order feed</h1>
@@ -41,19 +40,7 @@ afterAll(async () => {
   session.close();
   server.stop(true);
   Bun.WebView.closeAll();
-  // Edge and Chrome keep the profile folder locked until their process is gone, which on Windows
-  // is a moment after it is killed. Nothing announces that, so the delete is retried while the
-  // folder is still locked, for at most ten seconds.
-  for (let attempt = 0; ; attempt++) {
-    try {
-      rmSync(profile, { recursive: true, force: true });
-      return;
-    } catch (error) {
-      const code = (error as { code?: string }).code ?? "";
-      if (!["EBUSY", "EPERM", "ENOTEMPTY"].includes(code) || attempt >= 100) throw error;
-      await Bun.sleep(100);
-    }
-  }
+  await removeLockedDir(profile);
 });
 
 function shown(result: AgentToolResult<unknown>): string {

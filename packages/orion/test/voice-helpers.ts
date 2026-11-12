@@ -5,7 +5,7 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { startOrion } from "../src/app";
 import type { VoiceOptions } from "../src/voice/session";
-import { connect, removeDir, TOKEN, tempDir } from "./helpers";
+import { connect, removeLockedDir, TOKEN, tempDir } from "./helpers";
 
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => {
@@ -14,7 +14,7 @@ afterEach(async () => {
 
 export async function voiceFixture(options: Pick<VoiceOptions, "transport" | "toolBudgetMs"> = {}) {
   const dir = tempDir();
-  cleanup.push(() => removeDir(dir));
+  cleanup.push(() => removeLockedDir(dir));
   const app = await startOrion(
     {
       port: 0,
