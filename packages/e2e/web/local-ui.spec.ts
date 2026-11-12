@@ -30,13 +30,13 @@ test("Orion builds your own Orbit, the app opens it, safe mode skips it, and you
 
   await page.goto("/");
   await expect(page).toHaveURL(new RegExp(`^${LOCAL_BASE}`));
-  await page.goto(`${LOCAL_BASE}settings`);
+  await page.goto(`${LOCAL_BASE}settings/about`);
   await expect(page.getByTestId("local-ui-badge")).toBeVisible();
   await page.getByTestId("local-ui-use-original").click();
   await expect(page).toHaveURL(`${SHIPPED_ORIGIN}/`);
   await expect(page.getByTestId("home-herd-counts")).toHaveText(herdCounts);
 
-  await page.goto("/settings");
+  await page.goto("/settings/about");
   await expect(page.getByTestId("local-ui-badge")).toHaveText("Original");
-  await expect(page).toHaveURL(`${SHIPPED_ORIGIN}/settings`);
+  await expect(page).toHaveURL(`${SHIPPED_ORIGIN}/settings/about`);
 });

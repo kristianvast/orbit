@@ -896,7 +896,7 @@ describe("ChatPage and SettingsPage integration", () => {
     const { client, requestMock, providers, emit } = createMockClient();
 
     render(
-      <MemoryRouter initialEntries={["/settings"]}>
+      <MemoryRouter initialEntries={["/settings/orion"]}>
         <AppProviders initialClient={client}>
           <SettingsPage />
         </AppProviders>
@@ -960,7 +960,7 @@ describe("ChatPage and SettingsPage integration", () => {
     const { client, requestMock, emit } = createMockClient();
 
     render(
-      <MemoryRouter initialEntries={["/settings"]}>
+      <MemoryRouter initialEntries={["/settings/orion"]}>
         <AppProviders initialClient={client}>
           <SettingsPage />
         </AppProviders>

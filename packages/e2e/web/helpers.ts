@@ -17,7 +17,7 @@ export async function setToolAccess(
   tool: "shell" | "browser" | "computer",
   allowed: boolean,
 ): Promise<void> {
-  await page.goto("/settings");
+  await page.goto("/settings/orion");
   const toggle = page.getByTestId(`settings-access-${tool}`);
   await expect(toggle).toBeEnabled();
   // The box is controlled by Orion's answer, so it flips only after the update comes back.

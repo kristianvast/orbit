@@ -29,7 +29,7 @@ test("the first command asks about commands only, and Allow lets them run from t
   await startChat(page, "check git again");
   await expect(toolCard(page, "bash")).toHaveAttribute("data-tool-status", "done");
   await expect(dialog).toHaveCount(0);
-  await page.goto("/settings");
+  await page.goto("/settings/orion");
   await expect(page.getByTestId("settings-access-shell")).toBeChecked();
   await expect(page.getByTestId("settings-access-browser")).not.toBeChecked();
   await expect(page.getByTestId("settings-access-computer")).not.toBeChecked();
@@ -41,7 +41,7 @@ test("Not now keeps the shell closed for that request", async ({ page }) => {
   await page.getByTestId("access-decline").click();
   await expect(page.getByTestId("access-dialog")).toHaveCount(0);
   await expect(toolCard(page, "bash")).toHaveAttribute("data-tool-status", "error");
-  await page.goto("/settings");
+  await page.goto("/settings/orion");
   await expect(page.getByTestId("settings-access-shell")).not.toBeChecked();
 });
 
@@ -57,7 +57,7 @@ test("a new session appears in the sidebar and survives a reload", async ({ page
 });
 
 test("turning a switch on in Settings asks the first time only", async ({ page }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/orion");
   const computer = page.getByTestId("settings-access-computer");
   const dialog = page.getByTestId("access-dialog");
   await expect(computer).toBeEnabled();

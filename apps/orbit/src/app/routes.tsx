@@ -170,7 +170,7 @@ export function AppRoutes() {
             </ModuleRoute>
           }
         />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings/*" element={<SettingsPage />} />
         <Route path="pages/:id" element={<CustomPageView theme={theme} />} />
       </Route>
     </Routes>

@@ -1,7 +1,7 @@
 import type { Settings } from "@orbit/protocol";
 import { Info, Languages, type LucideIcon, Sparkles, Tractor, UserRound } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { useLocation } from "react-router";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useLocation } from "react-router";
 import { Card, Select, useToast } from "../../design";
 import { isLocale, LOCALE_NAMES, LOCALES, type MessageKey, useI18n } from "../../i18n";
 import { useOrion, useOrionEvent } from "../../lib/orion";
@@ -35,42 +35,33 @@ export {
   OrbitModulesCard,
 };
 
-interface SectionInfo {
-  readonly id: string;
-  readonly icon: LucideIcon;
-  readonly labelKey: MessageKey;
-}
+type PageId = "farm" | "account" | "orion" | "about";
 
-const FARM: SectionInfo = { id: "settings-farm", icon: Tractor, labelKey: "settings.section.farm" };
-const ACCOUNT: SectionInfo = {
-  id: "settings-account",
-  icon: UserRound,
-  labelKey: "settings.section.account",
+const PAGES: { id: PageId; icon: LucideIcon; labelKey: MessageKey }[] = [
+  { id: "farm", icon: Tractor, labelKey: "settings.section.farm" },
+  { id: "account", icon: UserRound, labelKey: "settings.section.account" },
+  { id: "orion", icon: Sparkles, labelKey: "settings.section.orion" },
+  { id: "about", icon: Info, labelKey: "settings.section.about" },
+];
+
+// Older links point at a card by its id, such as /settings#providers; they open that card's page.
+const PAGE_FOR_HASH: Record<string, PageId> = {
+  "farm-profile": "farm",
+  modules: "farm",
+  account: "account",
+  providers: "orion",
+  undo: "orion",
+  feedback: "about",
 };
-const ORION: SectionInfo = {
-  id: "settings-orion",
-  icon: Sparkles,
-  labelKey: "settings.section.orion",
-};
-const ABOUT: SectionInfo = { id: "settings-about", icon: Info, labelKey: "settings.section.about" };
-const SECTIONS = [FARM, ACCOUNT, ORION, ABOUT];
 
 function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
 }
 
-function Section({ info, children }: { info: SectionInfo; children: ReactNode }) {
-  const { t } = useI18n();
-  const { id, icon: Icon, labelKey } = info;
-  return (
-    <section id={id} className="settings-section" aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`} className="settings-section__title">
-        <Icon size={22} className="settings-accent" aria-hidden="true" />
-        {t(labelKey)}
-      </h2>
-      {children}
-    </section>
-  );
+function pageFromLocation(pathname: string, hash: string): PageId {
+  const sub = pathname.split("/settings/")[1]?.split("/")[0];
+  const fromPath = PAGES.find((page) => page.id === sub)?.id;
+  return fromPath ?? PAGE_FOR_HASH[hash.replace(/^#/, "")] ?? "farm";
 }
 
 function LanguageCard() {
@@ -144,52 +135,70 @@ export default function SettingsPage() {
     }
   };
 
+  const page = pageFromLocation(location.pathname, location.hash);
+
   return (
     <div className="orbit-container settings-page" data-testid="settings-page">
       <header className="settings-header">
         <h1>{t("settings.title")}</h1>
-        <nav className="settings-jump" aria-label={t("settings.section.nav")}>
-          {SECTIONS.map(({ id, icon: Icon, labelKey }) => (
-            <button key={id} type="button" onClick={() => scrollToId(id)}>
-              <Icon size={15} className="settings-accent" aria-hidden="true" />
+        <nav className="settings-tabs" aria-label={t("settings.section.nav")}>
+          {PAGES.map(({ id, icon: Icon, labelKey }) => (
+            <Link
+              key={id}
+              to={`/settings/${id}`}
+              className="settings-tab"
+              aria-current={page === id ? "page" : undefined}
+              data-testid={`settings-tab-${id}`}
+            >
+              <Icon size={16} aria-hidden="true" />
               {t(labelKey)}
-            </button>
+            </Link>
           ))}
         </nav>
       </header>
 
-      <Section info={FARM}>
-        <FarmProfileCard />
-        <div className="orbit-split-grid">
-          <OrbitModulesCard />
-          <LanguageCard />
-        </div>
-      </Section>
+      <div className="settings-stack" data-testid={`settings-page-${page}`}>
+        {page === "farm" && (
+          <>
+            <FarmProfileCard />
+            <div className="orbit-split-grid">
+              <OrbitModulesCard />
+              <LanguageCard />
+            </div>
+          </>
+        )}
 
-      <Section info={ACCOUNT}>
-        <AccountSection />
-        <PrivacyCard settings={settings} onSettings={setSettings} />
-      </Section>
+        {page === "account" && (
+          <>
+            <AccountSection />
+            <PrivacyCard settings={settings} onSettings={setSettings} />
+          </>
+        )}
 
-      <Section info={ORION}>
-        <div className="orbit-split-grid">
-          <ModelCard settings={settings} onSettings={setSettings} />
-          <OrionVoiceCard />
-        </div>
-        <ProvidersCard onChanged={(id) => void handleProvidersChanged(id)} />
-        <div className="orbit-split-grid">
-          <AccessCard settings={settings} onSettings={setSettings} />
-          <UndoCard />
-        </div>
-      </Section>
+        {page === "orion" && (
+          <>
+            <div className="orbit-split-grid">
+              <ModelCard settings={settings} onSettings={setSettings} />
+              <OrionVoiceCard />
+            </div>
+            <ProvidersCard onChanged={(id) => void handleProvidersChanged(id)} />
+            <div className="orbit-split-grid">
+              <AccessCard settings={settings} onSettings={setSettings} />
+              <UndoCard />
+            </div>
+          </>
+        )}
 
-      <Section info={ABOUT}>
-        <div className="orbit-split-grid">
-          <YourOrbitCard />
-          <AboutCard />
-        </div>
-        <FeedbackCard />
-      </Section>
+        {page === "about" && (
+          <>
+            <div className="orbit-split-grid">
+              <YourOrbitCard />
+              <AboutCard />
+            </div>
+            <FeedbackCard />
+          </>
+        )}
+      </div>
     </div>
   );
 }
