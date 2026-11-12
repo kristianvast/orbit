@@ -2,19 +2,17 @@ import type { Observation, WearableKind } from "@orbit/schema";
 import {
   Activity,
   AlertTriangle,
-  ArrowUp,
   CheckCircle2,
   ChevronRight,
   Flame,
   HeartPulse,
-  Mic,
   ShieldCheck,
 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Badge, Button, EmptyState, OrbitRings, type OrbitSatellite, Skeleton } from "../design";
 import { PageCards, useCustomPages } from "../features/pages";
-import { HomeVoiceWidget, useVoice } from "../features/voice";
+import { HomeVoiceWidget } from "../features/voice";
 import { type MessageKey, type TranslateFn, useI18n } from "../i18n";
 import { type ModuleId, useModules } from "../lib/modules";
 import { useOrion, useOrionQuery } from "../lib/orion";
@@ -114,7 +112,6 @@ const GROUP_PALETTE = [
 export function HomePage() {
   const navigate = useNavigate();
   const { t } = useI18n();
-  const voice = useVoice();
   const [question, setQuestion] = useState("");
   const { loading: modulesLoading, isEnabled, anyEnabled } = useModules();
   const { species } = useFarmSpecies();
@@ -264,7 +261,42 @@ export function HomePage() {
             {t(isHorse ? "home.minimal.lede.horse" : "home.minimal.lede.cattle")}
           </p>
 
-          {needsSetup ? (
+          <HomeVoiceWidget
+            ask={
+              needsSetup
+                ? undefined
+                : {
+                    value: question,
+                    onChange: setQuestion,
+                    onSubmit: submitQuestion,
+                    placeholder: t("home.minimal.placeholder"),
+                  }
+            }
+          >
+            {!needsSetup && (
+              <ul
+                className="orbit-starter-grid"
+                aria-label={t("home.minimal.startersLabel")}
+                data-testid="home-starter-chips"
+              >
+                {minimalStarters.map((starter) => (
+                  <li key={starter.id}>
+                    <button
+                      type="button"
+                      className="orbit-starter-tile"
+                      data-testid={`home-starter-${starter.id}`}
+                      onClick={() => openOrionWithQuestion(t(starter.promptKey))}
+                    >
+                      <span>{t(starter.labelKey)}</span>
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </HomeVoiceWidget>
+
+          {needsSetup && (
             <section className="orbit-setup" data-testid="home-setup">
               <h2 className="orbit-setup__title">{t("home.setup.title")}</h2>
               <p className="orbit-setup__body">{t("home.setup.body")}</p>
@@ -294,54 +326,7 @@ export function HomePage() {
                 {t("home.setup.ownKey")}
               </Link>
             </section>
-          ) : voice.isLive ? null : (
-            <>
-              <form className="orbit-ask orbit-ask--hero" onSubmit={submitQuestion}>
-                <label htmlFor="home-ask-orion" className="orbit-visually-hidden">
-                  {t("home.ask.label")}
-                </label>
-                <input
-                  id="home-ask-orion"
-                  data-testid="home-ask-input"
-                  className="orbit-ask__input"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder={t("home.minimal.placeholder")}
-                  autoComplete="off"
-                />
-                <Button
-                  type="submit"
-                  variant="primary"
-                  icon={<ArrowUp size={16} />}
-                  data-testid="home-ask-submit"
-                >
-                  {t("home.ask.submit")}
-                </Button>
-              </form>
-
-              <ul
-                className="orbit-starter-grid"
-                aria-label={t("home.minimal.startersLabel")}
-                data-testid="home-starter-chips"
-              >
-                {minimalStarters.map((starter) => (
-                  <li key={starter.id}>
-                    <button
-                      type="button"
-                      className="orbit-starter-tile"
-                      data-testid={`home-starter-${starter.id}`}
-                      onClick={() => openOrionWithQuestion(t(starter.promptKey))}
-                    >
-                      <span>{t(starter.labelKey)}</span>
-                      <ChevronRight size={15} aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
           )}
-
-          <HomeVoiceWidget />
         </header>
 
         <PageCards pages={customPages} theme={theme} />
@@ -512,59 +497,28 @@ export function HomePage() {
           )}
         </div>
 
-        {!voice.isLive && (
-          <>
-            <form className="orbit-ask" onSubmit={submitQuestion}>
-              <label htmlFor="home-ask-orion" className="orbit-visually-hidden">
-                {t("home.ask.label")}
-              </label>
-              <input
-                id="home-ask-orion"
-                data-testid="home-ask-input"
-                className="orbit-ask__input"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder={t("home.ask.placeholder")}
-                autoComplete="off"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                icon={<Mic size={15} />}
-                onClick={() => void voice.start({ resumeRecent: true })}
-                data-testid="home-voice-btn"
-              >
-                {t("home.ask.voice")}
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                icon={<ArrowUp size={16} />}
-                data-testid="home-ask-submit"
-              >
-                {t("home.ask.submit")}
-              </Button>
-            </form>
-
-            <ul className="orbit-ask__suggestions" aria-label={t("home.ask.suggestions")}>
-              {suggestedQuestions.map((key) => (
-                <li key={key}>
-                  <button
-                    type="button"
-                    className="orbit-ask__suggestion"
-                    onClick={() => openOrionWithQuestion(t(key))}
-                  >
-                    {t(key)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-
-        <HomeVoiceWidget />
+        <HomeVoiceWidget
+          ask={{
+            value: question,
+            onChange: setQuestion,
+            onSubmit: submitQuestion,
+            placeholder: t("home.ask.placeholder"),
+          }}
+        >
+          <ul className="orbit-ask__suggestions" aria-label={t("home.ask.suggestions")}>
+            {suggestedQuestions.map((key) => (
+              <li key={key}>
+                <button
+                  type="button"
+                  className="orbit-ask__suggestion"
+                  onClick={() => openOrionWithQuestion(t(key))}
+                >
+                  {t(key)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </HomeVoiceWidget>
       </header>
 
       <div className="orbit-home__grid">

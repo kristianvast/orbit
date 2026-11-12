@@ -38,8 +38,6 @@ export const voice = {
   "caption.you": "You",
   "caption.orion": "Orion",
   "caption.empty": "Listening on your microphone, or type a question below.",
-  "idle.hint.cattle": "Ask hands-free about your herd, barn cameras, or daily checks.",
-  "idle.hint.horse": "Ask hands-free about your horses, stable cameras, or daily checks.",
   spokenTurn: "Spoken in voice call",
   "micDenied.title": "Microphone access is turned off",
   "micDenied.body":

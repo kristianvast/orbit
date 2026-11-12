@@ -39,8 +39,6 @@ export const voice: Catalog<typeof en> = {
   "caption.you": "Du",
   "caption.orion": "Orion",
   "caption.empty": "Lytter på mikrofonen, eller skriv et spørsmål nedenfor.",
-  "idle.hint.cattle": "Spør håndfritt om besetningen, kameraene eller dagens tilsyn.",
-  "idle.hint.horse": "Spør håndfritt om hestene, kameraene eller dagens tilsyn.",
   spokenTurn: "Sagt i talesamtale",
   "micDenied.title": "Mikrofontilgang er slått av",
   "micDenied.body":
