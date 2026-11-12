@@ -42,6 +42,7 @@ import {
 } from "./services/camera-proxy";
 import { FarmService } from "./services/farm";
 import { FeedbackService } from "./services/feedback";
+import { serveGoogleCallback } from "./services/google-callback";
 import { LOCAL_UI_PREFIX, LocalUiService } from "./services/local-ui";
 import { liveRowsIn, ModulesStore } from "./services/modules";
 import { listPages, PAGE_SDK, PAGES_DIR, resolvePageFile } from "./services/pages";
@@ -191,6 +192,7 @@ export async function startOrion(
   const account = new AccountService({
     dataDir: config.dataDir,
     coreUrl: config.coreUrl ?? null,
+    siteUrl: config.siteUrl ?? null,
     repo,
     secrets,
     settings,
@@ -216,9 +218,10 @@ export async function startOrion(
     ...voiceOptions,
   });
 
+  const openUrl = systemBrowserOpener();
   const auth = new AuthFlows(hub.runtime, emit, {
     deviceIdFile: join(config.dataDir, "pi", "device-id"),
-    openUrl: systemBrowserOpener(),
+    openUrl,
     hidden: new Set([MOCK_PROVIDER, GATEWAY_PROVIDER]),
   });
 
@@ -436,6 +439,10 @@ export async function startOrion(
         return account.requestPasswordReset(msg.email);
       case "account.login":
         return account.login(msg.email, msg.password);
+      case "account.googleStart": {
+        const { url } = account.googleStart(`http://127.0.0.1:${server.port}`);
+        return { url, opened: openUrl?.(url) ?? false };
+      }
       case "account.logout":
         voice.dispose();
         return account.logout();
@@ -504,6 +511,9 @@ export async function startOrion(
       if (url.pathname.startsWith("/fonts/")) return serveFont(url.pathname);
       if (url.pathname.startsWith(`/${LOCAL_UI_PREFIX}/`)) return serveLocalUi(url.pathname);
       if (url.pathname.startsWith("/camera/")) return serveCamera(req, srv, { tokenPath, relay });
+      if (url.pathname.startsWith("/account/google/")) {
+        return serveGoogleCallback(req, url, srv.port as number, account);
+      }
       if (url.pathname.startsWith("/voice/")) {
         const parsed = tokenPath(url.pathname);
         if (parsed instanceof Response) return parsed;

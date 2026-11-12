@@ -5,6 +5,7 @@
 // exactly as long as the farm's data: an update keeps it, deleting the data signs out. It is not
 // in the OS keychain, which Windows empties when an admin resets the user's password.
 // account.json keeps only the non-secret view so the status survives restarts and offline starts.
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
@@ -28,6 +29,8 @@ import type { SettingsStore } from "../settings";
 export const GATEWAY_MODEL = "orbit-default";
 const SESSION_REF = "core-session";
 const SESSION_FILE = "account-session.enc.json";
+const DEFAULT_SITE_URL = "https://pecorva.com";
+const GOOGLE_LOGIN_TTL_MS = 10 * 60_000;
 const FARM_HEADER = "x-orbit-farm";
 
 export class AccountError extends Error {
@@ -55,6 +58,8 @@ interface SyncEvent {
 export interface AccountServiceOptions {
   dataDir: string;
   coreUrl: string | null;
+  /** Website that runs Google sign-in for the app; https://pecorva.com when null or unset. */
+  siteUrl?: string | null;
   repo: Repository;
   secrets: SecretStore;
   settings: SettingsStore;
@@ -98,12 +103,16 @@ export class AccountService {
   private readonly file: string;
   private readonly session: SecretStore;
   private readonly coreUrl: string | null;
+  private readonly siteUrl: string;
   private readonly doFetch: typeof fetch;
+  /** Google sign-ins started from this Orbit: state -> expiry (ms). Each state works once. */
+  private readonly googleLogins = new Map<string, number>();
 
   constructor(private readonly opts: AccountServiceOptions) {
     this.file = join(opts.dataDir, "account.json");
     this.session = new EncryptedFileStore(opts.dataDir, SESSION_FILE);
     this.coreUrl = opts.coreUrl?.replace(/\/+$/, "") ?? null;
+    this.siteUrl = (opts.siteUrl ?? DEFAULT_SITE_URL).replace(/\/+$/, "");
     this.doFetch = opts.fetch ?? fetch;
     if (existsSync(this.file)) {
       this.stored = { ...this.stored, ...(JSON.parse(readFileSync(this.file, "utf8")) as Stored) };
@@ -205,6 +214,36 @@ export class AccountService {
   async login(email: string, password: string): Promise<AccountStatus> {
     const body = { email, password, deviceName: this.opts.deviceName };
     return this.signIn(await this.call("POST", "/v1/auth/login", body, { anonymous: true }));
+  }
+
+  /**
+   * Google sign-in runs on the website (Google refuses embedded app windows): it sends the Google
+   * credential back to `callbackOrigin`/account/google/<state>, which calls googleFinish.
+   */
+  googleStart(callbackOrigin: string): { url: string; state: string } {
+    if (!this.coreUrl) throw new AccountError("not_ready", "this Orbit has no cloud address");
+    const now = Date.now();
+    for (const [state, expires] of this.googleLogins) {
+      if (expires <= now) this.googleLogins.delete(state);
+    }
+    const state = randomBytes(24).toString("base64url");
+    this.googleLogins.set(state, now + GOOGLE_LOGIN_TTL_MS);
+    const callback = `${callbackOrigin}/account/google/${state}`;
+    return { url: `${this.siteUrl}/account/app/?${new URLSearchParams({ callback })}`, state };
+  }
+
+  hasGoogleLogin(state: string): boolean {
+    return (this.googleLogins.get(state) ?? 0) > Date.now();
+  }
+
+  async googleFinish(state: string, credential: string): Promise<AccountStatus> {
+    const expires = this.googleLogins.get(state) ?? 0;
+    this.googleLogins.delete(state);
+    if (expires <= Date.now()) {
+      throw new AccountError("not_found", "This sign-in has expired. Start again from Orbit.");
+    }
+    const body = { credential, acceptTerms: true, deviceName: this.opts.deviceName };
+    return this.signIn(await this.call("POST", "/v1/auth/google", body, { anonymous: true }));
   }
 
   async logout(): Promise<AccountStatus> {

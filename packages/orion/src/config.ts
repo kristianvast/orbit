@@ -14,6 +14,8 @@ export interface OrionConfig {
   gatewayUrl: string | null;
   /** Orbit cloud (Core) base URL (--core-url or ORBIT_CORE_URL): accounts, sync, cloud model. */
   coreUrl?: string | null;
+  /** Website for Google sign-in (env ORBIT_SITE_URL); https://pecorva.com when unset. */
+  siteUrl?: string | null;
   /** Orbit source checkout Orion may edit (--app-source or ORBIT_APP_SOURCE); null in installed builds. */
   appSource: string | null;
   /** Skill catalog: http(s) base URL or local folder (--skills-url or ORION_SKILLS_URL). */
@@ -108,6 +110,7 @@ export function parseConfig(
     seed: values.get("seed") === true || truthy(env.ORION_SEED),
     gatewayUrl: env.ORBIT_GATEWAY_URL?.trim() || null,
     coreUrl: (str("core-url") ?? env.ORBIT_CORE_URL)?.trim().replace(/\/+$/, "") || null,
+    siteUrl: env.ORBIT_SITE_URL?.trim().replace(/\/+$/, "") || null,
     appSource,
     skillsUrl: (str("skills-url") ?? env.ORION_SKILLS_URL)?.trim() || null,
     parentWatch: values.get("parent-watch") === true,

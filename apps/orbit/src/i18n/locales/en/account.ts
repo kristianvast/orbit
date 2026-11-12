@@ -13,6 +13,13 @@ export const account = {
   "field.passwordHint": "At least 10 characters",
   "field.terms": "I accept the Pecorva terms of service and privacy policy",
   "forgot.link": "Forgot password?",
+  "google.continue": "Continue with Google",
+  "google.terms":
+    "By continuing with Google you accept the Pecorva terms of service and privacy policy.",
+  "google.waiting":
+    "Finish signing in with Google in your browser. Orbit updates by itself when you are done.",
+  "google.reopen": "Open the page again",
+  "google.or": "or with email",
   "forgot.needEmail": "Enter your email above first",
   "forgot.sent": "If an account exists for that address, we emailed a reset link",
   "verify.title": "Confirm your email address",
@@ -66,7 +73,6 @@ export const account = {
     one: "Free Orion month: {days} day left (ends {date})",
     other: "Free Orion month: {days} days left (ends {date})",
   },
-  "billing.websitePricing": "See plans on the website",
   "billing.status.active": "Active",
   "billing.status.trialing": "Trial",
   "billing.status.past_due": "Past due",
@@ -83,11 +89,6 @@ export const account = {
   "billing.freeCopy":
     "Orbit and Orion are open source and free; bring your own AI subscription or key in Providers, or choose a plan to use Orion on Pecorva's cloud.",
   "billing.signedOutPrompt": "Sign in above to choose a plan or check your farm's cloud usage.",
-  "billing.pickerPlanLabel": "Plan",
-  "billing.pickerIntervalLabel": "Billing interval",
-  "billing.option.month":
-    "{name} · {price} / month ({tokens} tokens, {minutes} voice min per month)",
-  "billing.option.year": "{name} · {price} / year ({tokens} tokens, {minutes} voice min per month)",
   "billing.choosePlan": "Choose a plan",
   "billing.manageBilling": "Manage billing",
   "billing.includedNote": "Orion cloud allowance is included in paid plans.",

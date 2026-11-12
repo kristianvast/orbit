@@ -202,6 +202,11 @@ mapped resource against them.
   role; unknown to the cloud: claim it as owner; someone else's: stay local with `linkError` until an
   invite is accepted), runs `@orbit/sync` with the session, and applies the same role matrix to
   `db.mutate` and the agent's farm tools (`forbidden`).
+- **Google sign-in in the app:** Google refuses its sign-in inside app windows, so
+  `account.googleStart` opens `<site>/account/app/?callback=http://127.0.0.1:<port>/account/google/<state>`
+  (site `https://pecorva.com`, `ORBIT_SITE_URL` overrides) in the system browser. The site's Google
+  button sends the credential back in the URL fragment; Orion's page posts it to itself (same-origin
+  only, state single-use, 10 minutes) and Orion signs in with it at `POST /v1/auth/google`.
 - **First-run setup (`useNeedsSetup`):** when `account.status` is `"signed_out"` and
   `settings.get` reports no `availableModels`, Home renders the first-run setup card (`home-setup`)
   offering to create a free Orbit account (30-day free trial of Orion, no card needed), sign in, or

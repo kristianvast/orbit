@@ -4,7 +4,7 @@ import { useLocation } from "react-router";
 import { Badge, Button, Card, Input, useToast } from "../../design";
 import { useT } from "../../i18n";
 import { calmAccountSyncState, useOrion, useOrionEvent } from "../../lib/orion";
-import { BillingSection } from "./BillingSection";
+import { BillingSection, openExternalUrl } from "./BillingSection";
 import { MembersCard } from "./MembersCard";
 
 export { BillingSection, openExternalUrl } from "./BillingSection";
@@ -101,7 +101,16 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [googleUrl, setGoogleUrl] = useState<string | null>(null);
   const { pushToast } = useToast();
+
+  const google = () =>
+    run(async () => {
+      if (!client) return;
+      const { url, opened } = await client.request("account.googleStart", {});
+      if (!opened) await openExternalUrl(url);
+      setGoogleUrl(url);
+    });
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -169,6 +178,38 @@ export function AccountCard({ status, onStatus }: AccountCardProps) {
 
       {status.state === "signed_out" && (
         <>
+          <div style={column} data-testid="account-google">
+            <Button
+              type="button"
+              variant="secondary"
+              loading={busy}
+              onClick={google}
+              data-testid="account-google-button"
+            >
+              {t("account.google.continue")}
+            </Button>
+            {googleUrl ? (
+              <div role="status" style={column} data-testid="account-google-waiting">
+                <p style={muted}>{t("account.google.waiting")}</p>
+                <div style={row}>
+                  <Button
+                    type="button"
+                    variant="subtle"
+                    size="sm"
+                    onClick={() => void run(() => openExternalUrl(googleUrl))}
+                    data-testid="account-google-reopen"
+                  >
+                    {t("account.google.reopen")}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p style={{ ...muted, fontSize: "var(--text-sm)" }}>{t("account.google.terms")}</p>
+            )}
+            <p style={{ ...muted, fontSize: "var(--text-sm)", textAlign: "center" }}>
+              {t("account.google.or")}
+            </p>
+          </div>
           <form style={column} onSubmit={submit} data-testid="account-form">
             <div style={row} role="tablist">
               {(["login", "register"] as const).map((m) => (

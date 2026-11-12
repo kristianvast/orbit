@@ -1,5 +1,5 @@
 // Orbit account (Core sign-in), farm members and invites. The UI never talks to Core directly:
-// Orion holds the session in the OS keychain and relays these requests.
+// Orion holds the session (encrypted in its data folder) and relays these requests.
 import { FARM_ROLES } from "@orbit/schema/roles";
 import { type Static, Type } from "typebox";
 
@@ -76,6 +76,14 @@ export const AccountRequests = {
     result: AccountStatus,
   },
   "account.login": { params: Type.Object(Credentials), result: AccountStatus },
+  /**
+   * Starts Google sign-in on the website in the system browser (`url`; `opened` false when Orion
+   * could not open it). The site hands the result back to Orion, which then emits account.updated.
+   */
+  "account.googleStart": {
+    params: Type.Object({}),
+    result: Type.Object({ url: Type.String(), opened: Type.Boolean() }),
+  },
   "account.logout": { params: Type.Object({}), result: AccountStatus },
   /** Re-reads the account from the cloud, e.g. after confirming the email or buying a plan. */
   "account.refresh": { params: Type.Object({}), result: AccountStatus },

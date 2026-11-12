@@ -2,6 +2,7 @@
 // sync, the cloud model and local role enforcement. Electric and the LLM provider are faked at
 // Core's upstream fetch.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import type { webcrypto } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -22,7 +23,10 @@ import { type OrionApp, startOrion } from "../src/app";
 import { EncryptedFileStore } from "../src/secrets";
 import { connect, removeDir, TOKEN, tempDir, waitFor } from "./helpers";
 
+process.env.ORION_NO_BROWSER = "1";
+
 const PASSWORD = "correct horse battery";
+const GOOGLE_CLIENT = "orbit-test.apps.googleusercontent.com";
 const SSE = [
   `data: ${JSON.stringify({ id: "c1", object: "chat.completion.chunk", choices: [{ index: 0, delta: { role: "assistant", content: "Hello from the cloud" }, finish_reason: null }] })}\n\n`,
   `data: ${JSON.stringify({ id: "c1", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 11, completion_tokens: 4 } })}\n\n`,
@@ -37,8 +41,44 @@ let upstream: { model: unknown; auth: string | null }[] = [];
 /** When set, answers model requests instead of the default SSE reply (one call per request). */
 let scriptedUpstream: ((body: { messages: Record<string, unknown>[] }) => Response) | null = null;
 const mail = createLogMailer(() => {});
+let googleKey: CryptoKey;
+let googleJwk: webcrypto.JsonWebKey;
+
+/** A Google ID token as the website's Google button hands it over, signed by the faked Google keys. */
+async function googleCredential(): Promise<string> {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const unsigned = `${encode({ alg: "RS256", kid: "test-key" })}.${encode({
+    iss: "https://accounts.google.com",
+    aud: GOOGLE_CLIENT,
+    sub: "google-person-1",
+    email: "Google@Farm.Test",
+    email_verified: true,
+    name: "Google Farmer",
+    iat: now,
+    exp: now + 3600,
+  })}`;
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    googleKey,
+    new TextEncoder().encode(unsigned),
+  );
+  return `${unsigned}.${Buffer.from(signature).toString("base64url")}`;
+}
 
 beforeAll(async () => {
+  const pair = await crypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  );
+  googleKey = pair.privateKey;
+  googleJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
   pglite = new PGlite();
   db = drizzle({ client: pglite, schema: coreSchema }) as unknown as CoreDb;
   await migrate(db);
@@ -48,8 +88,14 @@ beforeAll(async () => {
     electricUrl: "http://electric.test",
     mailer: mail,
     llm: { upstreamUrl: "http://llm.test", upstreamApiKey: "sk-core", defaultModel: "gpt-real" },
+    googleClientIds: [GOOGLE_CLIENT],
     fetch: async (input, init) => {
       const url = new URL(String(input));
+      if (url.host === "www.googleapis.com") {
+        return Response.json({
+          keys: [{ ...googleJwk, kid: "test-key", alg: "RS256", use: "sig" }],
+        });
+      }
       if (url.host === "electric.test") {
         return Response.json([{ headers: { control: "up-to-date" } }], {
           headers: { "electric-handle": "h1", "electric-offset": "0_0", "electric-up-to-date": "" },
@@ -316,6 +362,53 @@ describe("Orion account", () => {
     await c.request("account.logout", {});
     expect(await dataFolder().get("core-session")).toBeNull();
     expect(await restart()).toMatchObject({ state: "signed_out", user: null });
+  });
+
+  test("Google sign-in runs on the website and comes back through Orion's own page, once", async () => {
+    const c = await boot();
+    const start = async () => {
+      const { url, opened } = await c.request("account.googleStart", {});
+      expect(opened).toBe(false);
+      const site = new URL(url);
+      expect(`${site.origin}${site.pathname}`).toBe("https://pecorva.com/account/app/");
+      return new URL(site.searchParams.get("callback") as string);
+    };
+    const post = (callback: URL, body: unknown, origin = callback.origin) =>
+      fetch(callback, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    const rejected = await start();
+    expect(rejected.origin).toBe(`http://127.0.0.1:${orion?.port}`);
+    const refused = await post(rejected, { credential: "not.a.token" });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      ok: false,
+      message: "invalid Google sign-in token",
+    });
+
+    const callback = await start();
+    const pageRes = await fetch(callback);
+    expect(pageRes.status).toBe(200);
+    expect(pageRes.headers.get("content-security-policy")).toContain("script-src 'nonce-");
+    expect(
+      (await post(callback, { credential: await googleCredential() }, "https://evil.test")).status,
+    ).toBe(403);
+
+    const updated = waitFor(c, "account.updated", (s) => s.state === "signed_in");
+    const ok = await post(callback, { credential: await googleCredential() });
+    expect(await ok.json()).toEqual({ ok: true, email: "google@farm.test" });
+    expect((await updated).user?.email).toBe("google@farm.test");
+    expect(await c.request("account.status", {})).toMatchObject({
+      state: "signed_in",
+      farm: { role: "owner" },
+    });
+
+    expect((await post(callback, { credential: await googleCredential() })).status).toBe(410);
+    expect((await fetch(callback)).status).toBe(410);
+    expect((await fetch(new URL(`/account/google/${"x".repeat(32)}`, callback))).status).toBe(410);
   });
 
   test("a plan bought on the website before Orbit was installed follows the account into Orbit", async () => {
